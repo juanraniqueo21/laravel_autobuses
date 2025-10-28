@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -19,31 +19,46 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
-
-const SAMPLE_BUSES = [
-  { id: 1, patente: 'SASA01', marca: 'Volvo', modelo: 'B450R', año: 2022, capacidad: 45, estado: 'Operativo', proximaRevision: '2025-11-15' },
-  { id: 2, patente: 'SASA02', marca: 'Mercedes', modelo: 'OH1628L', año: 2021, capacidad: 48, estado: 'Operativo', proximaRevision: '2025-10-30' },
-  { id: 3, patente: 'SASA03', marca: 'Volvo', modelo: 'B430R', año: 2020, capacidad: 45, estado: 'Mantenimiento', proximaRevision: '2025-12-01' },
-  { id: 4, patente: 'SASA04', marca: 'Scania', modelo: 'K400', año: 2019, capacidad: 50, estado: 'Operativo', proximaRevision: '2025-11-25' },
-];
+import { fetchBuses, createBus, updateBus, deleteBus } from '../../services/api';
 
 const ESTADOS_BUS = ['Operativo', 'Mantenimiento', 'Desmantelado'];
 
 export default function BusesPage() {
-  const [buses, setBuses] = useState(SAMPLE_BUSES);
+  const [buses, setBuses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingBus, setEditingBus] = useState(null);
   const [formData, setFormData] = useState({
     patente: '',
     marca: '',
     modelo: '',
-    año: new Date().getFullYear(),
+    anio: new Date().getFullYear(),
     capacidad: 45,
     estado: 'Operativo',
     proximaRevision: '',
   });
+
+  useEffect(() => {
+    loadBuses();
+  }, []);
+
+  const loadBuses = async () => {
+    try {
+      setLoading(true);
+      const data = await fetchBuses();
+      setBuses(data);
+      setError(null);
+    } catch (err) {
+      setError('Error al cargar buses: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleOpenDialog = (bus = null) => {
     if (bus) {
@@ -55,7 +70,7 @@ export default function BusesPage() {
         patente: '',
         marca: '',
         modelo: '',
-        año: new Date().getFullYear(),
+        anio: new Date().getFullYear(),
         capacidad: 45,
         estado: 'Operativo',
         proximaRevision: '',
@@ -69,28 +84,51 @@ export default function BusesPage() {
     setEditingBus(null);
   };
 
-  const handleSave = () => {
-    if (editingBus) {
-      setBuses(buses.map(b => b.id === editingBus.id ? { ...b, ...formData } : b));
-    } else {
-      setBuses([...buses, { id: Math.max(...buses.map(b => b.id), 0) + 1, ...formData }]);
+  const handleSave = async () => {
+    try {
+      if (editingBus) {
+        await updateBus(editingBus.id, formData);
+      } else {
+        await createBus(formData);
+      }
+      loadBuses();
+      handleCloseDialog();
+    } catch (err) {
+      setError('Error al guardar: ' + err.message);
     }
-    handleCloseDialog();
   };
 
-  const handleDelete = (id) => {
-    setBuses(buses.filter(b => b.id !== id));
+  const handleDelete = async (id) => {
+    if (window.confirm('¿Estás seguro?')) {
+      try {
+        await deleteBus(id);
+        loadBuses();
+      } catch (err) {
+        setError('Error al eliminar: ' + err.message);
+      }
+    }
   };
 
   const isRevisionExpiring = (date) => {
+    if (!date) return false;
     const today = new Date();
     const revisionDate = new Date(date);
     const daysLeft = Math.ceil((revisionDate - today) / (1000 * 60 * 60 * 24));
     return daysLeft < 30 && daysLeft > 0;
   };
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <h2>Gestión de Buses</h2>
         <Button
@@ -117,58 +155,63 @@ export default function BusesPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {buses.map((bus) => (
-              <TableRow key={bus.id}>
-                <TableCell sx={{ fontWeight: 'bold' }}>{bus.patente}</TableCell>
-                <TableCell>{bus.marca}</TableCell>
-                <TableCell>{bus.modelo}</TableCell>
-                <TableCell>{bus.año}</TableCell>
-                <TableCell>{bus.capacidad} pasajeros</TableCell>
-                <TableCell>
-                  <Box
-                    sx={{
-                      display: 'inline-block',
-                      px: 2,
-                      py: 0.5,
-                      borderRadius: '20px',
-                      backgroundColor: bus.estado === 'Operativo' ? '#c8e6c9' : '#ffccbc',
-                      color: bus.estado === 'Operativo' ? '#2e7d32' : '#d84315',
-                      fontSize: '12px',
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    {bus.estado}
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ color: isRevisionExpiring(bus.proximaRevision) ? 'orange' : 'inherit' }}>
-                    {bus.proximaRevision}
-                    {isRevisionExpiring(bus.proximaRevision) && ' ⚠️'}
-                  </Box>
-                </TableCell>
-                <TableCell align="center">
-                  <IconButton
-                    size="small"
-                    color="primary"
-                    onClick={() => handleOpenDialog(bus)}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    color="error"
-                    onClick={() => handleDelete(bus.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </TableCell>
+            {buses.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} align="center">No hay buses</TableCell>
               </TableRow>
-            ))}
+            ) : (
+              buses.map((bus) => (
+                <TableRow key={bus.id}>
+                  <TableCell sx={{ fontWeight: 'bold' }}>{bus.patente}</TableCell>
+                  <TableCell>{bus.marca}</TableCell>
+                  <TableCell>{bus.modelo}</TableCell>
+                  <TableCell>{bus.anio}</TableCell>
+                  <TableCell>{bus.capacidad} pasajeros</TableCell>
+                  <TableCell>
+                    <Box
+                      sx={{
+                        display: 'inline-block',
+                        px: 2,
+                        py: 0.5,
+                        borderRadius: '20px',
+                        backgroundColor: bus.estado === 'Operativo' ? '#c8e6c9' : '#ffccbc',
+                        color: bus.estado === 'Operativo' ? '#2e7d32' : '#d84315',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      {bus.estado}
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ color: isRevisionExpiring(bus.proximaRevision) ? 'orange' : 'inherit' }}>
+                      {bus.proximaRevision}
+                      {isRevisionExpiring(bus.proximaRevision) && ' ⚠️'}
+                    </Box>
+                  </TableCell>
+                  <TableCell align="center">
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      onClick={() => handleOpenDialog(bus)}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => handleDelete(bus.id)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>
 
-      {/* Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
           {editingBus ? 'Editar Bus' : 'Nuevo Bus'}
@@ -199,8 +242,8 @@ export default function BusesPage() {
             fullWidth
             label="Año"
             type="number"
-            value={formData.año}
-            onChange={(e) => setFormData({ ...formData, año: parseInt(e.target.value) })}
+            value={formData.anio}
+            onChange={(e) => setFormData({ ...formData, anio: parseInt(e.target.value) })}
             margin="normal"
           />
           <TextField

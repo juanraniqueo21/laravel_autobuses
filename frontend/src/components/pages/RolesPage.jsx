@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -15,23 +15,37 @@ import {
   DialogActions,
   Box,
   IconButton,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
-
-const SAMPLE_ROLES = [
-  { id: 1, nombre: 'Admin', descripcion: 'Administrador del sistema' },
-  { id: 2, nombre: 'Supervisor', descripcion: 'Supervisor de rutas' },
-  { id: 3, nombre: 'Conductor', descripcion: 'Conductor de buses' },
-  { id: 4, nombre: 'Asistente', descripcion: 'Asistente de ruta' },
-  { id: 5, nombre: 'Mecánico', descripcion: 'Mecánico de buses' },
-  { id: 6, nombre: 'RRHH', descripcion: 'Recursos Humanos' },
-];
+import { fetchRoles, createRole, updateRole, deleteRole } from '../../services/api';
 
 export default function RolesPage() {
-  const [roles, setRoles] = useState(SAMPLE_ROLES);
+  const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
   const [formData, setFormData] = useState({ nombre: '', descripcion: '' });
+
+  // Cargar roles al iniciar
+  useEffect(() => {
+    loadRoles();
+  }, []);
+
+  const loadRoles = async () => {
+    try {
+      setLoading(true);
+      const data = await fetchRoles();
+      setRoles(data);
+      setError(null);
+    } catch (err) {
+      setError('Error al cargar roles: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleOpenDialog = (role = null) => {
     if (role) {
@@ -50,21 +64,43 @@ export default function RolesPage() {
     setFormData({ nombre: '', descripcion: '' });
   };
 
-  const handleSave = () => {
-    if (editingRole) {
-      setRoles(roles.map(r => r.id === editingRole.id ? { ...r, ...formData } : r));
-    } else {
-      setRoles([...roles, { id: Math.max(...roles.map(r => r.id)) + 1, ...formData }]);
+  const handleSave = async () => {
+    try {
+      if (editingRole) {
+        await updateRole(editingRole.id, formData);
+      } else {
+        await createRole(formData);
+      }
+      loadRoles();
+      handleCloseDialog();
+    } catch (err) {
+      setError('Error al guardar: ' + err.message);
     }
-    handleCloseDialog();
   };
 
-  const handleDelete = (id) => {
-    setRoles(roles.filter(r => r.id !== id));
+  const handleDelete = async (id) => {
+    if (window.confirm('¿Estás seguro?')) {
+      try {
+        await deleteRole(id);
+        loadRoles();
+      } catch (err) {
+        setError('Error al eliminar: ' + err.message);
+      }
+    }
   };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <h2>Gestión de Roles</h2>
         <Button
@@ -87,29 +123,35 @@ export default function RolesPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {roles.map((role) => (
-              <TableRow key={role.id}>
-                <TableCell>{role.id}</TableCell>
-                <TableCell>{role.nombre}</TableCell>
-                <TableCell>{role.descripcion}</TableCell>
-                <TableCell align="center">
-                  <IconButton
-                    size="small"
-                    color="primary"
-                    onClick={() => handleOpenDialog(role)}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    color="error"
-                    onClick={() => handleDelete(role.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </TableCell>
+            {roles.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center">No hay roles</TableCell>
               </TableRow>
-            ))}
+            ) : (
+              roles.map((role) => (
+                <TableRow key={role.id}>
+                  <TableCell>{role.id}</TableCell>
+                  <TableCell>{role.nombre}</TableCell>
+                  <TableCell>{role.descripcion}</TableCell>
+                  <TableCell align="center">
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      onClick={() => handleOpenDialog(role)}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => handleDelete(role.id)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>

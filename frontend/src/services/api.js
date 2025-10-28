@@ -1,24 +1,71 @@
-const API_URL = 'http://localhost:8000';
+const API_URL = '/api';
+
+const fetchOptions = (method = 'GET', body = null) => {
+  const options = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
+  
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
+  
+  return options;
+};
+
+export const fetchRoles = async () => {
+  const response = await fetch(`${API_URL}/roles`, fetchOptions('GET'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const createRole = async (roleData) => {
+  const response = await fetch(`${API_URL}/roles`, fetchOptions('POST', roleData));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const updateRole = async (id, roleData) => {
+  const response = await fetch(`${API_URL}/roles/${id}`, fetchOptions('PUT', roleData));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const deleteRole = async (id) => {
+  const response = await fetch(`${API_URL}/roles/${id}`, fetchOptions('DELETE'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
 
 export const fetchTest = async () => {
-  try {
-    const response = await fetch(`${API_URL}/test`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      mode: 'cors',
-      credentials: 'omit'
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error:', error);
-    throw error;
-  }
+  const response = await fetch(`${API_URL}/test`, fetchOptions('GET'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+///buses
+export const fetchBuses = async () => {
+  const response = await fetch(`${API_URL}/buses`, fetchOptions('GET'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const createBus = async (busData) => {
+  const response = await fetch(`${API_URL}/buses`, fetchOptions('POST', busData));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const updateBus = async (id, busData) => {
+  const response = await fetch(`${API_URL}/buses/${id}`, fetchOptions('PUT', busData));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const deleteBus = async (id) => {
+  const response = await fetch(`${API_URL}/buses/${id}`, fetchOptions('DELETE'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
 };
