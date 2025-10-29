@@ -69,3 +69,28 @@ export const deleteBus = async (id) => {
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();
 };
+///conductores
+
+export const fetchConductores = async () => {
+  const response = await fetch(`${API_URL}/conductores`, fetchOptions('GET'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const createConductor = async (conductorData) => {
+  const response = await fetch(`${API_URL}/conductores`, fetchOptions('POST', conductorData));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const updateConductor = async (id, conductorData) => {
+  const response = await fetch(`${API_URL}/conductores/${id}`, fetchOptions('PUT', conductorData));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const deleteConductor = async (id) => {
+  const response = await fetch(`${API_URL}/conductores/${id}`, fetchOptions('DELETE'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
