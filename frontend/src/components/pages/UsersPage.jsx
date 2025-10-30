@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -19,37 +19,78 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
+import { fetchUsers, fetchRoles, createUser, updateUser, deleteUser } from '../../services/api';
 
-const SAMPLE_USERS = [
-  { id: 1, nombre: 'Juan', apellido: 'Pérez', email: 'juan@example.com', rut: '12.345.678-9', rol: 'Admin' },
-  { id: 2, nombre: 'María', apellido: 'García', email: 'maria@example.com', rut: '13.456.789-0', rol: 'Supervisor' },
-  { id: 3, nombre: 'Carlos', apellido: 'López', email: 'carlos@example.com', rut: '14.567.890-1', rol: 'Conductor' },
-  { id: 4, nombre: 'Ana', apellido: 'Martínez', email: 'ana@example.com', rut: '15.678.901-2', rol: 'RRHH' },
-];
-
-const ROLES = ['Admin', 'Supervisor', 'Conductor', 'Asistente', 'Mecánico', 'RRHH'];
+const ESTADOS = ['activo', 'inactivo', 'suspendido'];
 
 export default function UsersPage() {
-  const [users, setUsers] = useState(SAMPLE_USERS);
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
     email: '',
+    password: '',
     rut: '',
-    rol: 'Conductor',
+    rut_verificador: '',
+    rol_id: '',
+    estado: 'activo',
   });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [usersData, rolesData] = await Promise.all([
+        fetchUsers(),
+        fetchRoles(),
+      ]);
+      setUsers(usersData);
+      setRoles(rolesData);
+      setError(null);
+    } catch (err) {
+      setError('Error al cargar datos: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleOpenDialog = (user = null) => {
     if (user) {
       setEditingUser(user);
-      setFormData(user);
+      setFormData({
+        nombre: user.nombre,
+        apellido: user.apellido,
+        email: user.email,
+        password: '',
+        rut: user.rut,
+        rut_verificador: user.rut_verificador,
+        rol_id: user.rol_id,
+        estado: user.estado,
+      });
     } else {
       setEditingUser(null);
-      setFormData({ nombre: '', apellido: '', email: '', rut: '', rol: 'Conductor' });
+      setFormData({
+        nombre: '',
+        apellido: '',
+        email: '',
+        password: '',
+        rut: '',
+        rut_verificador: '',
+        rol_id: roles.length > 0 ? roles[0].id : '',
+        estado: 'activo',
+      });
     }
     setOpenDialog(true);
   };
@@ -59,21 +100,48 @@ export default function UsersPage() {
     setEditingUser(null);
   };
 
-  const handleSave = () => {
-    if (editingUser) {
-      setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...formData } : u));
-    } else {
-      setUsers([...users, { id: Math.max(...users.map(u => u.id), 0) + 1, ...formData }]);
+  const handleSave = async () => {
+    try {
+      if (editingUser) {
+        await updateUser(editingUser.id, formData);
+      } else {
+        await createUser(formData);
+      }
+      loadData();
+      handleCloseDialog();
+    } catch (err) {
+      setError('Error al guardar: ' + err.message);
     }
-    handleCloseDialog();
   };
 
-  const handleDelete = (id) => {
-    setUsers(users.filter(u => u.id !== id));
+  const handleDelete = async (id) => {
+    if (window.confirm('¿Estás seguro?')) {
+      try {
+        await deleteUser(id);
+        loadData();
+      } catch (err) {
+        setError('Error al eliminar: ' + err.message);
+      }
+    }
   };
+
+  const getRolNombre = (rolId) => {
+    const rol = roles.find(r => r.id === rolId);
+    return rol ? rol.nombre : 'N/A';
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <h2>Gestión de Usuarios</h2>
         <Button
@@ -86,46 +154,70 @@ export default function UsersPage() {
       </Box>
 
       <TableContainer component={Paper}>
-        <Table>
+        <Table size="small">
           <TableHead>
             <TableRow sx={{ backgroundColor: '#1976d2' }}>
+              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>ID</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Nombre</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Email</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>RUT</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Rol</TableCell>
+              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Estado</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Acciones</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.nombre} {user.apellido}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>{user.rut}</TableCell>
-                <TableCell>{user.rol}</TableCell>
-                <TableCell align="center">
-                  <IconButton
-                    size="small"
-                    color="primary"
-                    onClick={() => handleOpenDialog(user)}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    color="error"
-                    onClick={() => handleDelete(user.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </TableCell>
+            {users.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} align="center">No hay usuarios</TableCell>
               </TableRow>
-            ))}
+            ) : (
+              users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>{user.id}</TableCell>
+                  <TableCell>{user.nombre} {user.apellido}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{user.rut}</TableCell>
+                  <TableCell>{getRolNombre(user.rol_id)}</TableCell>
+                  <TableCell>
+                    <Box
+                      sx={{
+                        display: 'inline-block',
+                        px: 2,
+                        py: 0.5,
+                        borderRadius: '20px',
+                        backgroundColor: user.estado === 'activo' ? '#c8e6c9' : '#ffccbc',
+                        color: user.estado === 'activo' ? '#2e7d32' : '#d84315',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      {user.estado}
+                    </Box>
+                  </TableCell>
+                  <TableCell align="center">
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      onClick={() => handleOpenDialog(user)}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => handleDelete(user.id)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>
 
-      {/* Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
           {editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
@@ -153,23 +245,57 @@ export default function UsersPage() {
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             margin="normal"
           />
+          {!editingUser && (
+            <TextField
+              fullWidth
+              label="Contraseña"
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              margin="normal"
+            />
+          )}
           <TextField
             fullWidth
             label="RUT"
             value={formData.rut}
             onChange={(e) => setFormData({ ...formData, rut: e.target.value })}
             margin="normal"
-            placeholder="12.345.678-9"
+            placeholder="12.345.678"
+          />
+          <TextField
+            fullWidth
+            label="RUT Verificador"
+            value={formData.rut_verificador}
+            onChange={(e) => setFormData({ ...formData, rut_verificador: e.target.value.toUpperCase() })}
+            margin="normal"
+            maxLength="1"
+            placeholder="0-9 o K"
           />
           <FormControl fullWidth margin="normal">
             <InputLabel>Rol</InputLabel>
             <Select
-              value={formData.rol}
-              onChange={(e) => setFormData({ ...formData, rol: e.target.value })}
+              value={formData.rol_id}
+              onChange={(e) => setFormData({ ...formData, rol_id: e.target.value })}
               label="Rol"
             >
-              {ROLES.map((rol) => (
-                <MenuItem key={rol} value={rol}>{rol}</MenuItem>
+              <MenuItem value="">Seleccionar rol</MenuItem>
+              {roles.map((rol) => (
+                <MenuItem key={rol.id} value={rol.id}>
+                  {rol.nombre}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Estado</InputLabel>
+            <Select
+              value={formData.estado}
+              onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
+              label="Estado"
+            >
+              {ESTADOS.map((e) => (
+                <MenuItem key={e} value={e}>{e}</MenuItem>
               ))}
             </Select>
           </FormControl>

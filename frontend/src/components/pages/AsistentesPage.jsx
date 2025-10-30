@@ -15,63 +15,63 @@ import {
   DialogActions,
   Box,
   IconButton,
+  CircularProgress,
+  Alert,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
-  CircularProgress,
-  Alert,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
-import { fetchEmpleados, createEmpleado, updateEmpleado, deleteEmpleado } from '../../services/api';
+import { fetchAsistentes, fetchEmpleados, createAsistente, updateAsistente, deleteAsistente } from '../../services/api';
 
-const CONTRATOS = ['indefinido', 'plazo_fijo', 'practicante'];
-const ESTADOS = ['activo', 'licencia', 'suspendido', 'terminado'];
+const ESTADOS_ASISTENTE = ['activo', 'inactivo', 'suspendido'];
 
-export default function EmployeesPage() {
+export default function AsistentesPage() {
+  const [asistentes, setAsistentes] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
-  const [editingEmpleado, setEditingEmpleado] = useState(null);
+  const [editingAsistente, setEditingAsistente] = useState(null);
   const [formData, setFormData] = useState({
-    user_id: '',
-    numero_empleado: '',
-    fecha_contratacion: '',
-    tipo_contrato: 'indefinido',
-    salario_base: '',
+    empleado_id: '',
+    fecha_inicio: '',
+    fecha_termino: '',
     estado: 'activo',
+    observaciones: '',
   });
 
   useEffect(() => {
-    loadEmpleados();
+    loadData();
   }, []);
 
-  const loadEmpleados = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const data = await fetchEmpleados();
-      setEmpleados(data);
+      const [asistentesData, empleadosData] = await Promise.all([
+        fetchAsistentes(),
+        fetchEmpleados(),
+      ]);
+      setAsistentes(asistentesData);
+      setEmpleados(empleadosData);
       setError(null);
     } catch (err) {
-      setError('Error al cargar empleados: ' + err.message);
+      setError('Error al cargar datos: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenDialog = (empleado = null) => {
-    if (empleado) {
-      setEditingEmpleado(empleado);
-      setFormData(empleado);
+  const handleOpenDialog = (asistente = null) => {
+    if (asistente) {
+      setEditingAsistente(asistente);
+      setFormData(asistente);
     } else {
-      setEditingEmpleado(null);
+      setEditingAsistente(null);
       setFormData({
-        user_id: '',
-        numero_empleado: '',
-        fecha_contratacion: '',
-        tipo_contrato: 'indefinido',
-        salario_base: '',
+        empleado_id: '',
+        fecha_inicio: '',
         estado: 'activo',
       });
     }
@@ -80,17 +80,17 @@ export default function EmployeesPage() {
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
-    setEditingEmpleado(null);
+    setEditingAsistente(null);
   };
 
   const handleSave = async () => {
     try {
-      if (editingEmpleado) {
-        await updateEmpleado(editingEmpleado.id, formData);
+      if (editingAsistente) {
+        await updateAsistente(editingAsistente.id, formData);
       } else {
-        await createEmpleado(formData);
+        await createAsistente(formData);
       }
-      loadEmpleados();
+      loadData();
       handleCloseDialog();
     } catch (err) {
       setError('Error al guardar: ' + err.message);
@@ -100,16 +100,17 @@ export default function EmployeesPage() {
   const handleDelete = async (id) => {
     if (window.confirm('¿Estás seguro?')) {
       try {
-        await deleteEmpleado(id);
-        loadEmpleados();
+        await deleteAsistente(id);
+        loadData();
       } catch (err) {
         setError('Error al eliminar: ' + err.message);
       }
     }
   };
 
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(value);
+  const getEmpleadoNombre = (empleadoId) => {
+    const emp = empleados.find(e => e.id === empleadoId);
+     return emp ? `${emp.user?.nombre || ''} ${emp.user?.apellido || ''}` : 'N/A';
   };
 
   if (loading) {
@@ -125,13 +126,13 @@ export default function EmployeesPage() {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <h2>Gestión de Empleados</h2>
+        <h2>Gestión de Asistentes</h2>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
         >
-          Nuevo Empleado
+          Nuevo Asistente
         </Button>
       </Box>
 
@@ -139,26 +140,23 @@ export default function EmployeesPage() {
         <Table size="small">
           <TableHead>
             <TableRow sx={{ backgroundColor: '#1976d2' }}>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Número Empleado</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Fecha Contratación</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Tipo Contrato</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Salario</TableCell>
+              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Nombre</TableCell>
+              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Fecha Inicio</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Estado</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Acciones</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {empleados.length === 0 ? (
+            {asistentes.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">No hay empleados</TableCell>
+                <TableCell colSpan={5} align="center">No hay asistentes</TableCell>
               </TableRow>
             ) : (
-              empleados.map((empleado) => (
-                <TableRow key={empleado.id}>
-                  <TableCell>{empleado.numero_empleado}</TableCell>
-                  <TableCell>{empleado.fecha_contratacion}</TableCell>
-                  <TableCell>{empleado.tipo_contrato}</TableCell>
-                  <TableCell align="right">{formatCurrency(empleado.salario_base)}</TableCell>
+              asistentes.map((asistente) => (
+                <TableRow key={asistente.id}>
+                  <TableCell>{getEmpleadoNombre(asistente.empleado_id)}</TableCell>
+                  <TableCell>{asistente.fecha_inicio}</TableCell>
+                  <TableCell>{asistente.fecha_termino || 'N/A'}</TableCell>
                   <TableCell>
                     <Box
                       sx={{
@@ -166,27 +164,27 @@ export default function EmployeesPage() {
                         px: 2,
                         py: 0.5,
                         borderRadius: '20px',
-                        backgroundColor: empleado.estado === 'activo' ? '#c8e6c9' : '#ffccbc',
-                        color: empleado.estado === 'activo' ? '#2e7d32' : '#d84315',
+                        backgroundColor: asistente.estado === 'activo' ? '#c8e6c9' : '#ffccbc',
+                        color: asistente.estado === 'activo' ? '#2e7d32' : '#d84315',
                         fontSize: '12px',
                         fontWeight: 'bold',
                       }}
                     >
-                      {empleado.estado}
+                      {asistente.estado}
                     </Box>
                   </TableCell>
                   <TableCell align="center">
                     <IconButton
                       size="small"
                       color="primary"
-                      onClick={() => handleOpenDialog(empleado)}
+                      onClick={() => handleOpenDialog(asistente)}
                     >
                       <EditIcon />
                     </IconButton>
                     <IconButton
                       size="small"
                       color="error"
-                      onClick={() => handleDelete(empleado.id)}
+                      onClick={() => handleDelete(asistente.id)}
                     >
                       <DeleteIcon />
                     </IconButton>
@@ -200,52 +198,32 @@ export default function EmployeesPage() {
 
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {editingEmpleado ? 'Editar Empleado' : 'Nuevo Empleado'}
+          {editingAsistente ? 'Editar Asistente' : 'Nuevo Asistente'}
         </DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
-          <TextField
-            fullWidth
-            label="User ID"
-            type="number"
-            value={formData.user_id}
-            onChange={(e) => setFormData({ ...formData, user_id: parseInt(e.target.value) })}
-            margin="normal"
-          />
-          <TextField
-            fullWidth
-            label="Número de Empleado"
-            value={formData.numero_empleado}
-            onChange={(e) => setFormData({ ...formData, numero_empleado: e.target.value })}
-            margin="normal"
-          />
-          <TextField
-            fullWidth
-            label="Fecha de Contratación"
-            type="date"
-            value={formData.fecha_contratacion}
-            onChange={(e) => setFormData({ ...formData, fecha_contratacion: e.target.value })}
-            margin="normal"
-            InputLabelProps={{ shrink: true }}
-          />
           <FormControl fullWidth margin="normal">
-            <InputLabel>Tipo de Contrato</InputLabel>
+            <InputLabel>Empleado</InputLabel>
             <Select
-              value={formData.tipo_contrato}
-              onChange={(e) => setFormData({ ...formData, tipo_contrato: e.target.value })}
-              label="Tipo de Contrato"
+              value={formData.empleado_id}
+              onChange={(e) => setFormData({ ...formData, empleado_id: e.target.value })}
+              label="Empleado"
             >
-              {CONTRATOS.map((c) => (
-                <MenuItem key={c} value={c}>{c}</MenuItem>
+              <MenuItem value="">Seleccionar empleado</MenuItem>
+              {empleados.filter(emp => emp.user?.rol_id === 5).map((emp) => (
+                <MenuItem key={emp.id} value={emp.id}>
+                  {emp.user?.nombre} {emp.user?.apellido}
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
           <TextField
             fullWidth
-            label="Salario Base (CLP)"
-            type="number"
-            value={formData.salario_base}
-            onChange={(e) => setFormData({ ...formData, salario_base: parseInt(e.target.value) })}
+            label="Fecha de Inicio"
+            type="date"
+            value={formData.fecha_inicio}
+            onChange={(e) => setFormData({ ...formData, fecha_inicio: e.target.value })}
             margin="normal"
+            InputLabelProps={{ shrink: true }}
           />
           <FormControl fullWidth margin="normal">
             <InputLabel>Estado</InputLabel>
@@ -254,7 +232,7 @@ export default function EmployeesPage() {
               onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
               label="Estado"
             >
-              {ESTADOS.map((e) => (
+              {ESTADOS_ASISTENTE.map((e) => (
                 <MenuItem key={e} value={e}>{e}</MenuItem>
               ))}
             </Select>

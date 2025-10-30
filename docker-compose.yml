@@ -88,10 +88,23 @@ services:
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     restart: unless-stopped
 
+#Pgadmin 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: gestion_buses_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@gestionbuses.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - database
+    networks:
+      - gestion_buses_network
+    restart: unless-stopped
 volumes:
   postgres_data:
     driver: local
-
 networks:
   gestion_buses_network:
     driver: bridge

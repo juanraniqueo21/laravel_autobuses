@@ -28,9 +28,9 @@ import ConductorsPage from './pages/ConductoresPage';
 import BusesPage from './pages/BusesPage';
 import RoutesPage from './pages/RoutesPage';
 import MaintenancePage from './pages/MantencionesPage';
-import TripsPage from './pages/ViajesPage';
-
-
+import ViajesPage from './pages/ViajesPage';
+import AsistentesPage from './pages/AsistentesPage';
+import MecanicosPage from './pages/MecanicosPage';
 
 const DRAWER_WIDTH = 240;
 
@@ -53,9 +53,11 @@ export default function Layout() {
     { id: 'employees', label: 'Empleados', icon: <PeopleIcon /> },
     { id: 'conductors', label: 'Conductores', icon: <BusIcon /> },
     { id: 'buses', label: 'Buses', icon: <BusIcon /> },
-    { id: 'routes', label: 'Rutas', icon: <BusIcon /> },
-    { id: 'mantenciones', label: 'Mantenimiento', icon: <SettingsIcon /> },
+    { id: 'rutas', label: 'Rutas', icon: <BusIcon /> },
+    { id: 'asistentes', label: 'Asistentes', icon: <PeopleIcon /> },
     { id: 'viajes', label: 'Viajes', icon: <BusIcon /> },
+    { id: 'mecanicos', label: 'Mecánicos', icon: <SettingsIcon /> },
+    { id: 'mantenciones', label: 'Mantenimiento', icon: <SettingsIcon /> },
     { id: 'settings', label: 'Configuración', icon: <SettingsIcon /> },
   ];
 
@@ -71,13 +73,16 @@ export default function Layout() {
         return <ConductorsPage />;
       case 'buses':
         return <BusesPage />;
-      case 'routes':
+      case 'rutas':
         return <RoutesPage />;
+      case 'asistentes':
+        return <AsistentesPage />;
+      case 'viajes':
+        return <ViajesPage />;
+      case 'mecanicos':
+        return <MecanicosPage />;
       case 'mantenciones':
         return <MaintenancePage />; 
-      case 'viajes':
-        return <TripsPage />;
-        
       default:
         return (
           <Box sx={{ p: 3 }}>

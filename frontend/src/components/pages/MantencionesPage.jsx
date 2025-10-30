@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -19,45 +19,86 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
+import { 
+  fetchBuses, 
+  fetchEmpleados, 
+  fetchMantenimientos,
+  createMantenimiento, 
+  updateMantenimiento, 
+  deleteMantenimiento 
+} from '../../services/api';
 
-const SAMPLE_MAINTENANCE = [
-  { id: 1, patenteBus: 'SASA01', tipoMantenimiento: 'Preventivo', descripcion: 'Cambio de aceite y filtros', fechaInicio: '2025-10-15', estado: 'En Proceso', costo: 150000 },
-  { id: 2, patenteBus: 'SASA02', tipoMantenimiento: 'Correctivo', descripcion: 'Reparación de frenos', fechaInicio: '2025-10-10', estado: 'Completado', costo: 450000 },
-  { id: 3, patenteBus: 'SASA03', tipoMantenimiento: 'Preventivo', descripcion: 'Revisión general', fechaInicio: '2025-10-18', estado: 'En Proceso', costo: 200000 },
-  { id: 4, patenteBus: 'SASA04', tipoMantenimiento: 'Revisión', descripcion: 'Inspección técnica', fechaInicio: '2025-10-20', estado: 'Pendiente', costo: 100000 },
-];
+const TIPOS_MANTENIMIENTO = ['preventivo', 'correctivo', 'revision'];
+const ESTADOS_MANTENIMIENTO = ['en_proceso', 'completado', 'cancelado'];
 
-const TIPOS_MANTENIMIENTO = ['Preventivo', 'Correctivo', 'Revisión'];
-const ESTADOS_MANTENIMIENTO = ['Pendiente', 'En Proceso', 'Completado', 'Cancelado'];
-
-export default function MaintenancePage() {
-  const [maintenance, setMaintenance] = useState(SAMPLE_MAINTENANCE);
+export default function MantencionesPage() {
+  const [mantenimientos, setMantenimientos] = useState([]);
+  const [buses, setBuses] = useState([]);
+  const [mecanicos, setMecanicos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
-  const [editingMaintenance, setEditingMaintenance] = useState(null);
+  const [editingMantenimiento, setEditingMantenimiento] = useState(null);
   const [formData, setFormData] = useState({
-    patenteBus: '',
-    tipoMantenimiento: 'Preventivo',
+    bus_id: '',
+    mecanico_id: '',
+    tipo_mantenimiento: 'preventivo',
     descripcion: '',
-    fechaInicio: '',
-    estado: 'Pendiente',
-    costo: '',
+    fecha_inicio: '',
+    fecha_termino: '',
+    costo_total: '',
+    estado: 'en_proceso',
+    repuestos_utilizados: '',
+    observaciones: '',
   });
 
-  const handleOpenDialog = (maint = null) => {
-    if (maint) {
-      setEditingMaintenance(maint);
-      setFormData(maint);
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [busesData, empleadosData, mantenimientosData] = await Promise.all([
+        fetchBuses(),
+        fetchEmpleados(),
+        fetchMantenimientos(),
+      ]);
+      
+      setBuses(busesData);
+      // Filtrar solo mecánicos
+      const mechanics = empleadosData.filter(emp => emp.mecanico);
+      setMecanicos(mechanics);
+      setMantenimientos(mantenimientosData);
+      setError(null);
+    } catch (err) {
+      setError('Error al cargar datos: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenDialog = (mantenimiento = null) => {
+    if (mantenimiento) {
+      setEditingMantenimiento(mantenimiento);
+      setFormData(mantenimiento);
     } else {
-      setEditingMaintenance(null);
+      setEditingMantenimiento(null);
       setFormData({
-        patenteBus: '',
-        tipoMantenimiento: 'Preventivo',
+        bus_id: '',
+        mecanico_id: '',
+        tipo_mantenimiento: 'preventivo',
         descripcion: '',
-        fechaInicio: '',
-        estado: 'Pendiente',
-        costo: '',
+        fecha_inicio: '',
+        fecha_termino: '',
+        costo_total: '',
+        estado: 'en_proceso',
+        repuestos_utilizados: '',
+        observaciones: '',
       });
     }
     setOpenDialog(true);
@@ -65,54 +106,86 @@ export default function MaintenancePage() {
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
-    setEditingMaintenance(null);
+    setEditingMantenimiento(null);
   };
 
-  const handleSave = () => {
-    if (editingMaintenance) {
-      setMaintenance(maintenance.map(m => m.id === editingMaintenance.id ? { ...m, ...formData } : m));
-    } else {
-      setMaintenance([...maintenance, { id: Math.max(...maintenance.map(m => m.id), 0) + 1, ...formData }]);
+  const handleSave = async () => {
+    try {
+      if (editingMantenimiento) {
+        await updateMantenimiento(editingMantenimiento.id, formData);
+      } else {
+        await createMantenimiento(formData);
+      }
+      loadData();
+      handleCloseDialog();
+    } catch (err) {
+      setError('Error al guardar: ' + err.message);
     }
-    handleCloseDialog();
   };
 
-  const handleDelete = (id) => {
-    setMaintenance(maintenance.filter(m => m.id !== id));
+  const handleDelete = async (id) => {
+    if (window.confirm('¿Estás seguro?')) {
+      try {
+        await deleteMantenimiento(id);
+        loadData();
+      } catch (err) {
+        setError('Error al eliminar: ' + err.message);
+      }
+    }
+  };
+
+  const getPatente = (busId) => {
+    const bus = buses.find(b => b.id === busId);
+    return bus ? bus.patente : 'N/A';
+  };
+
+  const getMecanicoNombre = (mecanicoId) => {
+    const mecanico = mecanicos.find(m => m.mecanico && m.mecanico.id === mecanicoId);
+    return mecanico ? `${mecanico.user?.nombre || ''} ${mecanico.user?.apellido || ''}` : 'N/A';
   };
 
   const formatCurrency = (value) => {
-    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(value);
+    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(value || 0);
   };
 
   const getStatusColor = (status) => {
     switch(status) {
-      case 'En Proceso':
+      case 'en_proceso':
         return '#fff3cd';
-      case 'Completado':
+      case 'completado':
         return '#d4edda';
-      case 'Pendiente':
-        return '#cfe2ff';
-      default:
+      case 'cancelado':
         return '#f8d7da';
+      default:
+        return '#cfe2ff';
     }
   };
 
   const getStatusTextColor = (status) => {
     switch(status) {
-      case 'En Proceso':
+      case 'en_proceso':
         return '#856404';
-      case 'Completado':
+      case 'completado':
         return '#155724';
-      case 'Pendiente':
-        return '#004085';
-      default:
+      case 'cancelado':
         return '#721c24';
+      default:
+        return '#004085';
     }
   };
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <h2>Gestión de Mantenimiento</h2>
         <Button
@@ -129,6 +202,7 @@ export default function MaintenancePage() {
           <TableHead>
             <TableRow sx={{ backgroundColor: '#1976d2' }}>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Patente Bus</TableCell>
+              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Mecánico</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Tipo</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Descripción</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Fecha Inicio</TableCell>
@@ -138,70 +212,100 @@ export default function MaintenancePage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {maintenance.map((maint) => (
-              <TableRow key={maint.id}>
-                <TableCell sx={{ fontWeight: 'bold' }}>{maint.patenteBus}</TableCell>
-                <TableCell>{maint.tipoMantenimiento}</TableCell>
-                <TableCell>{maint.descripcion}</TableCell>
-                <TableCell>{maint.fechaInicio}</TableCell>
-                <TableCell>
-                  <Box
-                    sx={{
-                      display: 'inline-block',
-                      px: 2,
-                      py: 0.5,
-                      borderRadius: '20px',
-                      backgroundColor: getStatusColor(maint.estado),
-                      color: getStatusTextColor(maint.estado),
-                      fontSize: '12px',
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    {maint.estado}
-                  </Box>
-                </TableCell>
-                <TableCell align="right">{formatCurrency(maint.costo)}</TableCell>
-                <TableCell align="center">
-                  <IconButton
-                    size="small"
-                    color="primary"
-                    onClick={() => handleOpenDialog(maint)}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    color="error"
-                    onClick={() => handleDelete(maint.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </TableCell>
+            {mantenimientos.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} align="center">No hay mantenimientos</TableCell>
               </TableRow>
-            ))}
+            ) : (
+              mantenimientos.map((mant) => (
+                <TableRow key={mant.id}>
+                  <TableCell sx={{ fontWeight: 'bold' }}>{getPatente(mant.bus_id)}</TableCell>
+                  <TableCell>{getMecanicoNombre(mant.mecanico_id)}</TableCell>
+                  <TableCell>{mant.tipo_mantenimiento}</TableCell>
+                  <TableCell>{mant.descripcion}</TableCell>
+                  <TableCell>{mant.fecha_inicio}</TableCell>
+                  <TableCell>
+                    <Box
+                      sx={{
+                        display: 'inline-block',
+                        px: 2,
+                        py: 0.5,
+                        borderRadius: '20px',
+                        backgroundColor: getStatusColor(mant.estado),
+                        color: getStatusTextColor(mant.estado),
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      {mant.estado}
+                    </Box>
+                  </TableCell>
+                  <TableCell align="right">{formatCurrency(mant.costo_total)}</TableCell>
+                  <TableCell align="center">
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      onClick={() => handleOpenDialog(mant)}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => handleDelete(mant.id)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>
 
-      {/* Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
         <DialogTitle>
-          {editingMaintenance ? 'Editar Mantenimiento' : 'Nuevo Mantenimiento'}
+          {editingMantenimiento ? 'Editar Mantenimiento' : 'Nuevo Mantenimiento'}
         </DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
-          <TextField
-            fullWidth
-            label="Patente del Bus"
-            value={formData.patenteBus}
-            onChange={(e) => setFormData({ ...formData, patenteBus: e.target.value })}
-            margin="normal"
-            placeholder="SASA01"
-          />
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Bus</InputLabel>
+            <Select
+              value={formData.bus_id}
+              onChange={(e) => setFormData({ ...formData, bus_id: e.target.value })}
+              label="Bus"
+            >
+              <MenuItem value="">Seleccionar bus</MenuItem>
+              {buses.map((bus) => (
+                <MenuItem key={bus.id} value={bus.id}>
+                  {bus.patente} - {bus.marca} {bus.modelo}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Mecánico</InputLabel>
+            <Select
+              value={formData.mecanico_id}
+              onChange={(e) => setFormData({ ...formData, mecanico_id: e.target.value })}
+              label="Mecánico"
+            >
+              <MenuItem value="">Seleccionar mecánico</MenuItem>
+              {mecanicos.map((mec) => (
+                <MenuItem key={mec.id} value={mec.mecanico.id}>
+                  {mec.user?.nombre} {mec.user?.apellido}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
           <FormControl fullWidth margin="normal">
             <InputLabel>Tipo de Mantenimiento</InputLabel>
             <Select
-              value={formData.tipoMantenimiento}
-              onChange={(e) => setFormData({ ...formData, tipoMantenimiento: e.target.value })}
+              value={formData.tipo_mantenimiento}
+              onChange={(e) => setFormData({ ...formData, tipo_mantenimiento: e.target.value })}
               label="Tipo de Mantenimiento"
             >
               {TIPOS_MANTENIMIENTO.map((t) => (
@@ -209,6 +313,7 @@ export default function MaintenancePage() {
               ))}
             </Select>
           </FormControl>
+
           <TextField
             fullWidth
             label="Descripción"
@@ -218,15 +323,36 @@ export default function MaintenancePage() {
             multiline
             rows={3}
           />
+
           <TextField
             fullWidth
             label="Fecha de Inicio"
             type="date"
-            value={formData.fechaInicio}
-            onChange={(e) => setFormData({ ...formData, fechaInicio: e.target.value })}
+            value={formData.fecha_inicio}
+            onChange={(e) => setFormData({ ...formData, fecha_inicio: e.target.value })}
             margin="normal"
             InputLabelProps={{ shrink: true }}
           />
+
+          <TextField
+            fullWidth
+            label="Fecha de Término"
+            type="date"
+            value={formData.fecha_termino}
+            onChange={(e) => setFormData({ ...formData, fecha_termino: e.target.value })}
+            margin="normal"
+            InputLabelProps={{ shrink: true }}
+          />
+
+          <TextField
+            fullWidth
+            label="Costo Total (CLP)"
+            type="number"
+            value={formData.costo_total}
+            onChange={(e) => setFormData({ ...formData, costo_total: parseInt(e.target.value) })}
+            margin="normal"
+          />
+
           <FormControl fullWidth margin="normal">
             <InputLabel>Estado</InputLabel>
             <Select
@@ -239,13 +365,26 @@ export default function MaintenancePage() {
               ))}
             </Select>
           </FormControl>
+
           <TextField
             fullWidth
-            label="Costo (CLP)"
-            type="number"
-            value={formData.costo}
-            onChange={(e) => setFormData({ ...formData, costo: parseInt(e.target.value) })}
+            label="Repuestos Utilizados"
+            value={formData.repuestos_utilizados}
+            onChange={(e) => setFormData({ ...formData, repuestos_utilizados: e.target.value })}
             margin="normal"
+            multiline
+            rows={2}
+            placeholder="Ej: Aceite 5W30, Filtro aire, etc."
+          />
+
+          <TextField
+            fullWidth
+            label="Observaciones"
+            value={formData.observaciones}
+            onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+            margin="normal"
+            multiline
+            rows={2}
           />
         </DialogContent>
         <DialogActions>

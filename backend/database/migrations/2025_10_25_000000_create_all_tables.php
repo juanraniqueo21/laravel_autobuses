@@ -110,6 +110,19 @@ return new class extends Migration
             $table->date('fecha_vencimiento_licencia');
             $table->integer('puntos_licencia')->default(0);
             $table->enum('estado', ['activo', 'baja_medica', 'suspendido', 'inactivo'])->default('activo');
+            $table->integer('anios_experiencia')->default(0);
+            $table->date('fecha_primera_licencia')->nullable();
+            $table->string('estado_licencia', 50)->default('vigente');
+            $table->text('observaciones_licencia')->nullable();
+            $table->integer('cantidad_infracciones')->default(0);
+            $table->integer('cantidad_accidentes')->default(0);
+            $table->text('historial_sanciones')->nullable();
+            $table->date('fecha_ultima_revision_medica')->nullable();
+            $table->boolean('apto_conducir')->default(true);
+            $table->boolean('certificado_rcp')->default(false);
+            $table->date('vencimiento_rcp')->nullable();
+            $table->boolean('certificado_defensa')->default(false);
+            $table->date('vencimiento_defensa')->nullable();
             $table->timestamps();
             
             // Relaciones
@@ -142,7 +155,7 @@ return new class extends Migration
             $table->char('patente_verificador', 1); // Dígito verificador
             $table->string('marca', 50);
             $table->string('modelo', 50);
-            $table->integer('año_fabricacion');
+            $table->integer('anio');
             $table->string('numero_serie', 50)->unique();
             $table->string('numero_motor', 50)->unique();
             $table->integer('capacidad_pasajeros');
@@ -151,7 +164,14 @@ return new class extends Migration
             $table->date('proxima_revision_tecnica')->nullable();
             $table->date('ultima_revision_tecnica')->nullable();
             $table->string('documento_revision_tecnica', 500)->nullable();
+            $table->date('vencimiento_seguro')->nullable();
+            $table->string('numero_permiso_circulacion', 50)->nullable();
+            $table->string('numero_soap', 50)->nullable();
+            $table->text('observaciones')->nullable();
+            $table->integer('kilometraje_original')->default(0);
+            $table->integer('kilometraje_actual')->default(0);
             $table->timestamps();
+
             
             // Índices
             $table->index('patente');

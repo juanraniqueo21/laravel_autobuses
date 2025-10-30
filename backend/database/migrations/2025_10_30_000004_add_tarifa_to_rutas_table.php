@@ -6,22 +6,18 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::create('rols', function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
+        Schema::table('rutas', function (Blueprint $table) {
+            $table->integer('tarifa')->nullable()->after('tiempo_estimado_minutos');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('rols');
+        Schema::table('rutas', function (Blueprint $table) {
+            $table->dropColumn('tarifa');
+        });
     }
 };
+
