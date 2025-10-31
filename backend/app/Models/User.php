@@ -24,6 +24,11 @@ class User extends Authenticatable
         'rol_id',
     ];
 
+    public function rol()
+    {
+        return $this->belongsTo(Rol::class);
+    }
+
     protected $hidden = [
         'password',
         'remember_token',

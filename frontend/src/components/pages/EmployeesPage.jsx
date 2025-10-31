@@ -23,13 +23,15 @@ import {
   Alert,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
-import { fetchEmpleados, createEmpleado, updateEmpleado, deleteEmpleado } from '../../services/api';
+import { fetchEmpleados,fetchUsers, createEmpleado, updateEmpleado, deleteEmpleado } from '../../services/api';
 
 const CONTRATOS = ['indefinido', 'plazo_fijo', 'practicante'];
 const ESTADOS = ['activo', 'licencia', 'suspendido', 'terminado'];
 
 export default function EmployeesPage() {
   const [empleados, setEmpleados] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+  const [searchUsuario, setSearchUsuario] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
@@ -50,8 +52,12 @@ export default function EmployeesPage() {
   const loadEmpleados = async () => {
     try {
       setLoading(true);
-      const data = await fetchEmpleados();
-      setEmpleados(data);
+      const [empleadosData, usuariosData] = await Promise.all([
+        fetchEmpleados(), 
+        fetchUsers()
+      ]);
+      setEmpleados(empleadosData);
+      setUsuarios(usuariosData);
       setError(null);
     } catch (err) {
       setError('Error al cargar empleados: ' + err.message);
@@ -75,12 +81,14 @@ export default function EmployeesPage() {
         estado: 'activo',
       });
     }
+    setSearchUsuario('');
     setOpenDialog(true);
   };
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingEmpleado(null);
+    setSearchUsuario('');
   };
 
   const handleSave = async () => {
@@ -112,6 +120,23 @@ export default function EmployeesPage() {
     return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(value);
   };
 
+  const getUsuariosFiltrados = () => {
+    return usuarios.filter(user => {
+      const rol = user.rol?.nombre?.toLowerCase() || '';
+      const busqueda = searchUsuario.toLowerCase();
+      
+      if (busqueda) {
+        return rol.includes(busqueda);
+      }
+      return true;
+    });
+  };
+
+  const getNombreUsuario = (userId) => {
+    const user = usuarios.find(u => u.id === userId);
+    return user ? `${user.nombre} ${user.apellido}` : 'N/A';
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
@@ -139,6 +164,7 @@ export default function EmployeesPage() {
         <Table size="small">
           <TableHead>
             <TableRow sx={{ backgroundColor: '#1976d2' }}>
+              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Usuario</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Número Empleado</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Fecha Contratación</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Tipo Contrato</TableCell>
@@ -150,11 +176,12 @@ export default function EmployeesPage() {
           <TableBody>
             {empleados.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">No hay empleados</TableCell>
+                <TableCell colSpan={7} align="center">No hay empleados</TableCell>
               </TableRow>
             ) : (
               empleados.map((empleado) => (
                 <TableRow key={empleado.id}>
+                  <TableCell>{getNombreUsuario(empleado.user_id)}</TableCell>
                   <TableCell>{empleado.numero_empleado}</TableCell>
                   <TableCell>{empleado.fecha_contratacion}</TableCell>
                   <TableCell>{empleado.tipo_contrato}</TableCell>
@@ -203,14 +230,46 @@ export default function EmployeesPage() {
           {editingEmpleado ? 'Editar Empleado' : 'Nuevo Empleado'}
         </DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
-          <TextField
-            fullWidth
-            label="User ID"
-            type="number"
-            value={formData.user_id}
-            onChange={(e) => setFormData({ ...formData, user_id: parseInt(e.target.value) })}
-            margin="normal"
-          />
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Filtrar por Rol</InputLabel>
+            <Select
+              value={searchUsuario}
+              onChange={(e) => setSearchUsuario(e.target.value)}
+              label="Filtrar por Rol"
+            >
+              <MenuItem value="">Todos los usuarios</MenuItem>
+              <MenuItem value="admin">Administradores</MenuItem>
+              <MenuItem value="conductor">Conductores</MenuItem>
+              <MenuItem value="mecanico">Mecánicos</MenuItem>
+              <MenuItem value="asistente">Asistentes</MenuItem>
+              <MenuItem value="rrhh">RRHH</MenuItem>
+              <MenuItem value="gerente">Gerentes</MenuItem>
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth margin="normal" required>
+            <InputLabel>Usuario</InputLabel>
+            <Select
+              value={formData.user_id}
+              onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
+              label="Usuario"
+            >
+              <MenuItem value="">Seleccione un usuario</MenuItem>
+              {getUsuariosFiltrados().map((user) => (
+                <MenuItem key={user.id} value={user.id}>
+                  <Box>
+                    <Box sx={{ fontWeight: 'bold' }}>
+                      {user.nombre} {user.apellido}
+                    </Box>
+                    <Box sx={{ fontSize: '0.85rem', color: 'gray' }}>
+                      ID: {user.id} | Email: {user.email} | Rol: {user.rol?.nombre}
+                    </Box>
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
           <TextField
             fullWidth
             label="Número de Empleado"

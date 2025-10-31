@@ -10,7 +10,7 @@ class UserController extends Controller
     // GET - Obtener todos los usuarios
     public function index()
     {
-        $users = User::all();
+        $users = User::with('rol')->get();
         return response()->json($users);
     }
 
