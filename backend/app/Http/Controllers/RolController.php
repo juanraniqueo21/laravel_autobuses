@@ -11,7 +11,7 @@ class RolController extends Controller
     public function index()
     {
         $roles = Rol::all();
-        return response()->json($roles);
+        return Rol::orderBy('id', 'asc')->get();
     }
 
     // GET - Obtener un rol específico
