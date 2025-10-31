@@ -11,6 +11,7 @@ use App\Http\Controllers\AsistenteController;
 use App\Http\Controllers\ViajeController;
 use App\Http\Controllers\MecanicoController;
 use App\Http\Controllers\MantenimientoController;
+use App\Http\Controllers\AuthController;
 
 // ROLES
 Route::get('/roles', [RolController::class, 'index']);
@@ -78,3 +79,8 @@ Route::delete('/mecanicos/{id}', [MecanicoController::class, 'destroy']);
 
 //mantenimientos
 Route::apiResource('mantenimientos', MantenimientoController::class);
+
+//login
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/logout', [AuthController::class, 'logout']);
+Route::get('/me', [AuthController::class, 'me']);

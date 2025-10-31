@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -21,6 +21,7 @@ import {
   Settings as SettingsIcon,
   Logout as LogoutIcon,
 } from '@mui/icons-material';
+import DashboardPage from './pages/DashboardPage';
 import RolesPage from './pages/RolesPage';
 import UsersPage from './pages/UsersPage';
 import EmployeesPage from './pages/EmployeesPage';
@@ -34,7 +35,7 @@ import MecanicosPage from './pages/MecanicosPage';
 
 const DRAWER_WIDTH = 240;
 
-export default function Layout() {
+export default function Layout({ user, onLogout }) {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [anchorEl, setAnchorEl] = useState(null);
 
@@ -63,6 +64,8 @@ export default function Layout() {
 
   const renderPage = () => {
     switch (currentPage) {
+      case 'dashboard':
+        return <DashboardPage />;
       case 'roles':
         return <RolesPage />;
       case 'users':
@@ -116,7 +119,10 @@ export default function Layout() {
           >
             <MenuItem onClick={handleProfileMenuClose}>Mi Perfil</MenuItem>
             <MenuItem onClick={handleProfileMenuClose}>Configuración</MenuItem>
-            <MenuItem onClick={handleProfileMenuClose}>
+            <MenuItem onClick={() => {
+              handleProfileMenuClose();
+              onLogout();
+            }}>
               <LogoutIcon sx={{ mr: 1 }} />
               Salir
             </MenuItem>
