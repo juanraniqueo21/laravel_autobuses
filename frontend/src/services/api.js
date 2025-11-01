@@ -1,3 +1,5 @@
+import { Key } from "lucide-react";
+
 const API_URL = '/api';
 
 const fetchOptions = (method = 'GET', body = null) => {
@@ -262,6 +264,19 @@ export const updateMantenimiento = async (id, mantenimientoData) => {
 
 export const deleteMantenimiento = async (id) => {
   const response = await fetch(`${API_URL}/mantenimientos/${id}`, fetchOptions('DELETE'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+// ========== AFP/ISAPRE ==========
+export const fetchAfps = async () => {
+  const response = await fetch(`${API_URL}/empleados/afps`, fetchOptions('GET'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const fetchIsapres = async () => {
+  const response = await fetch(`${API_URL}/empleados/isapres`, fetchOptions('GET'));
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();
 };

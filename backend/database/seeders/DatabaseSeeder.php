@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Models\Rol;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -15,11 +16,31 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // 1. Crear roles primero (si no existen)
+        $adminRol = Rol::firstOrCreate(
+            ['nombre' => 'Admin'],
+            ['descripcion' => 'Administrador del sistema']
+        );
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        // 2. Crear usuario de prueba
+        User::firstOrCreate(
+            ['email' => 'test@example.com'],
+            [
+                'nombre' => 'Test',
+                'apellido' => 'User',
+                'password' => bcrypt('123456'),
+                'rut' => '12.345.678',
+                'rut_verificador' => '9',
+                'telefono' => '912345678',
+                'estado' => 'activo',
+                'rol_id' => $adminRol->id,
+            ]
+        );
+
+        // 3. Ejecutar otros seeders
+        $this->call([
+            AfpSeeder::class,
+            IsapresSeeder::class,
         ]);
     }
 }

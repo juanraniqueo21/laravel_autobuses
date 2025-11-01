@@ -16,7 +16,6 @@ class Conductor extends Model
         'numero_licencia',
         'clase_licencia',
         'fecha_vencimiento_licencia',
-        'puntos_licencia',
         'estado',
         // Nuevos campos
         'anios_experiencia',

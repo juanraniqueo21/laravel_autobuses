@@ -27,7 +27,12 @@ Route::post('/users', [UserController::class, 'store']);
 Route::put('/users/{id}', [UserController::class, 'update']);
 Route::delete('/users/{id}', [UserController::class, 'destroy']);
 
-// EMPLEADOS
+// EMPLEADOS - RUTAS ESPECÍFICAS PRIMERO
+Route::get('/empleados/afps', [EmpleadoController::class, 'getAfps']);
+Route::get('/empleados/isapres', [EmpleadoController::class, 'getIsapres']);
+Route::get('/empleados/activos', [EmpleadoController::class, 'getActivos']);
+
+// EMPLEADOS - RUTAS GENÉRICAS DESPUÉS
 Route::get('/empleados', [EmpleadoController::class, 'index']);
 Route::get('/empleados/{id}', [EmpleadoController::class, 'show']);
 Route::post('/empleados', [EmpleadoController::class, 'store']);
@@ -69,7 +74,6 @@ Route::post('/viajes', [ViajeController::class, 'store']);
 Route::put('/viajes/{id}', [ViajeController::class, 'update']);
 Route::delete('/viajes/{id}', [ViajeController::class, 'destroy']);
 
-
 // MECANICOS
 Route::get('/mecanicos', [MecanicoController::class, 'index']);
 Route::get('/mecanicos/{id}', [MecanicoController::class, 'show']);
@@ -77,10 +81,10 @@ Route::post('/mecanicos', [MecanicoController::class, 'store']);
 Route::put('/mecanicos/{id}', [MecanicoController::class, 'update']);
 Route::delete('/mecanicos/{id}', [MecanicoController::class, 'destroy']);
 
-//mantenimientos
+// MANTENIMIENTOS
 Route::apiResource('mantenimientos', MantenimientoController::class);
 
-//login
+// AUTH
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout']);
 Route::get('/me', [AuthController::class, 'me']);

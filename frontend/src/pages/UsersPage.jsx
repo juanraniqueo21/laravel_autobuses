@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Phone, Mail } from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
@@ -9,6 +9,35 @@ import { fetchUsers, fetchRoles, createUser, updateUser, deleteUser } from '../s
 
 const ESTADOS = ['activo', 'inactivo', 'suspendido'];
 
+// ============================================
+// UTILIDADES
+// ============================================
+
+/**
+ * Formatear teléfono chileno
+ * Entrada: 976046231
+ * Salida: +56 9 7604 6231
+ */
+const formatPhoneChile = (phone) => {
+  if (!phone) return '';
+  const cleaned = phone.replace(/\D/g, '');
+  
+  if (cleaned.length === 9 && cleaned.startsWith('9')) {
+    return `+56 ${cleaned.charAt(0)} ${cleaned.substring(1, 5)} ${cleaned.substring(5)}`;
+  }
+  
+  return phone;
+};
+
+/**
+ * Validar teléfono chileno
+ * Solo acepta 9 dígitos empezando con 9
+ */
+const isValidPhoneChile = (phone) => {
+  const cleaned = phone.replace(/\D/g, '');
+  return cleaned.length === 9 && cleaned.startsWith('9');
+};
+
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -16,6 +45,7 @@ export default function UsersPage() {
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [phoneError, setPhoneError] = useState('');
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
@@ -23,6 +53,7 @@ export default function UsersPage() {
     password: '',
     rut: '',
     rut_verificador: '',
+    telefono: '',
     rol_id: '',
     estado: 'activo',
   });
@@ -49,6 +80,7 @@ export default function UsersPage() {
   };
 
   const handleOpenDialog = (user = null) => {
+    setPhoneError('');
     if (user) {
       setEditingUser(user);
       setFormData({
@@ -58,6 +90,7 @@ export default function UsersPage() {
         password: '',
         rut: user.rut,
         rut_verificador: user.rut_verificador,
+        telefono: user.telefono,
         rol_id: user.rol_id,
         estado: user.estado,
       });
@@ -70,6 +103,7 @@ export default function UsersPage() {
         password: '',
         rut: '',
         rut_verificador: '',
+        telefono: '',
         rol_id: roles.length > 0 ? roles[0].id : '',
         estado: 'activo',
       });
@@ -80,9 +114,28 @@ export default function UsersPage() {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingUser(null);
+    setPhoneError('');
+  };
+
+  const handlePhoneChange = (e) => {
+    const value = e.target.value.replace(/\D/g, ''); // Solo dígitos
+    setFormData({ ...formData, telefono: value });
+    
+    // Validar en tiempo real
+    if (value && !isValidPhoneChile(value)) {
+      setPhoneError('Teléfono debe tener 9 dígitos y empezar con 9');
+    } else {
+      setPhoneError('');
+    }
   };
 
   const handleSave = async () => {
+    // Validar teléfono antes de guardar
+    if (!formData.telefono || !isValidPhoneChile(formData.telefono)) {
+      setPhoneError('Teléfono inválido. Debe tener 9 dígitos y empezar con 9');
+      return;
+    }
+
     try {
       if (editingUser) {
         await updateUser(editingUser.id, formData);
@@ -97,7 +150,7 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('¿Estás seguro?')) {
+    if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
       try {
         await deleteUser(id);
         loadData();
@@ -123,8 +176,31 @@ export default function UsersPage() {
 
   const columns = [
     { id: 'id', label: 'ID' },
-    { id: 'nombre', label: 'Nombre', render: (row) => `${row.nombre} ${row.apellido}` },
-    { id: 'email', label: 'Email' },
+    { 
+      id: 'nombre', 
+      label: 'Nombre Completo', 
+      render: (row) => `${row.nombre} ${row.apellido}` 
+    },
+    { 
+      id: 'email', 
+      label: 'Email',
+      render: (row) => (
+        <div className="flex items-center gap-1">
+          <Mail size={14} className="text-gray-500" />
+          {row.email}
+        </div>
+      )
+    },
+    { 
+      id: 'telefono', 
+      label: 'Teléfono',
+      render: (row) => (
+        <div className="flex items-center gap-1">
+          <Phone size={14} className="text-gray-500" />
+          {formatPhoneChile(row.telefono)}
+        </div>
+      )
+    },
     { id: 'rut', label: 'RUT' },
     { id: 'rol_id', label: 'Rol', render: (row) => getRolNombre(row.rol_id) },
     {
@@ -180,39 +256,47 @@ export default function UsersPage() {
         onSubmit={handleSave}
         onCancel={handleCloseDialog}
       >
+        {/* Nombre y Apellido */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="Nombre"
             value={formData.nombre}
             onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+            placeholder="Juan"
             required
           />
           <Input
             label="Apellido"
             value={formData.apellido}
             onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
+            placeholder="Pérez"
             required
           />
         </div>
 
+        {/* Email */}
         <Input
           label="Email"
           type="email"
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          placeholder="juan@example.com"
           required
         />
 
+        {/* Contraseña (solo en crear) */}
         {!editingUser && (
           <Input
             label="Contraseña"
             type="password"
             value={formData.password}
             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            placeholder="••••••••"
             required
           />
         )}
 
+        {/* RUT */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="RUT"
@@ -231,21 +315,43 @@ export default function UsersPage() {
           />
         </div>
 
-        <Select
-          label="Rol"
-          options={roles.map(r => ({ id: r.id, label: r.nombre }))}
-          value={formData.rol_id}
-          onChange={(e) => setFormData({ ...formData, rol_id: e.target.value })}
-          required
-        />
+        {/* Teléfono */}
+        <div>
+          <Input
+            label="Teléfono"
+            type="tel"
+            value={formData.telefono}
+            onChange={handlePhoneChange}
+            placeholder="9 7604 6231"
+            maxLength="9"
+            required
+            error={phoneError}
+          />
+          {formData.telefono && (
+            <p className="text-sm text-gray-500 mt-1">
+              Formato: {formatPhoneChile(formData.telefono)}
+            </p>
+          )}
+        </div>
 
-        <Select
-          label="Estado"
-          options={ESTADOS.map(e => ({ id: e, label: e }))}
-          value={formData.estado}
-          onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-          required
-        />
+        {/* Rol y Estado */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Select
+            label="Rol"
+            options={roles.map(r => ({ id: r.id, label: r.nombre }))}
+            value={formData.rol_id}
+            onChange={(e) => setFormData({ ...formData, rol_id: e.target.value })}
+            required
+          />
+
+          <Select
+            label="Estado"
+            options={ESTADOS.map(e => ({ id: e, label: e.charAt(0).toUpperCase() + e.slice(1) }))}
+            value={formData.estado}
+            onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
+            required
+          />
+        </div>
       </FormDialog>
     </div>
   );

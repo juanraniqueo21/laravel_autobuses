@@ -24,17 +24,26 @@ class ConductorController extends Controller
 
     public function store(Request $request)
     {
+        // Validaciones
+        $validated = $request->validate([
+            'empleado_id' => 'required|exists:empleados,id|unique:conductores',
+            'numero_licencia' => 'required|string|unique:conductores',
+            'clase_licencia' => 'required|in:A,A2,A3,B,C,D,E',
+            'fecha_primera_licencia' => 'required|date',
+            'fecha_vencimiento_licencia' => 'required|date|after:fecha_primera_licencia',
+            'estado_licencia' => 'required|in:vigente,vencida,suspendida',
+            'anios_experiencia' => 'integer|min:0',
+            'estado' => 'required|in:activo,baja_medica,suspendido,inactivo',
+        ]);
+
         $conductor = Conductor::create([
             'empleado_id' => $request->empleado_id,
             'numero_licencia' => $request->numero_licencia,
             'clase_licencia' => $request->clase_licencia,
             'fecha_vencimiento_licencia' => $request->fecha_vencimiento_licencia,
-            'fecha_emision_licencia' => $request->fecha_emision_licencia,
-            'puntos_licencia' => $request->puntos_licencia ?? 0,
-            'estado' => $request->estado ?? 'activo',
-            // Nuevos campos
-            'anios_experiencia' => $request->anios_experiencia ?? 0,
             'fecha_primera_licencia' => $request->fecha_primera_licencia,
+            'estado' => $request->estado ?? 'activo',
+            'anios_experiencia' => $request->anios_experiencia ?? 0,
             'estado_licencia' => $request->estado_licencia ?? 'vigente',
             'observaciones_licencia' => $request->observaciones_licencia,
             'cantidad_infracciones' => $request->cantidad_infracciones ?? 0,
@@ -57,17 +66,24 @@ class ConductorController extends Controller
             return response()->json(['error' => 'Conductor no encontrado'], 404);
         }
 
+        // Validaciones (más flexibles para update)
+        $validated = $request->validate([
+            'numero_licencia' => 'sometimes|string|unique:conductores,numero_licencia,' . $id,
+            'clase_licencia' => 'sometimes|in:A,A2,A3,B,C,D,E',
+            'fecha_primera_licencia' => 'sometimes|date',
+            'fecha_vencimiento_licencia' => 'sometimes|date',
+            'estado_licencia' => 'sometimes|in:vigente,vencida,suspendida',
+            'anios_experiencia' => 'sometimes|integer|min:0',
+            'estado' => 'sometimes|in:activo,baja_medica,suspendido,inactivo',
+        ]);
+
         $conductor->update([
-            'empleado_id' => $request->empleado_id ?? $conductor->empleado_id,
             'numero_licencia' => $request->numero_licencia ?? $conductor->numero_licencia,
             'clase_licencia' => $request->clase_licencia ?? $conductor->clase_licencia,
             'fecha_vencimiento_licencia' => $request->fecha_vencimiento_licencia ?? $conductor->fecha_vencimiento_licencia,
-            'fecha_emision_licencia' => $request->fecha_emision_licencia ?? $conductor->fecha_emision_licencia,
-            'puntos_licencia' => $request->puntos_licencia ?? $conductor->puntos_licencia,
-            'estado' => $request->estado ?? $conductor->estado,
-            // Nuevos campos
-            'anios_experiencia' => $request->anios_experiencia ?? $conductor->anios_experiencia,
             'fecha_primera_licencia' => $request->fecha_primera_licencia ?? $conductor->fecha_primera_licencia,
+            'estado' => $request->estado ?? $conductor->estado,
+            'anios_experiencia' => $request->anios_experiencia ?? $conductor->anios_experiencia,
             'estado_licencia' => $request->estado_licencia ?? $conductor->estado_licencia,
             'observaciones_licencia' => $request->observaciones_licencia ?? $conductor->observaciones_licencia,
             'cantidad_infracciones' => $request->cantidad_infracciones ?? $conductor->cantidad_infracciones,
