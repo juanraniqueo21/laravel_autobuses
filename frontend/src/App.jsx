@@ -14,22 +14,44 @@ import RoutesPage from "./pages/RoutesPage";
 import ViajesPage from "./pages/ViajesPage";
 import MantencionesPage from './pages/MantencionesPage';
 import LogisticPage from './pages/LogisticPage';
+import { logout, me } from './services/api';
 import './index.css';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('dashboard');
-  {currentPage === 'logistica' && <LogisticPage />}
 
+  // Verificar autenticación al cargar la app
   useEffect(() => {
-    const savedAuth = localStorage.getItem('isAuthenticated');
-    const savedUser = localStorage.getItem('user');
-    
-    if (savedAuth && savedUser) {
-      setIsAuthenticated(true);
-      setUser(JSON.parse(savedUser));
-    }
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      const savedUser = localStorage.getItem('user');
+      
+      if (token && savedUser) {
+        try {
+          // Verificar que el token sigue siendo válido
+          const response = await me();
+          
+          if (response.success) {
+            setIsAuthenticated(true);
+            setUser(response.user);
+          } else {
+            // Token inválido, limpiar localStorage
+            handleLogout();
+          }
+        } catch (error) {
+          console.error('Error verificando autenticación:', error);
+          // Token inválido o expirado
+          handleLogout();
+        }
+      }
+      
+      setLoading(false);
+    };
+
+    checkAuth();
   }, []);
 
   const handleLoginSuccess = (userData) => {
@@ -38,13 +60,31 @@ function App() {
     setCurrentPage('dashboard');
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('isAuthenticated');
-    setIsAuthenticated(false);
-    setUser(null);
-    setCurrentPage('dashboard');
+  const handleLogout = async () => {
+    try {
+      // Llamar logout del backend para invalidar el token
+      await logout();
+    } catch (error) {
+      console.error('Error en logout:', error);
+    } finally {
+      // Limpiar estado local
+      setIsAuthenticated(false);
+      setUser(null);
+      setCurrentPage('dashboard');
+    }
   };
+
+  // Mostrar loading mientras verifica autenticación
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -73,7 +113,6 @@ function App() {
       {currentPage === 'viajes' && <ViajesPage />}
       {currentPage === 'mantenimientos' && <MantencionesPage />}
       {currentPage === 'logistica' && <LogisticPage />}
-      {/* Aquí irán las otras pages */}
     </MainLayout>
   );
 }

@@ -1,20 +1,103 @@
-import { Key } from "lucide-react";
-
 const API_URL = '/api';
 
-const fetchOptions = (method = 'GET', body = null) => {
+// ============================================
+// HELPER: Obtener token del localStorage
+// ============================================
+const getAuthToken = () => {
+  return localStorage.getItem('token');
+};
+
+// ============================================
+// HELPER: Configurar headers con token JWT
+// ============================================
+const fetchOptions = (method = 'GET', body = null, requiresAuth = true) => {
   const options = {
     method,
     headers: {
       'Content-Type': 'application/json',
     },
   };
+
+  // Agregar token JWT si la petición requiere autenticación
+  if (requiresAuth) {
+    const token = getAuthToken();
+    console.log('🔑 Token en fetchOptions:', token);
+    if (token) {
+      options.headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
   
   if (body) {
     options.body = JSON.stringify(body);
   }
   
   return options;
+};
+
+// ============================================
+// AUTENTICACIÓN (AUTH)
+// ============================================
+
+/**
+ * LOGIN - Autenticar usuario
+ * @param {string} email 
+ * @param {string} password 
+ * @returns {Promise} { success, token, user }
+ */
+export const login = async (email, password) => {
+  const response = await fetch(`${API_URL}/login`, fetchOptions('POST', { email, password }, false));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Error en el login');
+  }
+  const data = await response.json();
+  
+  // Guardar token en localStorage
+  if (data.token) {
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+  }
+  
+  return data;
+};
+
+/**
+ * LOGOUT - Cerrar sesión
+ */
+export const logout = async () => {
+  try {
+    await fetch(`${API_URL}/logout`, fetchOptions('POST', null, true));
+  } catch (error) {
+    console.error('Error en logout:', error);
+  } finally {
+    // Limpiar localStorage siempre
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  }
+};
+
+/**
+ * ME - Obtener datos del usuario autenticado
+ */
+export const me = async () => {
+  const response = await fetch(`${API_URL}/me`, fetchOptions('GET', null, true));
+  if (!response.ok) throw new Error('No autenticado');
+  return response.json();
+};
+
+/**
+ * REFRESH - Renovar token JWT
+ */
+export const refreshToken = async () => {
+  const response = await fetch(`${API_URL}/refresh`, fetchOptions('POST', null, true));
+  if (!response.ok) throw new Error('No se pudo renovar el token');
+  const data = await response.json();
+  
+  if (data.token) {
+    localStorage.setItem('token', data.token);
+  }
+  
+  return data;
 };
 
 // ========== ROLES ==========
@@ -121,25 +204,48 @@ export const deleteConductor = async (id) => {
 export const fetchBuses = async () => {
   const response = await fetch(`${API_URL}/buses`, fetchOptions('GET'));
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  return response.json();
+  const data = await response.json();
+  
+  // El backend devuelve {success: true, data: [...]}
+  if (data.success && data.data) {
+    return data.data;
+  }
+  return data;
 };
 
 export const createBus = async (busData) => {
   const response = await fetch(`${API_URL}/buses`, fetchOptions('POST', busData));
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  return response.json();
+  const data = await response.json();
+  
+  if (!response.ok) {
+    // Si hay errores de validación, lanzarlos
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  // El backend devuelve {success: true, data: {...}}
+  return data.data || data;
 };
 
 export const updateBus = async (id, busData) => {
   const response = await fetch(`${API_URL}/buses/${id}`, fetchOptions('PUT', busData));
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  return response.json();
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data.data || data;
 };
 
 export const deleteBus = async (id) => {
   const response = await fetch(`${API_URL}/buses/${id}`, fetchOptions('DELETE'));
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  return response.json();
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
 };
 
 // ========== RUTAS ==========
@@ -216,7 +322,6 @@ export const deleteViaje = async (id) => {
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();
 };
-
 
 // ========== MECANICOS ==========
 export const fetchMecanicos = async () => {

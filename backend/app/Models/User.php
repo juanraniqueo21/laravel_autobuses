@@ -5,8 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Tymon\JWTAuth\Contracts\JWTSubject;
 
-class User extends Authenticatable
+class User extends Authenticatable implements JWTSubject
 {
     use HasFactory, Notifiable;
 
@@ -38,6 +39,26 @@ class User extends Authenticatable
     }
 
     // ============================================
+    // JWT METHODS (REQUERIDOS)
+    // ============================================
+    
+    /**
+     * Get the identifier that will be stored in the subject claim of the JWT.
+     */
+    public function getJWTIdentifier()
+    {
+        return $this->getKey();
+    }
+
+    /**
+     * Return a key value array, containing any custom claims to be added to the JWT.
+     */
+    public function getJWTCustomClaims()
+    {
+        return [];
+    }
+
+    // ============================================
     // RELACIONES
     // ============================================
     
@@ -55,8 +76,6 @@ class User extends Authenticatable
 
     /**
      * Formatear teléfono para visualización
-     * Entrada: 976046231
-     * Salida: +56 9 7604 6231
      */
     public function getPhoneFormattedAttribute()
     {
@@ -64,7 +83,7 @@ class User extends Authenticatable
             return null;
         }
 
-        $phone = preg_replace('/\D/', '', $this->telefono); // Solo dígitos
+        $phone = preg_replace('/\D/', '', $this->telefono);
         
         if (strlen($phone) === 9 && substr($phone, 0, 1) === '9') {
             return '+56 ' . substr($phone, 0, 1) . ' ' . substr($phone, 1, 4) . ' ' . substr($phone, 5);

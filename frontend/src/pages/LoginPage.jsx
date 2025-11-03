@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
-
-const API_URL = '/api';
+import { login } from '../services/api';
 
 export default function LoginPage({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -21,31 +20,19 @@ export default function LoginPage({ onLoginSuccess }) {
 
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
-      });
+      
+      // Usar la función login de api.js (ya guarda token automáticamente)
+      const data = await login(email, password);
 
-      if (!response.ok) {
-        throw new Error('Credenciales inválidas');
+      if (data.success) {
+        // esperar un tick para asegurar que el token guardo
+        await new Promise(resolve => setTimeout(resolve, 100));
+        onLoginSuccess(data.user);
+      } else {
+        setError(data.message || 'Error en el login');
       }
-
-      const data = await response.json();
-
-      // Guardar usuario en localStorage
-      localStorage.setItem('user', JSON.stringify(data.user));
-      localStorage.setItem('isAuthenticated', 'true');
-
-      // Llamar callback para cambiar a dashboard
-      onLoginSuccess(data.user);
     } catch (err) {
-      setError(err.message || 'Error en el login');
+      setError(err.message || 'Credenciales inválidas');
     } finally {
       setLoading(false);
     }

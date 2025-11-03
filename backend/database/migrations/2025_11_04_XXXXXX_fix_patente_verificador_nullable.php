@@ -11,8 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('empleados', function (Blueprint $table) {
-            //
+        Schema::table('buses', function (Blueprint $table) {
+            // Hacer patente_verificador nullable
+            $table->string('patente_verificador', 1)->nullable()->change();
         });
     }
 
@@ -21,10 +22,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('empleados', function (Blueprint $table) {
-            $table->string('foto')->nullable()->after('id');
-
-
+        Schema::table('buses', function (Blueprint $table) {
+            $table->string('patente_verificador', 1)->nullable(false)->change();
         });
     }
 };
