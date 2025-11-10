@@ -42,7 +42,7 @@ export default function LoginPage({ onLoginSuccess }) {
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">🚌 Gestión de Buses</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-2"> Gestión de Buses</h1>
         <p className="text-gray-600">Sistema de gestión operativa</p>
       </div>
 

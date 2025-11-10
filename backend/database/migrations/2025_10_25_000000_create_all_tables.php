@@ -32,7 +32,6 @@ return new class extends Migration
             $table->string('password');
             $table->string('rut', 12)->unique(); // Formato: 12.345.678
             $table->char('rut_verificador', 1); // Dígito verificador (0-9 o K)
-            $table->string('telefono', 12)->nullable();
             $table->enum('estado', ['activo', 'inactivo', 'suspendido'])->default('activo');
             $table->unsignedBigInteger('rol_id');
             $table->timestamps();
@@ -147,31 +146,62 @@ return new class extends Migration
         });
 
         // ============================================
-        // 8. TABLA: BUSES
+        // 8. TABLA: BUSES (VERSIÓN COMPLETA)
         // ============================================
         Schema::create('buses', function (Blueprint $table) {
             $table->id();
+            
+            // Identificación del bus
             $table->string('patente', 6)->unique(); // Formato: SASA12
             $table->char('patente_verificador', 1); // Dígito verificador
+            
+            // Información básica
             $table->string('marca', 50);
             $table->string('modelo', 50);
             $table->integer('anio');
-            $table->string('numero_serie', 50)->unique();
-            $table->string('numero_motor', 50)->unique();
+            $table->string('tipo_combustible', 50)->nullable(); // diesel, gas, electrico
+            $table->string('color', 50)->nullable();
+            
+            // Números de serie
+            $table->string('numero_serie', 50)->nullable();
+            $table->string('numero_motor', 50)->nullable();
+            $table->string('numero_chasis', 50)->nullable();
+            
+            // Capacidad
             $table->integer('capacidad_pasajeros');
-            $table->date('fecha_adquisicion');
+            
+            // Fechas
+            $table->date('fecha_adquisicion')->nullable();
+            
+            // Estado operativo
             $table->enum('estado', ['operativo', 'mantenimiento', 'desmantelado'])->default('operativo');
+            
+            // Revisión técnica
             $table->date('proxima_revision_tecnica')->nullable();
             $table->date('ultima_revision_tecnica')->nullable();
             $table->string('documento_revision_tecnica', 500)->nullable();
-            $table->date('vencimiento_seguro')->nullable();
-            $table->string('numero_permiso_circulacion', 50)->nullable();
+            
+            // SOAP (Seguro Obligatorio de Accidentes Personales)
+            $table->date('vencimiento_soap')->nullable();
             $table->string('numero_soap', 50)->nullable();
+            
+            // Seguro y póliza
+            $table->string('compania_seguro', 100)->nullable();
+            $table->string('numero_poliza', 50)->nullable();
+            $table->enum('tipo_cobertura_adicional', ['ninguna', 'terceros', 'full'])->default('ninguna')->nullable();
+            $table->date('vencimiento_poliza')->nullable();
+            
+            // Permisos
+            $table->string('numero_permiso_circulacion', 50)->nullable();
+            
+            // Observaciones
             $table->text('observaciones')->nullable();
+            
+            // Kilometraje
             $table->integer('kilometraje_original')->default(0);
             $table->integer('kilometraje_actual')->default(0);
+            
             $table->timestamps();
-
             
             // Índices
             $table->index('patente');

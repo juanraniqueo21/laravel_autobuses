@@ -5,7 +5,7 @@ export default function Header({ user, onLogout }) {
   return (
     <header className="bg-white border-b shadow-sm sticky top-0 z-40">
       <div className="flex justify-between items-center px-6 py-4">
-        <h1 className="text-2xl font-bold text-blue-600">🚌 Gestión de Buses</h1>
+        <h1 className="text-2xl font-bold text-blue-600"></h1>
         
         <div className="flex items-center gap-4">
           <div className="text-right">

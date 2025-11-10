@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Phone, Mail } from 'lucide-react';
+import { Plus, Mail } from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
@@ -14,28 +14,90 @@ const ESTADOS = ['activo', 'inactivo', 'suspendido'];
 // ============================================
 
 /**
- * Formatear teléfono chileno
- * Entrada: 976046231
- * Salida: +56 9 7604 6231
+ * Formatear RUT chileno mientras se escribe
+ * Entrada: 215264092 o 21526409-2
+ * Salida: 21526409-2
  */
-const formatPhoneChile = (phone) => {
-  if (!phone) return '';
-  const cleaned = phone.replace(/\D/g, '');
+const formatRutChile = (rut) => {
+  // Limpiar: solo números y K
+  let cleaned = rut.replace(/[^0-9kK]/g, '').toUpperCase();
   
-  if (cleaned.length === 9 && cleaned.startsWith('9')) {
-    return `+56 ${cleaned.charAt(0)} ${cleaned.substring(1, 5)} ${cleaned.substring(5)}`;
-  }
+  if (cleaned.length === 0) return '';
   
-  return phone;
+  // Separar número y dígito verificador
+  let numero = cleaned.slice(0, -1);
+  let dv = cleaned.slice(-1);
+  
+  // Si solo hay un carácter, no agregar guión
+  if (cleaned.length === 1) return cleaned;
+  
+  // Formatear: 21526409-2
+  return `${numero}-${dv}`;
 };
 
 /**
- * Validar teléfono chileno
- * Solo acepta 9 dígitos empezando con 9
+ * Validar formato básico de RUT
+ * Solo verifica que tenga números y que el DV sea 0-9 o K
  */
-const isValidPhoneChile = (phone) => {
-  const cleaned = phone.replace(/\D/g, '');
-  return cleaned.length === 9 && cleaned.startsWith('9');
+const isValidRutFormat = (rut) => {
+  // Limpiar
+  const cleaned = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+  
+  if (cleaned.length < 2) return false;
+  
+  // Separar
+  const numero = cleaned.slice(0, -1);
+  const dv = cleaned.slice(-1);
+  
+  // Verificar que el número sea numérico
+  if (!/^\d+$/.test(numero)) return false;
+  
+  // Verificar que el DV sea 0-9 o K
+  if (!/^[0-9K]$/.test(dv)) return false;
+  
+  return true;
+};
+
+/**
+ * Calcular dígito verificador de RUT (Módulo 11)
+ */
+const calcularDVRut = (rut) => {
+  // Limpiar y obtener solo el número
+  const numero = rut.replace(/[^0-9]/g, '');
+  
+  let suma = 0;
+  let multiplo = 2;
+  
+  // Recorrer de derecha a izquierda
+  for (let i = numero.length - 1; i >= 0; i--) {
+    suma += parseInt(numero[i]) * multiplo;
+    multiplo = multiplo < 7 ? multiplo + 1 : 2;
+  }
+  
+  const resto = suma % 11;
+  const dv = 11 - resto;
+  
+  if (dv === 11) return '0';
+  if (dv === 10) return 'K';
+  return dv.toString();
+};
+
+/**
+ * Validar RUT completo (formato y dígito verificador)
+ */
+const isValidRutComplete = (rut) => {
+  if (!isValidRutFormat(rut)) return false;
+  
+  // Limpiar
+  const cleaned = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+  const numero = cleaned.slice(0, -1);
+  const dvIngresado = cleaned.slice(-1);
+  
+  // Calcular DV correcto
+  const dvCalculado = calcularDVRut(numero);
+  
+  // Comparar
+  return dvIngresado === dvCalculado;
 };
 
 export default function UsersPage() {
@@ -45,15 +107,13 @@ export default function UsersPage() {
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [phoneError, setPhoneError] = useState('');
+  const [rutError, setRutError] = useState('');
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
     email: '',
     password: '',
-    rut: '',
-    rut_verificador: '',
-    telefono: '',
+    rut_completo: '',
     rol_id: '',
     estado: 'activo',
   });
@@ -80,7 +140,7 @@ export default function UsersPage() {
   };
 
   const handleOpenDialog = (user = null) => {
-    setPhoneError('');
+    setRutError('');
     if (user) {
       setEditingUser(user);
       setFormData({
@@ -88,9 +148,7 @@ export default function UsersPage() {
         apellido: user.apellido,
         email: user.email,
         password: '',
-        rut: user.rut,
-        rut_verificador: user.rut_verificador,
-        telefono: user.telefono,
+        rut_completo: user.rut_completo || `${user.rut}-${user.rut_verificador}`,
         rol_id: user.rol_id,
         estado: user.estado,
       });
@@ -101,9 +159,7 @@ export default function UsersPage() {
         apellido: '',
         email: '',
         password: '',
-        rut: '',
-        rut_verificador: '',
-        telefono: '',
+        rut_completo: '',
         rol_id: roles.length > 0 ? roles[0].id : '',
         estado: 'activo',
       });
@@ -114,25 +170,34 @@ export default function UsersPage() {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingUser(null);
-    setPhoneError('');
+    setRutError('');
   };
 
-  const handlePhoneChange = (e) => {
-    const value = e.target.value.replace(/\D/g, ''); // Solo dígitos
-    setFormData({ ...formData, telefono: value });
+  const handleRutChange = (e) => {
+    let value = e.target.value;
+    
+    // Formatear automáticamente mientras escribe
+    const formatted = formatRutChile(value);
+    setFormData({ ...formData, rut_completo: formatted });
     
     // Validar en tiempo real
-    if (value && !isValidPhoneChile(value)) {
-      setPhoneError('Teléfono debe tener 9 dígitos y empezar con 9');
+    if (formatted.length > 0) {
+      if (!isValidRutFormat(formatted)) {
+        setRutError('Formato inválido. Solo números y K para el verificador');
+      } else if (formatted.length >= 3 && !isValidRutComplete(formatted)) {
+        setRutError('RUT inválido. Dígito verificador incorrecto');
+      } else {
+        setRutError('');
+      }
     } else {
-      setPhoneError('');
+      setRutError('');
     }
   };
 
   const handleSave = async () => {
-    // Validar teléfono antes de guardar
-    if (!formData.telefono || !isValidPhoneChile(formData.telefono)) {
-      setPhoneError('Teléfono inválido. Debe tener 9 dígitos y empezar con 9');
+    // Validar RUT antes de guardar
+    if (!formData.rut_completo || !isValidRutComplete(formData.rut_completo)) {
+      setRutError('RUT inválido. Verifique el formato y el dígito verificador');
       return;
     }
 
@@ -142,7 +207,7 @@ export default function UsersPage() {
       } else {
         await createUser(formData);
       }
-      loadData();
+      await loadData();
       handleCloseDialog();
     } catch (err) {
       setError('Error al guardar: ' + err.message);
@@ -192,16 +257,10 @@ export default function UsersPage() {
       )
     },
     { 
-      id: 'telefono', 
-      label: 'Teléfono',
-      render: (row) => (
-        <div className="flex items-center gap-1">
-          <Phone size={14} className="text-gray-500" />
-          {formatPhoneChile(row.telefono)}
-        </div>
-      )
+      id: 'rut_completo', 
+      label: 'RUT',
+      render: (row) => row.rut_completo || `${row.rut}-${row.rut_verificador}`
     },
-    { id: 'rut', label: 'RUT' },
     { id: 'rol_id', label: 'Rol', render: (row) => getRolNombre(row.rol_id) },
     {
       id: 'estado',
@@ -296,42 +355,29 @@ export default function UsersPage() {
           />
         )}
 
-        {/* RUT */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="RUT"
-            value={formData.rut}
-            onChange={(e) => setFormData({ ...formData, rut: e.target.value })}
-            placeholder="12.345.678"
-            required
-          />
-          <Input
-            label="RUT Verificador"
-            value={formData.rut_verificador}
-            onChange={(e) => setFormData({ ...formData, rut_verificador: e.target.value.toUpperCase() })}
-            placeholder="0-9 o K"
-            maxLength="1"
-            required
-          />
-        </div>
-
-        {/* Teléfono */}
+        {/* RUT - UN SOLO CAMPO */}
         <div>
           <Input
-            label="Teléfono"
-            type="tel"
-            value={formData.telefono}
-            onChange={handlePhoneChange}
-            placeholder="9 7604 6231"
-            maxLength="9"
+            label="RUT"
+            value={formData.rut_completo}
+            onChange={handleRutChange}
+            placeholder="12749625-K"
+            maxLength="12"
             required
-            error={phoneError}
+            error={rutError}
           />
-          {formData.telefono && (
-            <p className="text-sm text-gray-500 mt-1">
-              Formato: {formatPhoneChile(formData.telefono)}
-            </p>
+          {formData.rut_completo && !rutError && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-sm text-green-600 font-medium">✓ RUT válido</span>
+              <span className="text-sm text-gray-500">Formato: {formData.rut_completo}</span>
+            </div>
           )}
+          {rutError && (
+            <p className="text-sm text-red-600 mt-1">{rutError}</p>
+          )}
+          <p className="text-xs text-gray-500 mt-1">
+            Ingrese RUT sin puntos, solo con guión. Ejemplo: 12749625-K
+          </p>
         </div>
 
         {/* Rol y Estado */}

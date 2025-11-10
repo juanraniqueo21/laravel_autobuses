@@ -31,7 +31,6 @@ class DatabaseSeeder extends Seeder
                 'password' => bcrypt('123456'),
                 'rut' => '12.345.678',
                 'rut_verificador' => '9',
-                'telefono' => '912345678',
                 'estado' => 'activo',
                 'rol_id' => $adminRol->id,
             ]

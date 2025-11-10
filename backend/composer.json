@@ -27,11 +27,15 @@
             "Database\\Seeders\\": "database/seeders/"
         }
     },
+    "files": [
+        "app/Helpers/RutHelper.php"
+    ],
     "autoload-dev": {
         "psr-4": {
             "Tests\\": "tests/"
         }
     },
+    
     "scripts": {
         "setup": [
             "composer install",

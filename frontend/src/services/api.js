@@ -132,10 +132,30 @@ export const fetchUsers = async () => {
   return response.json();
 };
 
+// Reemplaza la función createUser en tu api.js con esta versión:
+
 export const createUser = async (userData) => {
   const response = await fetch(`${API_URL}/users`, fetchOptions('POST', userData));
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  return response.json();
+  
+  // Intentar parsear la respuesta como JSON
+  let data;
+  try {
+    data = await response.json();
+  } catch (error) {
+    // Si no es JSON, probablemente es un error HTML de Laravel
+    const text = await response.text();
+    console.error('❌ Respuesta del servidor (HTML):', text);
+    throw new Error('Error del servidor. Revisa la consola del navegador para más detalles.');
+  }
+  
+  if (!response.ok) {
+    // Si hay errores de validación o mensaje de error
+    const errorMsg = data.error || data.message || `HTTP error! status: ${response.status}`;
+    console.error('❌ Error del backend:', data);
+    throw new Error(errorMsg);
+  }
+  
+  return data;
 };
 
 export const updateUser = async (id, userData) => {

@@ -30,6 +30,10 @@ class User extends Authenticatable implements JWTSubject
         'remember_token',
     ];
 
+    protected $appends = [
+        'rut_completo' // Agregar RUT formateado automáticamente
+    ];
+
     protected function casts(): array
     {
         return [
@@ -73,6 +77,18 @@ class User extends Authenticatable implements JWTSubject
     // ============================================
     // MUTADORES Y ACCEADORES
     // ============================================
+
+    /**
+     * Formatear RUT completo: 21526409-2
+     */
+    public function getRutCompletoAttribute()
+    {
+        if (!$this->rut || !$this->rut_verificador) {
+            return null;
+        }
+        
+        return $this->rut . '-' . strtoupper($this->rut_verificador);
+    }
 
     /**
      * Formatear teléfono para visualización
