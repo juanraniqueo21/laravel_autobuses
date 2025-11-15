@@ -19,6 +19,7 @@ export default function AsistentesPage() {
   const [formData, setFormData] = useState({
     empleado_id: '',
     fecha_inicio: '',
+    fecha_examen_ocupacional: '',
     estado: 'activo',
   });
 
@@ -52,6 +53,7 @@ export default function AsistentesPage() {
       setFormData({
         empleado_id: '',
         fecha_inicio: '',
+        fecha_examen_ocupacional: '',
         estado: 'activo',
       });
     }
@@ -105,6 +107,7 @@ export default function AsistentesPage() {
   const columns = [
     { id: 'empleado_id', label: 'Nombre', render: (row) => getEmpleadoNombre(row.empleado_id) },
     { id: 'fecha_inicio', label: 'Fecha Inicio' },
+    { id: 'fecha_examen_ocupacional', label: 'Fecha Examen Ocupacional' },
     {
       id: 'estado',
       label: 'Estado',
@@ -160,13 +163,19 @@ export default function AsistentesPage() {
       >
         <Select
           label="Empleado"
-          options={empleados.filter(emp => emp.user?.rol_id === 5).map(emp => ({
-            id: emp.id,
-            label: `${emp.user?.nombre} ${emp.user?.apellido}`
-          }))}
+          options={empleados
+            .filter(emp =>
+              // mostrar solo rol asistente(5) y que no estén ya asignados
+              emp.user?.rol_id === 5 &&
+              (!asistentes.some(a => a.empleado_id === emp.id) || emp.id === formData.empleado_id)
+            )
+            .map(emp => ({
+              id: emp.id,
+              label: `${emp.user?.nombre || ''} ${emp.user?.apellido || ''}`
+            }))}
           value={formData.empleado_id}
           onChange={(e) => setFormData({ ...formData, empleado_id: e.target.value })}
-          required
+          required            
         />
 
         <Input
@@ -175,6 +184,12 @@ export default function AsistentesPage() {
           value={formData.fecha_inicio}
           onChange={(e) => setFormData({ ...formData, fecha_inicio: e.target.value })}
           required
+        />
+        <Input
+          label="Fecha de Examen Ocupacional"
+          type="date"
+          value={formData.fecha_examen_ocupacional}
+          onChange={(e) => setFormData({ ...formData, fecha_examen_ocupacional: e.target.value })}
         />
 
         <Select

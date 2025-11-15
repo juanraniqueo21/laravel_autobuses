@@ -53,6 +53,7 @@ Route::middleware('jwt.auth')->group(function () {
     Route::post('/empleados', [EmpleadoController::class, 'store']);
     Route::put('/empleados/{id}', [EmpleadoController::class, 'update']);
     Route::delete('/empleados/{id}', [EmpleadoController::class, 'destroy']);
+    Route::post('/empleados/{id}/baja', [EmpleadoController::class, 'darDeBaja']);
 
     // CONDUCTORES
     Route::get('/conductores', [ConductorController::class, 'index']);
@@ -98,4 +99,6 @@ Route::middleware('jwt.auth')->group(function () {
 
     // MANTENIMIENTOS
     Route::apiResource('mantenimientos', MantenimientoController::class);
+
+    
 });

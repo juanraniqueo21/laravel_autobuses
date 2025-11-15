@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Models\User;
 
 class Empleado extends Model
 {
@@ -15,8 +16,11 @@ class Empleado extends Model
         'user_id',
         'foto',
         'numero_empleado',
+        'numero_funcional',
         'fecha_contratacion',
         'fecha_termino',
+        'motivo_termino',         // ← CAMBIO: nuevo campo agregado
+        'observaciones_termino',  // ← CAMBIO: nuevo campo agregado
         'tipo_contrato',
         'salario_base',
         'afp_id',
@@ -167,6 +171,96 @@ class Empleado extends Model
         
         return $descripciones[$this->tipo_fonasa] ?? 'N/A';
     }
+
+
+    // ============================================
+    // AUTO-GENERACIÓN DE NÚMEROS (NUEVO)
+    // ============================================
+
+    public static function generarNumeroEmpleado()
+    { 
+        // obtener el ultimo numero de empleado
+        $ultimoEmpleado = self::where('numero_empleado', 'LIKE', 'E-%')
+            ->orderBy('numero_empleado', 'desc')
+            ->first();
+        if ($ultimoEmpleado) {
+            // se extrae el numero ""E-0001" -> 0001
+            $partes = explode('-', $ultimoEmpleado->numero_empleado);
+            $numero = intval(end($partes)) + 1;
+        } else {
+            $numero = 1;
+    }
+    //formato: E-0001
+        return sprintf('E-%04d', $numero);
+    }
+    /**
+     * Generar numero_funcional (dinámico según rol)
+     * Formato: C-0001, A-0001, M-0001, G-0001, R-0001, ADM-0001
+     */
+    public static function generarNumeroFuncional($rolId)
+    {
+        // determinar prefijo segun rol
+        $prefijos = self::obtenerPrefijoPorRol($rolId);
+        // obtener el ultimo numero funcional con ese prefijo
+        $ultimoFuncional = self::where('numero_funcional', 'LIKE', "$prefijos-%")
+            ->orderBy('numero_funcional', 'desc')
+            ->first();
+            if ($ultimoFuncional) {
+                // extraer el numero: "C-0001" -> 0001
+                $partes = explode('-', $ultimoFuncional->numero_funcional);
+                $numero = intval(end($partes)) + 1;
+            } else {
+                $numero = 1;
+            }    
+        //formato: C-0001, A-0001, M-0001, G-0001, R-0001, ADM-0001
+        return sprintf('%s-%04d', $prefijos, $numero);
+
+    }
+    /**
+     * Obtener prefijo según rol_id del usuario
+     */
+    public static function obtenerPrefijoPorRol($rolId)
+    {
+        $prefijos = [
+            1 => 'ADM', // Administrador
+            2 => 'G',   // Gerente
+            3 => 'C',   // Conductor
+            4 => 'M',   // Mecánico
+            5 => 'A',   // Asistente
+            6 => 'R',   // Recursos Humanos
+        ];
+        return $prefijos[$rolId] ?? 'E';// E por defecto(empleado general)
+    }
+    /**
+     * boot method - auto-generar numeros al crear empleado
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function($empleado){
+            // solo auto-genera si los campos estan vacios
+            if (empty($empleado->numero_empleado)) {
+                $empleado->numero_empleado = self::generarNumeroEmpleado();
+            }
+            if (empty($empleado->numero_funcional)) {
+                //obtener rol del usuario
+                $user = User::find($empleado->user_id);
+                if ($user) {
+                    $empleado->numero_funcional = self::generarNumeroFuncional($user->rol_id);
+                }
+            }
+        });
+    }
+
+
+
+
+
+
+
+
+
 
     // ============================================
     // SCOPES

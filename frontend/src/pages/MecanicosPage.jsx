@@ -22,6 +22,7 @@ export default function MecanicosPage() {
     numero_certificacion: '',
     especialidad: '',
     fecha_certificacion: '',
+    fecha_examen_ocupacional: '', // ✅ AGREGADO
     estado: 'activo',
     observaciones: '',
   });
@@ -38,7 +39,13 @@ export default function MecanicosPage() {
         fetchEmpleados(),
       ]);
       setMecanicos(mecanicosData);
-      setEmpleados(empleadosData);
+      
+      // ✅ CORREGIDO: Filtrar empleados que NO son mecánicos
+      const empleadosSinMecanico = empleadosData.filter(emp => 
+        !mecanicosData.some(mec => mec.empleado_id === emp.id)
+      );
+      setEmpleados(empleadosSinMecanico);
+      
       setError(null);
     } catch (err) {
       setError('Error al cargar datos: ' + err.message);
@@ -50,7 +57,15 @@ export default function MecanicosPage() {
   const handleOpenDialog = (mecanico = null) => {
     if (mecanico) {
       setEditingMecanico(mecanico);
-      setFormData(mecanico);
+      setFormData({
+        empleado_id: mecanico.empleado_id,
+        numero_certificacion: mecanico.numero_certificacion || '',
+        especialidad: mecanico.especialidad || '',
+        fecha_certificacion: mecanico.fecha_certificacion || '',
+        fecha_examen_ocupacional: mecanico.fecha_examen_ocupacional || '',
+        estado: mecanico.estado || 'activo',
+        observaciones: mecanico.observaciones || '',
+      });
     } else {
       setEditingMecanico(null);
       setFormData({
@@ -58,6 +73,7 @@ export default function MecanicosPage() {
         numero_certificacion: '',
         especialidad: '',
         fecha_certificacion: '',
+        fecha_examen_ocupacional: '',
         estado: 'activo',
         observaciones: '',
       });
@@ -85,7 +101,7 @@ export default function MecanicosPage() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('¿Estás seguro?')) {
+    if (window.confirm('¿Estás seguro de eliminar este mecánico?')) {
       try {
         await deleteMecanico(id);
         loadData();
@@ -96,8 +112,9 @@ export default function MecanicosPage() {
   };
 
   const getEmpleadoNombre = (empleadoId) => {
-    const emp = empleados.find(e => e.id === empleadoId);
-    return emp ? `${emp.user?.nombre || ''} ${emp.user?.apellido || ''}` : 'N/A';
+    const emp = empleados.find(e => e.id === empleadoId) || 
+                mecanicos.find(m => m.empleado_id === empleadoId)?.empleado;
+    return emp ? `${emp.user?.nombre || ''} ${emp.user?.apellido || ''}`.trim() : 'N/A';
   };
 
   const getEstadoColor = (estado) => {
@@ -109,11 +126,29 @@ export default function MecanicosPage() {
     return colors[estado] || 'bg-gray-100 text-gray-800';
   };
 
+  const formatDate = (date) => {
+    if (!date) return '-';
+    return new Date(date).toLocaleDateString('es-CL');
+  };
+
   const columns = [
-    { id: 'empleado_id', label: 'Nombre', render: (row) => getEmpleadoNombre(row.empleado_id) },
+    { 
+      id: 'empleado_id', 
+      label: 'Nombre', 
+      render: (row) => getEmpleadoNombre(row.empleado_id) 
+    },
     { id: 'especialidad', label: 'Especialidad' },
     { id: 'numero_certificacion', label: 'Certificación' },
-    { id: 'fecha_certificacion', label: 'Fecha Certificación' },
+    { 
+      id: 'fecha_certificacion', 
+      label: 'Fecha Certificación',
+      render: (row) => formatDate(row.fecha_certificacion)
+    },
+    { 
+      id: 'fecha_examen_ocupacional', 
+      label: 'Examen Ocupacional',
+      render: (row) => formatDate(row.fecha_examen_ocupacional)
+    },
     {
       id: 'estado',
       label: 'Estado',
@@ -138,11 +173,19 @@ export default function MecanicosPage() {
           size="lg"
           onClick={() => handleOpenDialog()}
           className="flex items-center gap-2"
+          disabled={empleados.length === 0}
         >
           <Plus size={20} />
           Nuevo Mecánico
         </Button>
       </div>
+
+      {/* Mensaje si no hay empleados disponibles */}
+      {empleados.length === 0 && !loading && (
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-6">
+          No hay empleados disponibles para asignar como mecánicos.
+        </div>
+      )}
 
       {/* Error */}
       {error && (
@@ -169,10 +212,19 @@ export default function MecanicosPage() {
       >
         <Select
           label="Empleado"
-          options={empleados.filter(emp => emp.user?.rol_id === 4).map(emp => ({
-            id: emp.id,
-            label: `${emp.user?.nombre} ${emp.user?.apellido}`
-          }))}
+          options={[
+            { id: '', label: 'Seleccione un empleado' },
+            ...empleados
+              .filter(emp =>
+                //SOLO rol mecanico(4)
+                emp.user?.rol_id === 4 &&
+                (!mecanicos.some(m => m.empleado_id === emp.id) || emp.id === formData.empleado_id)
+              )
+              .map(emp => ({
+                id: emp.id,
+                label: `${emp.user?.nombre} ${emp.user?.apellido}`
+              }))
+          ]}
           value={formData.empleado_id}
           onChange={(e) => setFormData({ ...formData, empleado_id: e.target.value })}
           required
@@ -180,7 +232,10 @@ export default function MecanicosPage() {
 
         <Select
           label="Especialidad"
-          options={ESPECIALIDADES.map(esp => ({ id: esp, label: esp }))}
+          options={[
+            { id: '', label: 'Seleccione especialidad' },
+            ...ESPECIALIDADES.map(esp => ({ id: esp, label: esp }))
+          ]}
           value={formData.especialidad}
           onChange={(e) => setFormData({ ...formData, especialidad: e.target.value })}
           required
@@ -190,14 +245,23 @@ export default function MecanicosPage() {
           label="Número de Certificación"
           value={formData.numero_certificacion}
           onChange={(e) => setFormData({ ...formData, numero_certificacion: e.target.value })}
+          placeholder="Número de certificación profesional"
         />
 
-        <Input
-          label="Fecha de Certificación"
-          type="date"
-          value={formData.fecha_certificacion}
-          onChange={(e) => setFormData({ ...formData, fecha_certificacion: e.target.value })}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="Fecha de Certificación"
+            type="date"
+            value={formData.fecha_certificacion}
+            onChange={(e) => setFormData({ ...formData, fecha_certificacion: e.target.value })}
+          />
+          <Input
+            label="Fecha de Examen Ocupacional"
+            type="date"
+            value={formData.fecha_examen_ocupacional}
+            onChange={(e) => setFormData({ ...formData, fecha_examen_ocupacional: e.target.value })}
+          />
+        </div>
 
         <Select
           label="Estado"
@@ -215,7 +279,8 @@ export default function MecanicosPage() {
             value={formData.observaciones}
             onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            rows={2}
+            rows={3}
+            placeholder="Observaciones adicionales..."
           />
         </div>
       </FormDialog>

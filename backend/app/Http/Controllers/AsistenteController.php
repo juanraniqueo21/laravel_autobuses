@@ -28,6 +28,7 @@ class AsistenteController extends Controller
             'empleado_id' => $request->empleado_id,
             'fecha_inicio' => $request->fecha_inicio,
             'fecha_termino' => $request->fecha_termino,
+            'fecha_examen_ocupacional' => $request->fecha_examen_ocupacional,
             'estado' => $request->estado ?? 'activo',
             'observaciones' => $request->observaciones,
         ]);
@@ -45,6 +46,7 @@ class AsistenteController extends Controller
             'empleado_id' => $request->empleado_id ?? $asistente->empleado_id,
             'fecha_inicio' => $request->fecha_inicio ?? $asistente->fecha_inicio,
             'fecha_termino' => $request->fecha_termino ?? $asistente->fecha_termino,
+            'fecha_examen_ocupacional' => $request->fecha_examen_ocupacional ?? $asistente->fecha_examen_ocupacional,
             'estado' => $request->estado ?? $asistente->estado,
             'observaciones' => $request->observaciones ?? $asistente->observaciones,
         ]);

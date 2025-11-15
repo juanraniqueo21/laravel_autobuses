@@ -83,6 +83,7 @@ class AuthController extends Controller
                     'rut' => $user->rut,
                     'telefono' => $user->telefono,
                     'estado' => $user->estado,
+                    'rol_id' => $user->rol_id,
                     'rol' => [
                         'id' => $user->rol->id,
                         'nombre' => $user->rol->nombre,
@@ -154,6 +155,7 @@ class AuthController extends Controller
                     'rut' => $user->rut,
                     'telefono' => $user->telefono,
                     'estado' => $user->estado,
+                    'rol_id' => $user->rol_id,
                     'rol' => [
                         'id' => $user->rol->id,
                         'nombre' => $user->rol->nombre,

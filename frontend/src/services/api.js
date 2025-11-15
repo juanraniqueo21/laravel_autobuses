@@ -194,6 +194,41 @@ export const deleteEmpleado = async (id) => {
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();
 };
+export const darDeBajaEmpleado = async (id, data) => {
+  console.log('🌐 URL:', `${API_URL}/empleados/${id}/baja`);
+  console.log('📤 Datos enviados:', data);
+  
+  const response = await fetch(`${API_URL}/empleados/${id}/baja`, fetchOptions('POST', data));
+  
+  console.log('📥 Response status:', response.status);
+  console.log('📥 Response OK?:', response.ok);
+  
+  // Leer la respuesta como texto primero
+  const responseText = await response.text();
+  console.log('📥 Response text (primeros 500 chars):', responseText.substring(0, 500));
+  
+  if (!response.ok) {
+    // Intentar parsear como JSON
+    try {
+      const errorData = JSON.parse(responseText);
+      throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`);
+    } catch (e) {
+      // Si no es JSON, es HTML (error 500 de Laravel)
+      console.error('❌ Respuesta no es JSON, es HTML/texto');
+      console.error('Contenido:', responseText.substring(0, 1000));
+      throw new Error(`Error del servidor (${response.status}). Revisa los logs del backend.`);
+    }
+  }
+  
+  // Si response.ok, parsear como JSON
+  try {
+    return JSON.parse(responseText);
+  } catch (e) {
+    console.error('❌ Error parseando respuesta exitosa:', e);
+    throw new Error('Respuesta del servidor no es JSON válido');
+  }
+};
+  
 
 // ========== CONDUCTORES ==========
 export const fetchConductores = async () => {

@@ -16,11 +16,13 @@ class Mecanico extends Model
         'especialidad',
         'fecha_certificacion',
         'estado',
+        'fecha_examen_ocupacional',
         'observaciones',
     ];
 
     protected $casts = [
         'fecha_certificacion' => 'date',
+        'fecha_examen_ocupacional' => 'date',
         'empleado_id' => 'integer',
     ];
 

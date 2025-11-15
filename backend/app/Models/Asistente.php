@@ -15,12 +15,14 @@ class Asistente extends Model
         'empleado_id',
         'fecha_inicio',
         'estado',
+        'fecha_examen_ocupacional',
         
     ];
 
     protected $casts = [
         'fecha_inicio' => 'date',
         'empleado_id' => 'integer',
+        'fecha_examen_ocupacional' => 'date',
     ];
 
     public function empleado(): BelongsTo

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ChevronDown, ChevronUp, Phone, MapPin, DollarSign, Search, X, Mail } from 'lucide-react';
+import { Plus, ChevronDown, ChevronUp, Phone, MapPin, DollarSign, Search, X, Mail, AlertTriangle } from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import Button from '../components/common/Button';
-import { fetchEmpleados, fetchUsers, fetchAfps, fetchIsapres, createEmpleado, updateEmpleado, deleteEmpleado } from '../services/api';
+import { fetchEmpleados, fetchUsers, fetchAfps, fetchIsapres, createEmpleado, updateEmpleado, deleteEmpleado, darDeBajaEmpleado } from '../services/api';
 
 const CONTRATOS = ['indefinido', 'plazo_fijo', 'practicante'];
 const ESTADOS = ['activo', 'licencia', 'suspendido', 'terminado'];
@@ -59,6 +59,7 @@ export default function EmployeesPage() {
   const [usuarios, setUsuarios] = useState([]);
   const [afps, setAfps] = useState([]);
   const [isapres, setIsapres] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [searchUsuario, setSearchUsuario] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -66,6 +67,13 @@ export default function EmployeesPage() {
   const [openDialog, setOpenDialog] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
   const [editingEmpleado, setEditingEmpleado] = useState(null);
+  const [openBajaDialog, setOpenBajaDialog] = useState(false);
+  const [empleadoParaBaja, setEmpleadoParaBaja] = useState(null);
+  const [bajaFormData, setBajaFormData] = useState({
+    fecha_termino: '',
+    motivo_termino: 'renuncia',
+    observaciones_termino: '',
+  });
   const [phoneErrors, setPhoneErrors] = useState({});
   const [formData, setFormData] = useState({
     user_id: '',
@@ -94,6 +102,9 @@ export default function EmployeesPage() {
   });
 
   useEffect(() => {
+    // obtener usuario actual del localStorage
+    const user = JSON.parse(localStorage.getItem('user'));
+    setCurrentUser(user);
     loadData();
   }, []);
 
@@ -205,7 +216,7 @@ export default function EmployeesPage() {
 
   const handleSave = async () => {
     // Validar campos requeridos
-    if (!formData.user_id || !formData.numero_empleado || !formData.fecha_contratacion || !formData.salario_base) {
+    if (!formData.user_id || !formData.fecha_contratacion || !formData.salario_base) {
       setError('Por favor complete los campos requeridos (*)');
       return;
     }
@@ -226,6 +237,12 @@ export default function EmployeesPage() {
         user_id: parseInt(formData.user_id),
         salario_base: parseInt(formData.salario_base) || 0
       };
+      // al crear, dejar el backend auto-genere los numeros
+      if (!editingEmpleado) {
+        delete dataToSave.numero_empleado;
+        delete dataToSave.numero_funcional;
+      }
+      console.log('📤 DATOS A ENVIAR:', dataToSave);
 
       if (editingEmpleado) {
         await updateEmpleado(editingEmpleado.id, dataToSave);
@@ -257,6 +274,60 @@ export default function EmployeesPage() {
         setError('Error al eliminar: ' + err.message);
       }
     }
+  };
+  // abrir modal de baja
+  const handleOpenBajaDialog = (empleado) => {
+    setEmpleadoParaBaja(empleado);
+    setBajaFormData({
+      fecha_termino: new Date().toISOString().split('T')[0],
+      motivo_termino: 'renuncia',
+      observaciones_termino: '',
+    });
+    setOpenBajaDialog(true);
+  };
+  // cerrar modal de baja
+  const handleCloseBajaDialog = () => {
+    setOpenBajaDialog(false);
+    setEmpleadoParaBaja(null);
+    setBajaFormData({
+      fecha_termino: '',
+      motivo_termino: 'renuncia',
+      observaciones_termino: '',
+    });
+  };
+  // confirmar dar de baja
+  const handleConfirmarBaja = async () => {
+    console.log('🔴 INICIANDO DAR DE BAJA');
+    console.log('📋 Empleado:', empleadoParaBaja);
+    console.log('📋 Datos del formulario:', bajaFormData);
+
+    if (!bajaFormData.fecha_termino || !bajaFormData.motivo_termino) {
+      setError('Por favor complete los campos requeridos para la baja');
+      return;
+    }
+    try {
+      console.log('📤 Enviando a darDeBajaEmpleado...');
+      const resultado = await darDeBajaEmpleado(empleadoParaBaja.id, bajaFormData);
+      console.log('📥 Resultado de darDeBajaEmpleado:', resultado);
+      loadData();
+      handleCloseBajaDialog();
+      setError(null);
+    } catch (err) {
+      setError(err.message || 'Error al dar de baja el empleado');
+    }                                                                       
+  };
+  // verificar si el usuario tiene permiso para dar de baja
+  const canDarDeBaja = () => {
+    console.log('🔐 currentUser:', currentUser);
+    console.log('🔐 rol_id:', currentUser?.rol_id);
+    if (!currentUser) {
+      console.log('❌ No hay usuario actual');
+      return false;
+    }
+    // solo admin o recursos humanos
+    const tienePermiso = currentUser.rol_id === 1 || currentUser.rol_id === 6;
+    console.log('✅ Tiene permiso?', tienePermiso);
+    return tienePermiso;
   };
 
   const getNombreUsuario = (userId) => {
@@ -291,13 +362,23 @@ export default function EmployeesPage() {
 
   const getUsuariosFiltrados = () => {
     return usuarios.filter(user => {
+      //filtro 1: por busqueda de rol
       const rol = user.rol?.nombre?.toLowerCase() || '';
       const busqueda = searchUsuario.toLowerCase();
-      if (busqueda) {
-        return rol.includes(busqueda);
+      if (busqueda && !rol.includes(busqueda)) {
+        return false;
       }
-      return true;
+
+      //filtro 2: excluir usuarios ya asignados como empleados
+      const yaEsEmpleado = empleados.some(emp => emp.user_id === user.id);
+      // si estamos editando, permitir que aparezca el usuario actual
+      if (editingEmpleado && user.id === editingEmpleado.user_id) {
+        return true;
+      }
+      // nostrar solo si no es empleado
+      return !yaEsEmpleado;
     });
+     
   };
 
   // MEJORADO: Filtrar empleados con sistema de puntuación
@@ -439,6 +520,7 @@ export default function EmployeesPage() {
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Usuario</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">RUT</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">N° Empleado</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">N° Funcional</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Contratación</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Salario</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Estado</th>
@@ -452,6 +534,11 @@ export default function EmployeesPage() {
                     <td className="px-6 py-4 text-sm text-gray-900">{getNombreUsuario(empleado.user_id)}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{getRUTUsuario(empleado.user_id)}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{empleado.numero_empleado}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-mono">
+                        {empleado.numero_funcional || '-'}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{formatDate(empleado.fecha_contratacion)}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">{formatCurrency(empleado.salario_base)}</td>
                     <td className="px-6 py-4">
@@ -466,6 +553,15 @@ export default function EmployeesPage() {
                       >
                         Editar
                       </button>
+                      {/* Botón para dar de baja - solo para empleados activos*/}
+                      {empleado.estado === 'activo' &&  canDarDeBaja() && (
+                        <button
+                          onClick={() => handleOpenBajaDialog(empleado)}
+                          className="text-orange-600 hover:text-orange-900 font-medium text-sm"
+                        >
+                          Dar de baja
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDelete(empleado.id)}
                         className="text-red-600 hover:text-red-900 font-medium text-sm"
@@ -685,12 +781,16 @@ export default function EmployeesPage() {
           })()}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Número de Empleado"
-              value={formData.numero_empleado}
-              onChange={(e) => setFormData({ ...formData, numero_empleado: e.target.value })}
-              required
-            />
+            {/* numero de empleado se auto-genera*/}
+            {editingEmpleado && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <p className="text-sm text-gray-600 font-medium mb-1">Número de Empleado</p>
+                <p className="text-sm text-grey-900 font-mono">
+                  {formData.numero_empleado || 'se genera automaticamente'}
+                </p>
+              </div>
+            )}
+                
             <Input
               label="Fecha de Contratación"
               type="date"
@@ -897,6 +997,91 @@ export default function EmployeesPage() {
           />
         </div>
       </FormDialog>
+
+      {/* MODAL DE DAR DE BAJA */}
+      <FormDialog
+        isOpen={openBajaDialog}
+        title="Dar de Baja a Empleado"
+        onSubmit={handleConfirmarBaja}
+        onCancel={handleCloseBajaDialog}
+      >
+        {empleadoParaBaja && (
+          <>
+            {/* Información del empleado */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="text-yellow-600 flex-shrink-0 mt-1" size={20} />
+                <div>
+                  <h4 className="font-semibold text-yellow-900 mb-2">
+                    ¿Estás seguro de dar de baja a este empleado?
+                  </h4>
+                  <p className="text-sm text-yellow-800">
+                    <span className="font-medium">Empleado:</span> {getNombreUsuario(empleadoParaBaja.user_id)}
+                  </p>
+                  <p className="text-sm text-yellow-800">
+                    <span className="font-medium">N° Empleado:</span> {empleadoParaBaja.numero_empleado}
+                  </p>
+                  <p className="text-sm text-yellow-800">
+                    <span className="font-medium">RUT:</span> {getRUTUsuario(empleadoParaBaja.user_id)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Formulario de baja */}
+            <div className="space-y-4">
+              <Input
+                label="Fecha de Término"
+                type="date"
+                value={bajaFormData.fecha_termino}
+                onChange={(e) => setBajaFormData({ ...bajaFormData, fecha_termino: e.target.value })}
+                required
+              />
+
+              <Select
+                label="Motivo de Término"
+                options={[
+                  { id: 'renuncia', label: 'Renuncia Voluntaria' },
+                  { id: 'despido', label: 'Despido' },
+                  { id: 'termino_contrato', label: 'Término de Contrato' },
+                  { id: 'jubilacion', label: 'Jubilación' },
+                  { id: 'otro', label: 'Otro' },
+                ]}
+                value={bajaFormData.motivo_termino}
+                onChange={(e) => setBajaFormData({ ...bajaFormData, motivo_termino: e.target.value })}
+                required
+              />
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Observaciones
+                </label>
+                <textarea
+                  value={bajaFormData.observaciones_termino}
+                  onChange={(e) => setBajaFormData({ ...bajaFormData, observaciones_termino: e.target.value })}
+                  rows="4"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Detalles adicionales sobre el término de la relación laboral..."
+                  maxLength="500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {bajaFormData.observaciones_termino.length}/500 caracteres
+                </p>
+              </div>
+            </div>
+
+            {/* Advertencia */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-4">
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold">Nota:</span> Esta acción cambiará el estado del empleado a "terminado" 
+                y marcará como inactivo sus roles específicos (conductor, mecánico, asistente). 
+                El historial completo se mantendrá en el sistema.
+              </p>
+            </div>
+          </>
+        )}
+      </FormDialog>
+
     </div>
   );
 }

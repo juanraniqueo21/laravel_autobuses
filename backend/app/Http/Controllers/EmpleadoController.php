@@ -43,7 +43,8 @@ class EmpleadoController extends Controller
         $validated = $request->validate([
             // Datos laborales
             'user_id' => 'required|exists:users,id|unique:empleados,user_id',
-            'numero_empleado' => 'required|string|unique:empleados,numero_empleado',
+            'numero_empleado' => 'nullable|string|unique:empleados,numero_empleado',
+            'numero_funcional' => 'nullable|string|unique:empleados,numero_funcional',
             'fecha_contratacion' => 'required|date|before_or_equal:today',
             'fecha_termino' => 'nullable|date|after:fecha_contratacion',
             'tipo_contrato' => 'required|in:indefinido,plazo_fijo,practicante',
@@ -77,7 +78,8 @@ class EmpleadoController extends Controller
         try {
             $empleado = Empleado::create([
                 'user_id' => $validated['user_id'],
-                'numero_empleado' => $validated['numero_empleado'],
+                'numero_empleado' => $validated['numero_empleado'] ?? null,
+                'numero_funcional' => $validated['numero_funcional'] ?? null,
                 'fecha_contratacion' => $validated['fecha_contratacion'],
                 'fecha_termino' => $validated['fecha_termino'] ?? null,
                 'tipo_contrato' => strtolower($validated['tipo_contrato']),
@@ -130,7 +132,8 @@ class EmpleadoController extends Controller
 
         $validated = $request->validate([
             // Datos laborales
-            'numero_empleado' => 'sometimes|required|string|unique:empleados,numero_empleado,' . $id,
+            'numero_empleado' => 'sometimes|nullable|string|unique:empleados,numero_empleado,' . $id,
+            'numero_funcional' => 'sometimes|nullable|string|unique:empleados,numero_funcional,' . $id,
             'fecha_contratacion' => 'sometimes|required|date|before_or_equal:today',
             'fecha_termino' => 'nullable|date|after:fecha_contratacion',
             'tipo_contrato' => 'sometimes|required|in:indefinido,plazo_fijo,practicante',
@@ -242,4 +245,73 @@ class EmpleadoController extends Controller
         
         return response()->json($empleados);
     }
+
+    public function darDeBaja(Request $request, $id)
+    {
+        $empleado = Empleado::with('conductor', 'mecanico', 'asistente')->find($id);
+
+        if (!$empleado) {
+            return response()->json(['error' => 'Empleado no encontrado'], 404);
+
+        }
+
+        // validar que el empleado este activo
+        if ($empleado->estado !== 'activo') {
+            return response()->json([
+                'error' => 'el empleado ya no es activo'
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'fecha_termino' => 'required|date|after_or_equal:fecha_contratacion',
+            'motivo_termino' => 'required|in:renuncia,despido,termino_contrato,jubilacion,otro',
+            'observaciones_termino' => 'nullable|string|max:500',
+        ]);
+
+        try {
+            // verificar que no tenag viajes futuros (si es conductor)
+            if ($empleado->conductor) {
+                $viajesFuturos = \DB::table('asignaciones_turno')
+                    ->where('conductor_id', $empleado->conductor->id)
+                    ->where('fecha_turno', '>=', now()->format('Y-m-d'))
+                    ->where('estado', '!=', 'completado')
+                    ->count();
+
+                if ($turnosFuturos > 0) {
+                    return response()->json([
+                        'error' => "No se puede dar de baja. El conductor tiene $turnosFuturos turno(s) programado(s) a futuro."
+                    ], 400);
+                }
+            }
+
+            // actualizar empleado
+            $empleado->update([
+                'estado' => 'terminado',
+                'fecha_termino' => $validated['fecha_termino'],
+                'motivo_termino' => $validated['motivo_termino'],
+                'observaciones_termino' => $validated['observaciones_termino'] ?? null,
+            ]);
+            // marcar como incactivo en tablas especificas
+            if ($empleado->conductor) {
+                $empleado->conductor->update(['estado' => 'inactivo']);
+            }
+            if ($empleado->mecanico) {
+                $empleado->mecanico->update(['estado' => 'inactivo']);
+            }
+            if ($empleado->asistente) {
+                $empleado->asistente->update(['estado' => 'inactivo']);
+            }
+
+            $empleado->load('user', 'afp', 'isapre');
+            return response()->json([
+                'message' => 'Empleado dado de baja exitosamente',
+                'data' => $empleado
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Error al dar de baja empleado: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

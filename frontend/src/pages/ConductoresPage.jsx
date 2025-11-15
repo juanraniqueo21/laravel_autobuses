@@ -40,7 +40,7 @@ export default function ConductoresPage() {
     cantidad_infracciones: 0,
     cantidad_accidentes: 0,
     historial_sanciones: '',
-    fecha_ultima_revision_medica: '',
+    fecha_examen_ocupacional: '',
     apto_conducir: true,
     certificado_rcp: false,
     vencimiento_rcp: '',
@@ -57,7 +57,7 @@ export default function ConductoresPage() {
       setLoading(true);
       const [conductoresData, empleadosData] = await Promise.all([
         fetchConductores(),
-        fetchEmpleados(),
+        fetchEmpleados(''),
       ]);
       setConductores(conductoresData);
       setEmpleados(empleadosData);
@@ -85,7 +85,7 @@ export default function ConductoresPage() {
         cantidad_infracciones: conductor.cantidad_infracciones || 0,
         cantidad_accidentes: conductor.cantidad_accidentes || 0,
         historial_sanciones: conductor.historial_sanciones || '',
-        fecha_ultima_revision_medica: conductor.fecha_ultima_revision_medica || '',
+        fecha_examen_ocupacional: conductor.fecha_examen_ocupacional || '',
         apto_conducir: conductor.apto_conducir !== undefined ? conductor.apto_conducir : true,
         certificado_rcp: conductor.certificado_rcp !== undefined ? conductor.certificado_rcp : false,
         vencimiento_rcp: conductor.vencimiento_rcp || '',
@@ -107,7 +107,7 @@ export default function ConductoresPage() {
         cantidad_infracciones: 0,
         cantidad_accidentes: 0,
         historial_sanciones: '',
-        fecha_ultima_revision_medica: '',
+        fecha_examen_ocupacional: '',
         apto_conducir: true,
         certificado_rcp: false,
         vencimiento_rcp: '',
@@ -285,7 +285,7 @@ export default function ConductoresPage() {
                         <div>
                           <h4 className="font-semibold text-gray-900 mb-3">Salud & Certificados</h4>
                           <div className="space-y-2 text-sm">
-                            <p><span className="text-gray-600">Última revisión médica:</span> {formatDate(conductor.fecha_ultima_revision_medica)}</p>
+                            <p><span className="text-gray-600">Fecha Examen Ocupacional:</span> {formatDate(conductor.fecha_examen_ocupacional)}</p>
                             <p><span className="text-gray-600">Apto para conducir:</span> {conductor.apto_conducir ? '✅ Sí' : '❌ No'}</p>
                             <p><span className="text-gray-600">RCP:</span> {conductor.certificado_rcp ? '✅ Sí' : '❌ No'}</p>
                             {conductor.vencimiento_rcp && (
@@ -369,14 +369,23 @@ export default function ConductoresPage() {
             label="Empleado"
             options={[
               { id: '', label: 'Seleccione empleado' },
-              ...empleados.map(emp => ({
-                id: emp.id,
-                label: `${emp.user?.nombre} ${emp.user?.apellido}`
-              }))
+              ...empleados
+                .filter(emp =>
+                  // solo mostrar empleados con rol conductor (3)
+                  emp.user?.rol_id === 3 &&
+                  // que no esten ya enla tabla conductores
+                  (!conductores.some(c => c.empleado_id === emp.id) || emp.id === formData.empleado_id)
+                )
+                .map(emp => ({
+                  id: emp.id,
+                  label: `${emp.user?.nombre} ${emp.user?.apellido}`
+                }))
             ]}
             value={formData.empleado_id}
             onChange={(e) => setFormData({ ...formData, empleado_id: e.target.value })}
             required
+
+                
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -483,10 +492,10 @@ export default function ConductoresPage() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label="Última Revisión Médica"
+              label="Fecha Examen Ocupacional"
               type="date"
-              value={formData.fecha_ultima_revision_medica}
-              onChange={(e) => setFormData({ ...formData, fecha_ultima_revision_medica: e.target.value })}
+              value={formData.fecha_examen_ocupacional}
+              onChange={(e) => setFormData({ ...formData, fecha_examen_ocupacional: e.target.value })}
             />
           </div>
 

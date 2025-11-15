@@ -9,7 +9,7 @@ class MecanicoController extends Controller
 {
     public function index()
     {
-        $mecanicos = Mecanico::with('empleado')->get();
+        $mecanicos = Mecanico::with('empleado.user')->get();
         return response()->json($mecanicos);
     }
 
@@ -29,6 +29,7 @@ class MecanicoController extends Controller
             'numero_certificacion' => $request->numero_certificacion,
             'especialidad' => $request->especialidad,
             'fecha_certificacion' => $request->fecha_certificacion,
+            'fecha_examen_ocupacional' => $request->fecha_examen_ocupacional,
             'estado' => $request->estado ?? 'activo',
             'observaciones' => $request->observaciones,
         ]);
@@ -47,6 +48,7 @@ class MecanicoController extends Controller
             'numero_certificacion' => $request->numero_certificacion ?? $mecanico->numero_certificacion,
             'especialidad' => $request->especialidad ?? $mecanico->especialidad,
             'fecha_certificacion' => $request->fecha_certificacion ?? $mecanico->fecha_certificacion,
+            'fecha_examen_ocupacional' => $request->fecha_examen_ocupacional ?? $mecanico->fecha_examen_ocupacional,
             'estado' => $request->estado ?? $mecanico->estado,
             'observaciones' => $request->observaciones ?? $mecanico->observaciones,
         ]);
