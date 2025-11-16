@@ -22,7 +22,7 @@ export default function MecanicosPage() {
     numero_certificacion: '',
     especialidad: '',
     fecha_certificacion: '',
-    fecha_examen_ocupacional: '', // ✅ AGREGADO
+    fecha_examen_ocupacional: '', 
     estado: 'activo',
     observaciones: '',
   });
@@ -39,12 +39,7 @@ export default function MecanicosPage() {
         fetchEmpleados(),
       ]);
       setMecanicos(mecanicosData);
-      
-      // ✅ CORREGIDO: Filtrar empleados que NO son mecánicos
-      const empleadosSinMecanico = empleadosData.filter(emp => 
-        !mecanicosData.some(mec => mec.empleado_id === emp.id)
-      );
-      setEmpleados(empleadosSinMecanico);
+      setEmpleados(empleadosData);
       
       setError(null);
     } catch (err) {
@@ -130,6 +125,32 @@ export default function MecanicosPage() {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('es-CL');
   };
+  
+  const getEmpleadosDisponibles = () => {
+    return empleados.filter(empleado => {
+      // 1. solo empleados activos
+      if (empleado.estado !== 'activo') {
+        return false;
+      }
+      // 2. solo rol mecanico(4)
+      if (empleado.user?.rol_id !== 4) {
+        return false;
+      }
+      // 3. empleados que no son ya mecanicos
+      const yaEsMecanicoActivo = mecanicos.some(
+        m => m.empleado_id === empleado.id && m.estado === 'activo'
+      );
+      // si estamos editando, permitir el empleado actual
+      if (editingMecanico && empleado.id === editingMecanico.empleado_id) {
+        return true;
+      }
+      return !yaEsMecanicoActivo;
+    });
+  };
+  
+  console.log('🔍 empleados totales:', empleados.length);
+  console.log('🔍 empleados disponibles:', getEmpleadosDisponibles().length);
+  console.log('🔍 mecanicos activos:', mecanicos.filter(m => m.estado === 'activo').length);
 
   const columns = [
     { 
@@ -159,6 +180,7 @@ export default function MecanicosPage() {
       ),
     },
   ];
+  
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
@@ -173,7 +195,7 @@ export default function MecanicosPage() {
           size="lg"
           onClick={() => handleOpenDialog()}
           className="flex items-center gap-2"
-          disabled={empleados.length === 0}
+          //disabled={getEmpleadosDisponibles && getEmpleadosDisponibles().length === 0}
         >
           <Plus size={20} />
           Nuevo Mecánico
@@ -214,16 +236,10 @@ export default function MecanicosPage() {
           label="Empleado"
           options={[
             { id: '', label: 'Seleccione un empleado' },
-            ...empleados
-              .filter(emp =>
-                //SOLO rol mecanico(4)
-                emp.user?.rol_id === 4 &&
-                (!mecanicos.some(m => m.empleado_id === emp.id) || emp.id === formData.empleado_id)
-              )
-              .map(emp => ({
-                id: emp.id,
-                label: `${emp.user?.nombre} ${emp.user?.apellido}`
-              }))
+            ...getEmpleadosDisponibles().map(emp => ({
+              id: emp.id,
+              label: `${emp.user?.nombre} ${emp.user?.apellido} - ${emp.numero_empleado}`
+            }))
           ]}
           value={formData.empleado_id}
           onChange={(e) => setFormData({ ...formData, empleado_id: e.target.value })}

@@ -52,7 +52,14 @@ export default function MantencionesPage() {
       ]);
       
       setBuses(busesData);
-      const mechanics = empleadosData.filter(emp => emp.mecanico);
+
+      // filtrar solo mecanicos activos
+      const mechanics = empleadosData.filter(emp =>
+        emp.mecanico &&
+        emp.mecanico.estado === 'activo' &&
+        emp.estado === 'activo'
+      );
+
       setMecanicos(mechanics);
       setMantenimientos(mantenimientosData);
       setError(null);
@@ -211,10 +218,13 @@ export default function MantencionesPage() {
 
         <Select
           label="Mecánico"
-          options={mecanicos.map(mec => ({
-            id: mec.mecanico.id,
-            label: `${mec.user?.nombre} ${mec.user?.apellido}`
-          }))}
+          options={[
+            { id: '', label: 'Seleccione un mecánico' },
+            ...mecanicos.map(mec => ({
+              id: mec.mecanico.id,
+              label: `${mec.user?.nombre} ${mec.user?.apellido} - ${mec.numero_empleado} (${mec.mecanico.especialidad || 'Sin especialidad'})`
+            }))
+          ]}
           value={formData.mecanico_id}
           onChange={(e) => setFormData({ ...formData, mecanico_id: e.target.value })}
           required

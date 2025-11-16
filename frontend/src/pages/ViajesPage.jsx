@@ -51,8 +51,19 @@ export default function ViajesPage() {
       ]);
       setViajes(viagesData);
       setBuses(busesData);
-      setConductores(conductoresData);
-      setAsistentes(asistentesData);
+      
+      // filtrar solo conductores activos
+      const conductoresActivos = conductoresData.filter(c =>
+        c.estado === 'activo' &&
+        c.empleado?.estado === 'activo'
+      );
+      setConductores(conductoresActivos);
+      // filtrar solo asistentes activos
+      const asistentesActivos = asistentesData.filter(a =>
+        a.estado === 'activo' &&
+        a.empleado?.estado === 'activo'
+      );
+      setAsistentes(asistentesActivos);
       setRutas(rutasData);
       setError(null);
     } catch (err) {
@@ -60,6 +71,8 @@ export default function ViajesPage() {
     } finally {
       setLoading(false);
     }
+        
+        
   };
 
   const handleOpenDialog = (viaje = null) => {

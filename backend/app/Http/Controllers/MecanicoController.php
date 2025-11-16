@@ -25,7 +25,7 @@ class MecanicoController extends Controller
     public function store(Request $request)
     {
         $mecanico = Mecanico::create([
-            'empleado_id' => $request->empleado_id,
+            'empleado_id' => 'required|exists:empleados,id',
             'numero_certificacion' => $request->numero_certificacion,
             'especialidad' => $request->especialidad,
             'fecha_certificacion' => $request->fecha_certificacion,
@@ -33,6 +33,22 @@ class MecanicoController extends Controller
             'estado' => $request->estado ?? 'activo',
             'observaciones' => $request->observaciones,
         ]);
+        // verificar que el empleado este activo
+        $empleado = \App\Models\Empleado::find($validated['empleado_id']);
+        if (!$empleado || $empleado->estado !== 'activo') {
+            return response()->json([
+                'error' => 'El empleado no esta activo o no existe'
+            ], 400);
+        }
+        // verificar que no esxita un mecanico activo con este empleado
+        $mecanicoActivo = Mecanico::where('empleado_id', $validated['empleado_id'])
+            ->where('estado', 'activo')
+            ->first();
+            if ($mecanicoActivo) {
+                return response()->json([
+                    'error' => 'Ya existe un mecánico activo con este empleado'
+                ], 400);
+            }
         return response()->json($mecanico, 201);
     }
 
