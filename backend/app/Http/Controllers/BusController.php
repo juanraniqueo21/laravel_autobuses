@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Bus;
+use App\Models\MarcaBus;
+use App\Models\ModeloBus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -75,23 +77,44 @@ class BusController extends Controller
                     'string',
                     'max:10',
                     'unique:buses,patente',
-                    'regex:/^[A-Z]{4}[0-9]{2}$/' // Formato chileno: 
+                    'regex:/^[A-Z]{4}[0-9]{2}$/'
                 ],
                 'marca' => 'required|string|max:100',
                 'modelo' => 'required|string|max:100',
                 'tipo_combustible' => ['required', Rule::in(['diesel', 'gasolina', 'gas', 'eléctrico', 'híbrido'])],
-                'color' => 'nullable|string|max:50',
                 'anio' => 'required|integer|min:1980|max:' . (date('Y') + 1),
                 'capacidad_pasajeros' => 'required|integer|min:1|max:100',
                 'estado' => ['required', Rule::in(['operativo', 'mantenimiento', 'desmantelado'])],
+
+                // Nuevos campos obligatorios
+                'tipo_bus' => ['required', Rule::in(['simple', 'doble_piso'])],
+                'cantidad_ejes' => ['required', Rule::in(['2', '3', '4'])],
 
                 // Campos opcionales
                 'patente_verificador' => 'nullable|string|max:1',
                 'numero_serie' => 'nullable|string|max:50|unique:buses,numero_serie',
                 'numero_motor' => 'nullable|string|max:50',
+                'numero_chasis' => 'nullable|string|max:50',
                 'fecha_adquisicion' => 'nullable|date|before_or_equal:today',
                 'kilometraje_original' => 'nullable|integer|min:0',
-                'kilometraje_actual' => 'nullable|integer|min:0',
+                
+                // Motor
+                'marca_motor' => 'nullable|string|max:50',
+                'modelo_motor' => 'nullable|string|max:50',
+                'ubicacion_motor' => ['nullable', Rule::in(['delantero', 'trasero', 'central'])],
+                
+                // Chasis
+                'marca_chasis' => 'nullable|string|max:50',
+                'modelo_chasis' => 'nullable|string|max:50',
+                
+                // Carrocería
+                'marca_carroceria' => 'nullable|string|max:50',
+                'modelo_carroceria' => 'nullable|string|max:50',
+                
+                // Mantenimiento
+                'proximo_mantenimiento_km' => 'nullable|integer|min:0',
+                'fecha_ultimo_mantenimiento' => 'nullable|date|before_or_equal:today',
+                'fecha_proximo_mantenimiento' => 'nullable|date|after:fecha_ultimo_mantenimiento',
                 
                 // Documentación
                 'ultima_revision_tecnica' => 'nullable|date|before_or_equal:today',
@@ -119,7 +142,10 @@ class BusController extends Controller
                 'modelo.required' => 'El modelo es obligatorio',
                 'tipo_combustible.required' => 'El tipo de combustible es obligatorio',
                 'tipo_combustible.in' => 'Tipo de combustible inválido',
-                'color.max' => 'El color no puede tener más de 50 caracteres',
+                'tipo_bus.required' => 'El tipo de bus es obligatorio',
+                'tipo_bus.in' => 'Tipo de bus inválido',
+                'cantidad_ejes.required' => 'La cantidad de ejes es obligatoria',
+                'cantidad_ejes.in' => 'Cantidad de ejes inválida',
                 'anio.required' => 'El año es obligatorio',
                 'anio.min' => 'El año debe ser mayor a 1980',
                 'anio.max' => 'El año no puede ser mayor al año siguiente',
@@ -130,12 +156,13 @@ class BusController extends Controller
                 'estado.in' => 'Estado inválido',
                 'numero_serie.unique' => 'Este número de serie ya está registrado',
                 'proxima_revision_tecnica.after' => 'La próxima revisión debe ser después de la última',
+                'fecha_proximo_mantenimiento.after' => 'El próximo mantenimiento debe ser después del último',
                 'numero_soap.required' => 'El número de SOAP es obligatorio',
                 'vencimiento_soap.required' => 'La fecha de vencimiento del SOAP es obligatoria',
                 'vencimiento_soap.after_or_equal' => 'El SOAP no puede estar vencido',
-                'compania_seguro.max' => 'El nombre de la compañía es muy largo',
                 'tipo_cobertura_adicional.in' => 'Tipo de cobertura inválido',
                 'vencimiento_poliza.after_or_equal' => 'La póliza no puede estar vencida',
+                'ubicacion_motor.in' => 'Ubicación del motor inválida',
             ]);
 
             if ($validator->fails()) {
@@ -146,33 +173,36 @@ class BusController extends Controller
                 ], 422);
             }
 
-            // Validación adicional: kilometraje_actual >= kilometraje_original
-            if ($request->kilometraje_actual && $request->kilometraje_original) {
-                if ($request->kilometraje_actual < $request->kilometraje_original) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'El kilometraje actual no puede ser menor al original',
-                        'errors' => [
-                            'kilometraje_actual' => ['El kilometraje actual debe ser mayor o igual al original']
-                        ]
-                    ], 422);
-                }
-            }
-
             // Crear el bus
             $bus = Bus::create([
-                'patente' => strtoupper($request->patente), // Siempre en mayúsculas
+                'patente' => strtoupper($request->patente),
                 'patente_verificador' => $request->patente_verificador,
                 'marca' => $request->marca,
                 'modelo' => $request->modelo,
                 'tipo_combustible' => $request->tipo_combustible,
-                'color' => $request->color,
                 'anio' => $request->anio,
                 'numero_serie' => $request->numero_serie,
                 'numero_motor' => $request->numero_motor,
+                'numero_chasis' => $request->numero_chasis,
                 'capacidad_pasajeros' => $request->capacidad_pasajeros,
                 'fecha_adquisicion' => $request->fecha_adquisicion,
                 'estado' => $request->estado,
+                
+                // Nuevos campos
+                'tipo_bus' => $request->tipo_bus,
+                'cantidad_ejes' => $request->cantidad_ejes,
+                'marca_motor' => $request->marca_motor,
+                'modelo_motor' => $request->modelo_motor,
+                'ubicacion_motor' => $request->ubicacion_motor ?? 'trasero',
+                'marca_chasis' => $request->marca_chasis,
+                'modelo_chasis' => $request->modelo_chasis,
+                'marca_carroceria' => $request->marca_carroceria,
+                'modelo_carroceria' => $request->modelo_carroceria,
+                'proximo_mantenimiento_km' => $request->proximo_mantenimiento_km,
+                'fecha_ultimo_mantenimiento' => $request->fecha_ultimo_mantenimiento,
+                'fecha_proximo_mantenimiento' => $request->fecha_proximo_mantenimiento,
+                
+                // Documentación
                 'proxima_revision_tecnica' => $request->proxima_revision_tecnica,
                 'ultima_revision_tecnica' => $request->ultima_revision_tecnica,
                 'documento_revision_tecnica' => $request->documento_revision_tecnica,
@@ -185,7 +215,6 @@ class BusController extends Controller
                 'numero_permiso_circulacion' => $request->numero_permiso_circulacion,
                 'observaciones' => $request->observaciones,
                 'kilometraje_original' => $request->kilometraje_original ?? 0,
-                'kilometraje_actual' => $request->kilometraje_actual ?? 0,
             ]);
 
             return response()->json([
@@ -218,7 +247,7 @@ class BusController extends Controller
                 ], 404);
             }
 
-            // Validaciones (igual que store pero con unique ignorando el ID actual)
+            // Validaciones
             $validator = Validator::make($request->all(), [
                 'patente' => [
                     'sometimes',
@@ -231,10 +260,11 @@ class BusController extends Controller
                 'marca' => 'sometimes|required|string|max:100',
                 'modelo' => 'sometimes|required|string|max:100',
                 'tipo_combustible' => ['sometimes', 'required', Rule::in(['diesel', 'gasolina', 'gas', 'eléctrico', 'híbrido'])],
-                'color' => 'nullable|string|max:50',
                 'anio' => 'sometimes|required|integer|min:1980|max:' . (date('Y') + 1),
                 'capacidad_pasajeros' => 'sometimes|required|integer|min:1|max:100',
                 'estado' => ['sometimes', 'required', Rule::in(['operativo', 'mantenimiento', 'desmantelado'])],
+                'tipo_bus' => ['sometimes', 'required', Rule::in(['simple', 'doble_piso'])],
+                'cantidad_ejes' => ['sometimes', 'required', Rule::in(['2', '3', '4'])],
                 'patente_verificador' => 'nullable|string|max:1',
                 'numero_serie' => [
                     'nullable',
@@ -243,31 +273,30 @@ class BusController extends Controller
                     Rule::unique('buses', 'numero_serie')->ignore($id)
                 ],
                 'numero_motor' => 'nullable|string|max:50',
+                'numero_chasis' => 'nullable|string|max:50',
                 'fecha_adquisicion' => 'nullable|date|before_or_equal:today',
                 'kilometraje_original' => 'nullable|integer|min:0',
-                'kilometraje_actual' => 'nullable|integer|min:0',
+                'marca_motor' => 'nullable|string|max:50',
+                'modelo_motor' => 'nullable|string|max:50',
+                'ubicacion_motor' => ['nullable', Rule::in(['delantero', 'trasero', 'central'])],
+                'marca_chasis' => 'nullable|string|max:50',
+                'modelo_chasis' => 'nullable|string|max:50',
+                'marca_carroceria' => 'nullable|string|max:50',
+                'modelo_carroceria' => 'nullable|string|max:50',
+                'proximo_mantenimiento_km' => 'nullable|integer|min:0',
+                'fecha_ultimo_mantenimiento' => 'nullable|date|before_or_equal:today',
+                'fecha_proximo_mantenimiento' => 'nullable|date',
                 'ultima_revision_tecnica' => 'nullable|date|before_or_equal:today',
                 'proxima_revision_tecnica' => 'nullable|date',
                 'documento_revision_tecnica' => 'nullable|string|max:255',
-                
-                // SOAP
                 'numero_soap' => 'sometimes|required|string|max:50',
                 'vencimiento_soap' => 'sometimes|required|date',
-                
-                // Seguro adicional
                 'compania_seguro' => 'nullable|string|max:100',
                 'numero_poliza' => 'nullable|string|max:50',
                 'tipo_cobertura_adicional' => ['nullable', Rule::in(['ninguna', 'terceros', 'full'])],
                 'vencimiento_poliza' => 'nullable|date',
-                
                 'numero_permiso_circulacion' => 'nullable|string|max:50',
                 'observaciones' => 'nullable|string|max:1000',
-            ], [
-                'patente.unique' => 'Esta patente ya está registrada',
-                'patente.regex' => 'Formato de patente inválido (debe ser 4 letras y 2 números, ej: ABCD12)',
-                'numero_serie.unique' => 'Este número de serie ya está registrado',
-                'tipo_combustible.in' => 'Tipo de combustible inválido',
-                'tipo_cobertura_adicional.in' => 'Tipo de cobertura inválido',
             ]);
 
             if ($validator->fails()) {
@@ -278,55 +307,24 @@ class BusController extends Controller
                 ], 422);
             }
 
-            // Validación adicional: kilometraje_actual >= kilometraje_original
-            $kmActual = $request->kilometraje_actual ?? $bus->kilometraje_actual;
-            $kmOriginal = $request->kilometraje_original ?? $bus->kilometraje_original;
-
-            if ($kmActual < $kmOriginal) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'El kilometraje actual no puede ser menor al original',
-                    'errors' => [
-                        'kilometraje_actual' => ['El kilometraje actual debe ser mayor o igual al original']
-                    ]
-                ], 422);
-            }
-
-            // Actualizar campos (solo los que vienen en el request)
-            $dataToUpdate = [];
-            
-            if ($request->has('patente')) $dataToUpdate['patente'] = strtoupper($request->patente);
-            if ($request->has('patente_verificador')) $dataToUpdate['patente_verificador'] = $request->patente_verificador;
-            if ($request->has('marca')) $dataToUpdate['marca'] = $request->marca;
-            if ($request->has('modelo')) $dataToUpdate['modelo'] = $request->modelo;
-            if ($request->has('tipo_combustible')) $dataToUpdate['tipo_combustible'] = $request->tipo_combustible;
-            if ($request->has('color')) $dataToUpdate['color'] = $request->color;
-            if ($request->has('anio')) $dataToUpdate['anio'] = $request->anio;
-            if ($request->has('numero_serie')) $dataToUpdate['numero_serie'] = $request->numero_serie;
-            if ($request->has('numero_motor')) $dataToUpdate['numero_motor'] = $request->numero_motor;
-            if ($request->has('capacidad_pasajeros')) $dataToUpdate['capacidad_pasajeros'] = $request->capacidad_pasajeros;
-            if ($request->has('fecha_adquisicion')) $dataToUpdate['fecha_adquisicion'] = $request->fecha_adquisicion;
-            if ($request->has('estado')) $dataToUpdate['estado'] = $request->estado;
-            if ($request->has('proxima_revision_tecnica')) $dataToUpdate['proxima_revision_tecnica'] = $request->proxima_revision_tecnica;
-            if ($request->has('ultima_revision_tecnica')) $dataToUpdate['ultima_revision_tecnica'] = $request->ultima_revision_tecnica;
-            if ($request->has('documento_revision_tecnica')) $dataToUpdate['documento_revision_tecnica'] = $request->documento_revision_tecnica;
-            if ($request->has('numero_soap')) $dataToUpdate['numero_soap'] = $request->numero_soap;
-            if ($request->has('vencimiento_soap')) $dataToUpdate['vencimiento_soap'] = $request->vencimiento_soap;
-            if ($request->has('compania_seguro')) $dataToUpdate['compania_seguro'] = $request->compania_seguro;
-            if ($request->has('numero_poliza')) $dataToUpdate['numero_poliza'] = $request->numero_poliza;
-            if ($request->has('tipo_cobertura_adicional')) $dataToUpdate['tipo_cobertura_adicional'] = $request->tipo_cobertura_adicional;
-            if ($request->has('vencimiento_poliza')) $dataToUpdate['vencimiento_poliza'] = $request->vencimiento_poliza;
-            if ($request->has('numero_permiso_circulacion')) $dataToUpdate['numero_permiso_circulacion'] = $request->numero_permiso_circulacion;
-            if ($request->has('observaciones')) $dataToUpdate['observaciones'] = $request->observaciones;
-            if ($request->has('kilometraje_original')) $dataToUpdate['kilometraje_original'] = $request->kilometraje_original;
-            if ($request->has('kilometraje_actual')) $dataToUpdate['kilometraje_actual'] = $request->kilometraje_actual;
-
-            $bus->update($dataToUpdate);
+            // Actualizar campos
+            $bus->update($request->only([
+                'patente', 'patente_verificador', 'marca', 'modelo', 'tipo_combustible',
+                'anio', 'numero_serie', 'numero_motor', 'numero_chasis', 'capacidad_pasajeros',
+                'fecha_adquisicion', 'estado', 'tipo_bus', 'cantidad_ejes',
+                'marca_motor', 'modelo_motor', 'ubicacion_motor',
+                'marca_chasis', 'modelo_chasis', 'marca_carroceria', 'modelo_carroceria',
+                'proximo_mantenimiento_km', 'fecha_ultimo_mantenimiento', 'fecha_proximo_mantenimiento',
+                'proxima_revision_tecnica', 'ultima_revision_tecnica', 'documento_revision_tecnica',
+                'numero_soap', 'vencimiento_soap', 'compania_seguro', 'numero_poliza',
+                'tipo_cobertura_adicional', 'vencimiento_poliza', 'numero_permiso_circulacion',
+                'observaciones', 'kilometraje_original'
+            ]));
 
             return response()->json([
                 'success' => true,
                 'message' => 'Bus actualizado exitosamente',
-                'data' => $bus->fresh() // Recargar el modelo
+                'data' => $bus->fresh()
             ]);
 
         } catch (\Exception $e) {
@@ -353,7 +351,6 @@ class BusController extends Controller
                 ], 404);
             }
 
-            // Verificar si tiene viajes asociados
             if ($bus->viajes()->count() > 0) {
                 return response()->json([
                     'success' => false,
@@ -373,6 +370,88 @@ class BusController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error al eliminar bus',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // ============================================
+    // ENDPOINTS PARA CATÁLOGOS
+    // ============================================
+
+    /**
+     * Obtener marcas por tipo
+     * GET /api/buses/catalogos/marcas/{tipo}
+     * Tipos: bus, motor, chasis, carroceria
+     */
+    public function getMarcas($tipo)
+    {
+        try {
+            $marcas = MarcaBus::where('tipo', $tipo)
+                ->where('activo', true)
+                ->orderBy('nombre')
+                ->get(['id', 'nombre']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $marcas
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener marcas',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtener modelos de una marca específica
+     * GET /api/buses/catalogos/modelos/{marcaId}
+     */
+    public function getModelos($marcaId)
+    {
+        try {
+            $modelos = ModeloBus::where('marca_id', $marcaId)
+                ->where('activo', true)
+                ->orderBy('nombre')
+                ->get(['id', 'nombre']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $modelos
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener modelos',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtener todos los catálogos de una vez
+     * GET /api/buses/catalogos/todos
+     */
+    public function getCatalogosCompletos()
+    {
+        try {
+            $catalogos = [
+                'marcas_bus' => MarcaBus::buses()->get(['id', 'nombre']),
+                'marcas_motor' => MarcaBus::motores()->get(['id', 'nombre']),
+                'marcas_chasis' => MarcaBus::chasis()->get(['id', 'nombre']),
+                'marcas_carroceria' => MarcaBus::carrocerias()->get(['id', 'nombre']),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $catalogos
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener catálogos',
                 'error' => $e->getMessage()
             ], 500);
         }

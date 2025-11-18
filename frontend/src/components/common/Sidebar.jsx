@@ -1,4 +1,4 @@
-import { BarChart3, Users, Bus, MapPin, Zap, Settings, Briefcase, Users2, Wrench, TrendingUp } from 'lucide-react';
+import { BarChart3, Users, Bus, MapPin, Zap, Settings, Briefcase, Users2, Wrench, TrendingUp, Calendar } from 'lucide-react';
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -11,6 +11,7 @@ const menuItems = [
   { id: 'buses', label: 'Buses', icon: Bus },
   { id: 'rutas', label: 'Rutas', icon: MapPin },
   { id: 'viajes', label: 'Viajes', icon: Zap },
+  { id: 'turnos', label: 'Turnos / Rotativas', icon: Calendar },
   { id: 'mantenimientos', label: 'Mantenimientos', icon: Wrench },
   { id: 'logistica', label: 'Logística', icon: TrendingUp },
 ];

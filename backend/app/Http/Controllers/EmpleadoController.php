@@ -270,19 +270,19 @@ class EmpleadoController extends Controller
 
         try {
             // verificar que no tenag viajes futuros (si es conductor)
-            if ($empleado->conductor) {
-                $viajesFuturos = \DB::table('asignaciones_turno')
-                    ->where('conductor_id', $empleado->conductor->id)
-                    ->where('fecha_turno', '>=', now()->format('Y-m-d'))
-                    ->where('estado', '!=', 'completado')
-                    ->count();
+            //if ($empleado->conductor) {
+                //$viajesFuturos = \DB::table('asignaciones_turno')
+                    //->where('conductor_id', $empleado->conductor->id)
+                    //->where('fecha_turno', '>=', now()->format('Y-m-d'))
+                    //->where('estado', '!=', 'completado')
+                    //->count();
 
-                if ($turnosFuturos > 0) {
-                    return response()->json([
-                        'error' => "No se puede dar de baja. El conductor tiene $turnosFuturos turno(s) programado(s) a futuro."
-                    ], 400);
-                }
-            }
+                //if ($turnosFuturos > 0) {
+                    //return response()->json([
+                        //'error' => "No se puede dar de baja. El conductor tiene $turnosFuturos turno(s) programado(s) a futuro."
+                    //], 400);
+               // }
+            //}
 
             // actualizar empleado
             $empleado->update([

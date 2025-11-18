@@ -12,6 +12,7 @@ use App\Http\Controllers\ViajeController;
 use App\Http\Controllers\MecanicoController;
 use App\Http\Controllers\MantenimientoController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AsignacionTurnoController;
 
 // ============================================
 // RUTAS PÚBLICAS (sin autenticación)
@@ -62,6 +63,11 @@ Route::middleware('jwt.auth')->group(function () {
     Route::put('/conductores/{id}', [ConductorController::class, 'update']);
     Route::delete('/conductores/{id}', [ConductorController::class, 'destroy']);
 
+    // catologos buses
+    Route::get('/buses/catalogos/todos', [BusController::class, 'getCatalogosCompletos']);
+    Route::get('/buses/catalogos/marcas/{tipo}', [BusController::class, 'getMarcas']);
+    Route::get('/buses/catalogos/modelos/{marcaId}', [BusController::class, 'getModelos']);
+
     // BUSES
     Route::get('/buses', [BusController::class, 'index']);
     Route::get('/buses/{id}', [BusController::class, 'show']);
@@ -89,6 +95,18 @@ Route::middleware('jwt.auth')->group(function () {
     Route::post('/viajes', [ViajeController::class, 'store']);
     Route::put('/viajes/{id}', [ViajeController::class, 'update']);
     Route::delete('/viajes/{id}', [ViajeController::class, 'destroy']);
+
+
+
+    // TURNOS / ROTATIVAS
+    
+    Route::get('/turnos/calendario/{anio}/{mes}', [AsignacionTurnoController::class, 'calendario']);
+    Route::get('/turnos', [AsignacionTurnoController::class, 'index']);
+    Route::get('/turnos/{id}', [AsignacionTurnoController::class, 'show']);
+    Route::post('/turnos', [AsignacionTurnoController::class, 'store']);
+    Route::put('/turnos/{id}', [AsignacionTurnoController::class, 'update']);
+    Route::delete('/turnos/{id}', [AsignacionTurnoController::class, 'destroy']);
+
 
     // MECANICOS
     Route::get('/mecanicos', [MecanicoController::class, 'index']);

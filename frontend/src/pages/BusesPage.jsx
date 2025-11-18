@@ -10,6 +10,9 @@ import { fetchBuses, createBus, updateBus, deleteBus } from '../services/api';
 const ESTADOS_BUS = ['operativo', 'mantenimiento', 'desmantelado'];
 const TIPOS_COMBUSTIBLE = ['diesel', 'gasolina', 'gas', 'eléctrico', 'híbrido'];
 const TIPOS_COBERTURA = ['ninguna', 'terceros', 'full'];
+const TIPOS_BUS = ['simple', 'doble piso'];
+const CANTIDAD_EJES = ['2', '3', '4'];
+const UBICACION_MOTOR = ['delantero', 'trasero', 'central'];
 
 export default function BusesPage() {
   const [buses, setBuses] = useState([]);
@@ -39,9 +42,22 @@ export default function BusesPage() {
     anio: '',
     numero_serie: '',
     numero_motor: '',
+    numero_chasis: '',
     capacidad_pasajeros: '',
     fecha_adquisicion: '',
     estado: 'operativo',
+    tipo_bus: 'simple',
+    cantidad_ejes: '2',
+    marca_motor: '',
+    modelo_motor: '',
+    ubicacion_motor: '',
+    marca_chasis: '',
+    modelo_chasis: '',
+    marca_carroceria: '',
+    modelo_carroceria: '',
+    proximo_mantenimiento_km: '',
+    fecha_ultimo_mantenimiento: '',
+    fecha_proximo_mantenimiento: '',
     proxima_revision_tecnica: '',
     ultima_revision_tecnica: '',
     documento_revision_tecnica: '',
@@ -54,7 +70,6 @@ export default function BusesPage() {
     numero_permiso_circulacion: '',
     observaciones: '',
     kilometraje_original: '',
-    kilometraje_actual: '',
   });
 
   useEffect(() => {
@@ -189,13 +204,25 @@ export default function BusesPage() {
         marca: '',
         modelo: '',
         tipo_combustible: 'diesel',
-        color: '',
         anio: '',
         numero_serie: '',
         numero_motor: '',
+        numero_chasis: '',
         capacidad_pasajeros: '',
         fecha_adquisicion: '',
         estado: 'operativo',
+        tipo_bus: 'simple',
+        cantidad_ejes: '2',
+        marca_motor: '',
+        modelo_motor: '',
+        ubicacion_motor: 'trasero',
+        marca_chasis: '',
+        modelo_chasis: '',
+        marca_carroceria: '',
+        modelo_carroceria: '',
+        proximo_mantenimiento_km: '',
+        fecha_ultimo_mantenimiento: '',
+        fecha_proximo_mantenimiento: '',
         proxima_revision_tecnica: '',
         ultima_revision_tecnica: '',
         documento_revision_tecnica: '',
@@ -208,7 +235,6 @@ export default function BusesPage() {
         numero_permiso_circulacion: '',
         observaciones: '',
         kilometraje_original: '',
-        kilometraje_actual: '',
       });
     }
     setOpenDialog(true);
@@ -316,7 +342,7 @@ export default function BusesPage() {
   const renderExpandedRow = (bus) => (
     <tr className="bg-gray-50">
       <td colSpan="8" className="px-6 py-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* COLUMNA 1: IDENTIFICACIÓN */}
           <div>
             <h4 className="font-semibold text-gray-700 mb-3 border-b pb-2">Identificación</h4>
@@ -340,8 +366,14 @@ export default function BusesPage() {
                 <span className="ml-2">{bus.anio}</span>
               </div>
               <div>
-                <span className="font-medium text-gray-600">Color:</span>
-                <span className="ml-2">{bus.color || 'N/A'}</span>
+                <span className="font-medium text-gray-600">Tipo:</span>
+                <span className="ml-2">
+                  {bus.tipo_bus === 'simple' ? 'Simple (1 Piso)' : 'Doble Piso'}
+                </span>
+              </div>
+              <div>
+                <span className="font-medium text-gray-600">Ejes:</span>
+                <span className="ml-2">{bus.cantidad_ejes || 'N/A'}</span>
               </div>
               <div>
                 <span className="font-medium text-gray-600">Combustible:</span>
@@ -353,16 +385,96 @@ export default function BusesPage() {
                   <span className="ml-2 font-mono text-xs">{bus.numero_serie}</span>
                 </div>
               )}
-              {bus.numero_motor && (
-                <div>
-                  <span className="font-medium text-gray-600">N° Motor:</span>
-                  <span className="ml-2 font-mono text-xs">{bus.numero_motor}</span>
-                </div>
-              )}
             </div>
           </div>
+          {/* COLUMNA 2: COMPONENTES TECNICOS */}
+          <div>
+            <h4 className="font-semibold text-gray-700 mb-3 border-b pb-2">Componentes Técnicos</h4>
 
-          {/* COLUMNA 2: OPERACIÓN */}
+            {/* MOTOR */}
+            {(bus.marca_motor || bus.modelo_motor || bus.ubicacion_motor) && (
+              <div className="mb-4">
+                <h5 className="text-xs font-semibold text-gray-500 uppercase mb-2">Motor</h5>
+                <div className="space-y-1 text-sm">
+                  {bus.marca_motor && (
+                    <div>
+                      <span className="font-medium text-gray-600">Marca:</span>
+                      <span className="ml-2">{bus.marca_motor}</span>
+                    </div>
+                  )}
+                  {bus.modelo_motor && (
+                    <div>
+                      <span className="font-medium text-gray-600">Modelo:</span>
+                      <span className="ml-2">{bus.modelo_motor}</span>
+                    </div>
+                  )}
+                  {bus.ubicacion_motor && (
+                    <div>
+                      <span className="font-medium text-gray-600">Ubicación:</span>
+                      <span className="ml-2 capitalize">{bus.ubicacion_motor}</span>
+                    </div>
+                  )}
+                  {bus.numero_motor && (
+                    <div>
+                      <span className="font-medium text-gray-600">N° Motor:</span>
+                      <span className="ml-2 font-mono text-xs">{bus.numero_motor}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            )}
+            {/* CHASIS */}
+            {(bus.marca_chasis || bus.modelo_chasis || bus.numero_chasis) && (
+              <div className="mb-4">
+                <h5 className="text-xs font-semibold text-gray-500 uppercase mb-2">Chasis</h5>
+                <div className="space-y-1 text-sm">
+                  {bus.marca_chasis && (
+                    <div>
+                      <span className="font-medium text-gray-600">Marca:</span>
+                      <span className="ml-2">{bus.marca_chasis}</span>
+                    </div>
+                  )}
+                  {bus.modelo_chasis && (
+                    <div>
+                      <span className="font-medium text-gray-600">Modelo:</span>
+                      <span className="ml-2">{bus.modelo_chasis}</span>
+                    </div>
+                  )}
+                  {bus.numero_chasis && (
+                    <div>
+                      <span className="font-medium text-gray-600">N° Chasis:</span>
+                      <span className="ml-2 font-mono text-xs">{bus.numero_chasis}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* CARROCERÍA */}
+            {(bus.marca_carroceria || bus.modelo_carroceria) && (
+              <div>
+                <h5 className="text-xs font-semibold text-gray-500 uppercase mb-2">Carrocería</h5>
+                <div className="space-y-1 text-sm">
+                  {bus.marca_carroceria && (
+                    <div>
+                      <span className="font-medium text-gray-600">Marca:</span>
+                      <span className="ml-2">{bus.marca_carroceria}</span>
+                    </div>
+                  )}
+                  {bus.modelo_carroceria && (
+                    <div>
+                      <span className="font-medium text-gray-600">Modelo:</span>
+                      <span className="ml-2">{bus.modelo_carroceria}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          
+
+          {/* COLUMNA 3: OPERACIÓN y MANTENIMIENTO */}
           <div>
             <h4 className="font-semibold text-gray-700 mb-3 border-b pb-2">Operación</h4>
             <div className="space-y-2 text-sm">
@@ -373,10 +485,6 @@ export default function BusesPage() {
               <div>
                 <span className="font-medium text-gray-600">Km Original:</span>
                 <span className="ml-2">{bus.kilometraje_original?.toLocaleString() || 0} km</span>
-              </div>
-              <div>
-                <span className="font-medium text-gray-600">Km Actual:</span>
-                <span className="ml-2">{bus.kilometraje_actual?.toLocaleString() || 0} km</span>
               </div>
               <div>
                 <span className="font-medium text-gray-600">Km Recorridos:</span>
@@ -395,6 +503,32 @@ export default function BusesPage() {
                 </span>
               </div>
             </div>
+            {/* MANTENIMIENTO */}
+            {(bus.proximo_mantenimiento_km || bus.fecha_ultimo_mantenimiento || bus.fecha_proximo_mantenimiento) && (
+              <>
+                <h4 className="font-semibold text-gray-700 mt-4 mb-2 border-b pb-2">Mantenimiento</h4>
+                <div className="space-y-2 text-sm">
+                  {bus.proximo_mantenimiento_km && (
+                    <div>
+                      <span className="font-medium text-gray-600">Cada:</span>
+                      <span className="ml-2">{bus.proximo_mantenimiento_km.toLocaleString()} km</span>
+                    </div>
+                  )}
+                  {bus.fecha_ultimo_mantenimiento && (
+                    <div>
+                      <span className="font-medium text-gray-600">Último:</span>
+                      <span className="ml-2">{formatDate(bus.fecha_ultimo_mantenimiento)}</span>
+                    </div>
+                  )}
+                  {bus.fecha_proximo_mantenimiento && (
+                    <div>
+                      <span className="font-medium text-gray-600">Próximo:</span>
+                      <span className="ml-2">{formatDate(bus.fecha_proximo_mantenimiento)}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* REVISIÓN TÉCNICA */}
             <h4 className="font-semibold text-gray-700 mt-4 mb-2 border-b pb-2">Revisión Técnica</h4>
@@ -720,13 +854,24 @@ export default function BusesPage() {
             onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
             required
           />
-          
-          <Input
-            label="Color"
-            value={formData.color}
-            onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-            placeholder="Ej: Blanco, Azul"
+          <Select
+            label="Tipo Bus *"
+            options={TIPOS_BUS.map(t => ({
+              id: t,
+              label: t === 'simple' ? 'Simple (1 Piso)' : 'Doble Piso' 
+            }))}
+            value={formData.tipo_bus}
+            onChange={(e) => setFormData({ ...formData, tipo_bus: e.target.value })}
+            required
           />
+          <Select
+            label="Cantidad Ejes *"
+            options={CANTIDAD_EJES.map(e => ({ id: e, label: `${e} ejes` }))}
+            value={formData.cantidad_ejes}
+            onChange={(e) => setFormData({ ...formData, cantidad_ejes: e.target.value })}
+            required
+          />
+          
           
           <Input
             label="Año Fabricación *"
@@ -751,11 +896,78 @@ export default function BusesPage() {
             value={formData.numero_serie}
             onChange={(e) => setFormData({ ...formData, numero_serie: e.target.value })}
           />
+
+          {/*motor*/}
+          <div className="md:col-span-2 mt-4">
+            <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Motor</h3>
+          </div>
           <Input
-            label="Número Motor"
+            label="Marca Motor"
+            value={formData.marca_motor}
+            onChange={(e) => setFormData({ ...formData, marca_motor: e.target.value })}
+            placeholder="Ej: Mercedes-Benz, Cummins"
+          />
+          <Input
+            label="Modelo Motor"
+            value={formData.modelo_motor}
+            onChange={(e) => setFormData({ ...formData, modelo_motor: e.target.value })}
+            placeholder="Ej: OM-457, ISB 6.7"
+          />
+          <Select
+            label="Ubicación Motor"
+            options={UBICACION_MOTOR.map(u => ({
+              id: u,
+              label: u.charAt(0).toUpperCase() + u.slice(1) 
+            }))}
+            value={formData.ubicacion_motor}
+            onChange={(e) => setFormData({ ...formData, ubicacion_motor: e.target.value })}
+          />
+          <Input
+            label="numero motor"
             value={formData.numero_motor}
             onChange={(e) => setFormData({ ...formData, numero_motor: e.target.value })}
           />
+          {/* CHASIS */}
+          <div className="md:col-span-2 mt-4">
+            <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Chasis</h3>
+          </div>
+          <Input
+            label="Marca Chasis"
+            value={formData.marca_chasis}
+            onChange={(e) => setFormData({ ...formData, marca_chasis: e.target.value })}
+            placeholder="Ej: Mercedes-Benz, Volvo"
+          />
+          <Input
+            label="Modelo Chasis"
+            value={formData.modelo_chasis}
+            onChange={(e) => setFormData({ ...formData, modelo_chasis: e.target.value })}
+            placeholder="Ej: OF-1721, B270F"
+          />
+          <Input
+            label="Número Chasis (VIN)"
+            value={formData.numero_chasis}
+            onChange={(e) => setFormData({ ...formData, numero_chasis: e.target.value })}
+          />
+          <div></div> {/*espaciador*/}
+
+          {/*carrocería*/}
+          <div className="md:col-span-2 mt-4">
+            <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Carrocería</h3>
+          </div>
+          <Input
+            label="Marca Carrocería"
+            value={formData.marca_carroceria}
+            onChange={(e) => setFormData({ ...formData, marca_carroceria: e.target.value })}
+            placeholder="Ej: Marcopolo, Caio"
+          />
+          <Input
+            label="Modelo Carrocería"
+            value={formData.modelo_carroceria}
+            onChange={(e) => setFormData({ ...formData, modelo_carroceria: e.target.value })}
+            placeholder="Ej: Paradiso, Apache"
+          />
+
+
           <Input
             label="Fecha Adquisición"
             type="date"
@@ -778,13 +990,33 @@ export default function BusesPage() {
             onChange={(e) => setFormData({ ...formData, kilometraje_original: parseInt(e.target.value) || 0 })}
             min={0}
           />
+          {/* MANTENIMIENTO */}
+          <div className="md:col-span-2 mt-4">
+            <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Mantenimiento</h3>
+          </div>
           <Input
-            label="Km Actual"
+            label="Mantenimiento cada (km)"
             type="number"
-            value={formData.kilometraje_actual}
-            onChange={(e) => setFormData({ ...formData, kilometraje_actual: parseInt(e.target.value) || 0 })}
+            value={formData.proximo_mantenimiento_km}
+            onChange={(e) => setFormData({ ...formData, proximo_mantenimiento_km: parseInt(e.target.value) || '' })}
+            placeholder="Ej: 10000"
+            helpText="Cada cuántos km requiere mantenimiento"
             min={0}
           />
+          <Input
+            label="Último Mantenimiento"
+            type="date"
+            value={formData.fecha_ultimo_mantenimiento}
+            onChange={(e) => setFormData({ ...formData, fecha_ultimo_mantenimiento: e.target.value })}
+          />
+          <Input
+            label="Próximo Mantenimiento"
+            type="date"
+            value={formData.fecha_proximo_mantenimiento}
+            onChange={(e) => setFormData({ ...formData, fecha_proximo_mantenimiento: e.target.value })}
+            helpText="Para alertas en dashboard"
+          />
+          <div></div> {/*espaciador*/}
           
           {/* REVISIÓN TÉCNICA */}
           <div className="md:col-span-2 mt-4">

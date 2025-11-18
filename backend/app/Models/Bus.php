@@ -17,7 +17,6 @@ class Bus extends Model
         'marca',
         'modelo',
         'tipo_combustible',
-        'color',
         'anio',
         'numero_serie',
         'numero_motor',
@@ -36,7 +35,18 @@ class Bus extends Model
         'numero_soap',
         'observaciones',
         'kilometraje_original',
-        'kilometraje_actual',
+        // nuevos campos
+        'tipo_bus',
+        'cantidad_ejes',
+        'marca_motor',
+        'modelo_motor',
+        'ubicacion_motor',
+        'marca_chasis',
+        'marca_carroceria',
+        'modelo_carroceria',
+        'proximo_mantenimiento_km',
+        'fecha_ultimo_mantenimiento',
+        'fecha_proximo_mantenimiento',
     ];
 
     protected $casts = [
@@ -48,19 +58,13 @@ class Bus extends Model
         'anio' => 'integer',
         'capacidad_pasajeros' => 'integer',
         'kilometraje_original' => 'integer',
-        'kilometraje_actual' => 'integer',
+        // nuevos cats
+        'proximo_mantenimiento_km' => 'integer',
+        'fecha_ultimo_mantenimiento' => 'date',
+        'fecha_proximo_mantenimiento' => 'date',
     ];
 
-    /**
-     * Agregar atributos calculados al JSON
-     */
-    protected $appends = [
-        'antiguedad',
-        'revision_tecnica_vencida',
-        'seguro_vencido',
-        'dias_hasta_revision',
-        'dias_hasta_vencimiento_seguro',
-    ];
+
 
     // ============================================
     // RELACIONES
@@ -193,27 +197,40 @@ class Bus extends Model
             && !$this->revision_tecnica_vencida 
             && !$this->seguro_vencido;
     }
-
     /**
-     * Obtener kilometraje recorrido
+     * verificar si necesita mantenimiento proximo
      */
-    public function getKilometrajeRecorrido(): int
+    public function necesitaMantenimientoProximo(): bool
     {
-        return $this->kilometraje_actual - $this->kilometraje_original;
-    }
-
-    /**
-     * Actualizar kilometraje actual
-     */
-    public function actualizarKilometraje(int $nuevoKilometraje): bool
-    {
-        if ($nuevoKilometraje < $this->kilometraje_actual) {
+        if (!$this->fecha_proximo_mantenimiento) {
             return false;
         }
-        
-        $this->kilometraje_actual = $nuevoKilometraje;
-        return $this->save();
+        $diasRestantes = Carbon::now()->diffInDays(
+            Carbon::parse($this->fecha_proximo_mantenimiento),
+            false
+        );
+        return $diasRestantes !== null && $diasRestantes >= 0 && $diasRestantes <= 30;
     }
+
+    /**
+     * verificar si el mantenimiento esta vencido
+     */
+    public function mantenimientoVencido(): bool
+    {
+        if (!$this->fecha_proximo_mantenimiento) {
+            return false;
+        }
+        return Carbon::parse($this->fecha_proximo_mantenimiento)->isPast();
+    }
+
+    /**
+     * verificar si requiere asistente (buses dole piso)
+     */
+    public function requiereAsistente(): bool
+    {
+        return $this->tipo_bus === 'doble_piso';
+    }
+
 
     // ============================================
     // SCOPES (Consultas reutilizables)

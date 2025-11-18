@@ -440,3 +440,106 @@ export const fetchIsapres = async () => {
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();
 };
+
+// ========== TURNOS / ROTATIVAS ==========
+
+/**
+ * Obtener todos los turnos con filtros opcionales
+ * @param {Object} filters - { fecha, fecha_inicio, fecha_fin, tipo_turno, estado, conductor_id, bus_id }
+ */
+export const fetchTurnos = async (filters = {}) => {
+  // Construir query string con filtros
+  const queryParams = new URLSearchParams();
+  Object.keys(filters).forEach(key => {
+    if (filters[key]) {
+      queryParams.append(key, filters[key]);
+    }
+  });
+  
+  const url = `${API_URL}/turnos${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions('GET'));
+  
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  
+  const data = await response.json();
+  return data.success ? data.data : data;
+};
+
+/**
+ * Obtener un turno específico por ID
+ */
+export const fetchTurno = async (id) => {
+  const response = await fetch(`${API_URL}/turnos/${id}`, fetchOptions('GET'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const data = await response.json();
+  return data.success ? data.data : data;
+};
+
+/**
+ * Crear un nuevo turno
+ * @param {Object} turnoData - { bus_id, fecha_turno, hora_inicio, hora_termino, tipo_turno, conductores: [{conductor_id, rol}], asistentes: [{asistente_id, posicion}] }
+ */
+export const createTurno = async (turnoData) => {
+  const response = await fetch(`${API_URL}/turnos`, fetchOptions('POST', turnoData));
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    // Manejar errores de validación
+    if (data.errors) {
+      const errorMessages = Object.values(data.errors).flat().join(', ');
+      throw new Error(errorMessages);
+    }
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data.success ? data.data : data;
+};
+
+/**
+ * Actualizar un turno existente
+ */
+export const updateTurno = async (id, turnoData) => {
+  const response = await fetch(`${API_URL}/turnos/${id}`, fetchOptions('PUT', turnoData));
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    if (data.errors) {
+      const errorMessages = Object.values(data.errors).flat().join(', ');
+      throw new Error(errorMessages);
+    }
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data.success ? data.data : data;
+};
+
+/**
+ * Eliminar un turno
+ */
+export const deleteTurno = async (id) => {
+  const response = await fetch(`${API_URL}/turnos/${id}`, fetchOptions('DELETE'));
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Obtener calendario de turnos de un mes específico
+ * @param {number} anio - Año (ej: 2024)
+ * @param {number} mes - Mes (1-12)
+ */
+export const fetchCalendarioTurnos = async (anio, mes) => {
+  const response = await fetch(`${API_URL}/turnos/calendario/${anio}/${mes}`, fetchOptions('GET'));
+  
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  
+  const data = await response.json();
+  return data.success ? data.data : data;
+};

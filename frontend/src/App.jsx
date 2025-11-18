@@ -14,6 +14,7 @@ import RoutesPage from "./pages/RoutesPage";
 import ViajesPage from "./pages/ViajesPage";
 import MantencionesPage from './pages/MantencionesPage';
 import LogisticPage from './pages/LogisticPage';
+import TurnosPage from './pages/TurnosPage';
 import { logout, me } from './services/api';
 import './index.css';
 
@@ -113,6 +114,7 @@ function App() {
       {currentPage === 'viajes' && <ViajesPage />}
       {currentPage === 'mantenimientos' && <MantencionesPage />}
       {currentPage === 'logistica' && <LogisticPage />}
+      {currentPage === 'turnos' && <TurnosPage />}
     </MainLayout>
   );
 }

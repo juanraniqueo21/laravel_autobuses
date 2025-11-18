@@ -7,7 +7,7 @@ import Button from '../components/common/Button';
 import { fetchConductores, fetchEmpleados, createConductor, updateConductor, deleteConductor } from '../services/api';
 
 const CLASES_LICENCIA = ['A', 'A2', 'A3', 'B', 'C', 'D', 'E'];
-const ESTADOS = ['activo', 'baja_medica', 'suspendido', 'inactivo'];
+const ESTADOS = ['activo', 'licencia_medica', 'suspendido', 'inactivo'];
 const ESTADOS_LICENCIA = ['vigente', 'vencida', 'suspendida'];
 
 const formatDate = (date) => {
@@ -166,7 +166,7 @@ export default function ConductoresPage() {
   const getEstadoColor = (estado) => {
     const colors = {
       'activo': 'bg-green-100 text-green-800',
-      'baja_medica': 'bg-blue-100 text-blue-800',
+      'licencia_medica': 'bg-blue-100 text-blue-800',
       'suspendido': 'bg-orange-100 text-orange-800',
       'inactivo': 'bg-red-100 text-red-800',
     };
@@ -180,6 +180,30 @@ export default function ConductoresPage() {
     }
     return 'N/A';
   };
+
+  const getEmpleadosDisponibles = () => {
+    return empleados.filter(empleado => {
+      // 1. Empleado activo
+      if (empleado.estado !== 'activo') {
+        return false;
+      }
+      // 2. Rol conductor (rol_id = 3)
+      if (empleado.user?.rol_id !== 3) {
+        return false;
+      }
+      // 3, verificar que no sea conductor ACTIVO
+      const yaEsConductorActivo = conductores.some(
+        c => c.empleado_id === empleado.id && c.estado === 'activo'
+      );
+
+      // 4. si se esta editando, permitir el empleado actual
+      if (editingConductor && empleado.id === editingConductor.empleado_id) {
+        return true;
+      }
+      return !yaEsConductorActivo;
+    });
+  };
+      
 
   // Tabla expandible personalizada
   const renderConductoresTable = () => {
@@ -368,18 +392,11 @@ export default function ConductoresPage() {
           <Select
             label="Empleado"
             options={[
-              { id: '', label: 'Seleccione empleado' },
-              ...empleados
-                .filter(emp =>
-                  // solo mostrar empleados con rol conductor (3)
-                  emp.user?.rol_id === 3 &&
-                  // que no esten ya enla tabla conductores
-                  (!conductores.some(c => c.empleado_id === emp.id) || emp.id === formData.empleado_id)
-                )
-                .map(emp => ({
-                  id: emp.id,
-                  label: `${emp.user?.nombre} ${emp.user?.apellido}`
-                }))
+              { id: '', label: 'Seleccione un empleado' },
+              ...getEmpleadosDisponibles().map(emp => ({
+                id: emp.id,
+                label: `${emp.user?.nombre} ${emp.user?.apellido} - ${emp.numero_empleado}`
+              }))
             ]}
             value={formData.empleado_id}
             onChange={(e) => setFormData({ ...formData, empleado_id: e.target.value })}
