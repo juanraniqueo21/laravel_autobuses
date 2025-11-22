@@ -17,9 +17,7 @@ class BusController extends Controller
     public function index()
     {
         try {
-            $buses = Bus::with(['viajes' => function($query) {
-                $query->latest()->limit(5);
-            }])->get();
+            $buses = Bus::get();
 
             return response()->json([
                 'success' => true,

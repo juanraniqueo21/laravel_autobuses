@@ -1,148 +1,78 @@
 import React, { useState, useEffect } from 'react';
-import { Plus } from 'lucide-react';
-import Table from '../components/tables/Table';
-import FormDialog from '../components/forms/FormDialog';
+import { Calendar, Clock, MapPin, Users, Bus, ChevronRight } from 'lucide-react';
 import Input from '../components/common/Input';
-import Select from '../components/common/Select';
 import Button from '../components/common/Button';
-import { fetchViajes, fetchBuses, fetchConductores, fetchAsistentes, fetchRutas, createViaje, updateViaje, deleteViaje } from '../services/api';
-
-const ESTADOS_VIAJE = ['programado', 'en_curso', 'completado', 'cancelado'];
+import TurnoViajesPage from './TurnoViajesPage';
+import { 
+  fetchTurnos,
+  fetchViajesPorTurno
+} from '../services/api';
 
 export default function ViajesPage() {
-  const [viajes, setViajes] = useState([]);
-  const [buses, setBuses] = useState([]);
-  const [conductores, setConductores] = useState([]);
-  const [asistentes, setAsistentes] = useState([]);
-  const [rutas, setRutas] = useState([]);
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(
+    new Date().toISOString().split('T')[0]
+  );
+  const [turnos, setTurnos] = useState([]);
+  const [turnoSeleccionado, setTurnoSeleccionado] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [editingViaje, setEditingViaje] = useState(null);
-  const [formData, setFormData] = useState({
-    bus_id: '',
-    conductor_id: '',
-    asistente_id: '',
-    ruta_id: '',
-    fecha_hora_salida: '',
-    fecha_hora_llegada: '',
-    pasajeros_transportados: '',
-    combustible_gastado: '',
-    kilometraje_inicial: '',
-    kilometraje_final: '',
-    estado: 'programado',
-    observaciones: '',
-    incidentes: '',
-  });
 
   useEffect(() => {
-    loadData();
-  }, []);
+    loadTurnos();
+  }, [fechaSeleccionada]);
 
-  const loadData = async () => {
+  const loadTurnos = async () => {
     try {
       setLoading(true);
-      const [viagesData, busesData, conductoresData, asistentesData, rutasData] = await Promise.all([
-        fetchViajes(),
-        fetchBuses(),
-        fetchConductores(),
-        fetchAsistentes(),
-        fetchRutas(),
-      ]);
-      setViajes(viagesData);
-      setBuses(busesData);
       
-      // filtrar solo conductores activos
-      const conductoresActivos = conductoresData.filter(c =>
-        c.estado === 'activo' &&
-        c.empleado?.estado === 'activo'
+      // Buscar todos los turnos de la fecha seleccionada
+      const turnosData = await fetchTurnos({ fecha: fechaSeleccionada });
+      
+      // Cargar cantidad de viajes por cada turno
+      const turnosConViajes = await Promise.all(
+        turnosData.map(async (turno) => {
+          try {
+            const viajes = await fetchViajesPorTurno(turno.id);
+            return {
+              ...turno,
+              cantidad_viajes: viajes.length,
+              viajes_completados: viajes.filter(v => v.estado === 'completado').length,
+              viajes_en_curso: viajes.filter(v => v.estado === 'en_curso').length
+            };
+          } catch (err) {
+            return {
+              ...turno,
+              cantidad_viajes: 0,
+              viajes_completados: 0,
+              viajes_en_curso: 0
+            };
+          }
+        })
       );
-      setConductores(conductoresActivos);
-      // filtrar solo asistentes activos
-      const asistentesActivos = asistentesData.filter(a =>
-        a.estado === 'activo' &&
-        a.empleado?.estado === 'activo'
-      );
-      setAsistentes(asistentesActivos);
-      setRutas(rutasData);
+      
+      // Ordenar por hora de inicio
+      turnosConViajes.sort((a, b) => {
+        return a.hora_inicio.localeCompare(b.hora_inicio);
+      });
+      
+      setTurnos(turnosConViajes);
       setError(null);
     } catch (err) {
-      setError('Error al cargar datos: ' + err.message);
+      console.error('Error al cargar turnos:', err);
+      setError('Error al cargar turnos: ' + err.message);
+      setTurnos([]);
     } finally {
       setLoading(false);
     }
-        
-        
   };
 
-  const handleOpenDialog = (viaje = null) => {
-    if (viaje) {
-      setEditingViaje(viaje);
-      setFormData(viaje);
-    } else {
-      setEditingViaje(null);
-      setFormData({
-        bus_id: '',
-        conductor_id: '',
-        asistente_id: '',
-        ruta_id: '',
-        fecha_hora_salida: '',
-        fecha_hora_llegada: '',
-        pasajeros_transportados: '',
-        combustible_gastado: '',
-        kilometraje_inicial: '',
-        kilometraje_final: '',
-        estado: 'programado',
-        observaciones: '',
-        incidentes: '',
-      });
-    }
-    setOpenDialog(true);
+  const handleGestionarViajes = (turno) => {
+    setTurnoSeleccionado(turno);
   };
 
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setEditingViaje(null);
-  };
-
-  const handleSave = async () => {
-    try {
-      if (editingViaje) {
-        await updateViaje(editingViaje.id, formData);
-      } else {
-        await createViaje(formData);
-      }
-      loadData();
-      handleCloseDialog();
-    } catch (err) {
-      setError('Error al guardar: ' + err.message);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm('¿Estás seguro?')) {
-      try {
-        await deleteViaje(id);
-        loadData();
-      } catch (err) {
-        setError('Error al eliminar: ' + err.message);
-      }
-    }
-  };
-
-  const getPatente = (busId) => {
-    const bus = buses.find(b => b.id === busId);
-    return bus ? bus.patente : 'N/A';
-  };
-
-  const getConductorNombre = (conducId) => {
-    const cond = conductores.find(c => c.id === conducId);
-    return cond && cond.empleado ? `${cond.empleado.user?.nombre || ''} ${cond.empleado.user?.apellido || ''}` : 'N/A';
-  };
-
-  const getRutaNombre = (rutaId) => {
-    const ruta = rutas.find(r => r.id === rutaId);
-    return ruta ? ruta.nombre_ruta : 'N/A';
+  const handleVolverATurnos = () => {
+    setTurnoSeleccionado(null);
+    loadTurnos(); // Recargar para actualizar contadores
   };
 
   const getEstadoColor = (estado) => {
@@ -155,192 +85,217 @@ export default function ViajesPage() {
     return colors[estado] || 'bg-gray-100 text-gray-800';
   };
 
-  const columns = [
-    { id: 'fecha_hora_salida', label: 'Fecha', render: (row) => row.fecha_hora_salida?.split('T')[0] },
-    { id: 'bus_id', label: 'Bus', render: (row) => getPatente(row.bus_id) },
-    { id: 'conductor_id', label: 'Conductor', render: (row) => getConductorNombre(row.conductor_id) },
-    { id: 'ruta_id', label: 'Ruta', render: (row) => getRutaNombre(row.ruta_id) },
-    { id: 'fecha_hora_salida', label: 'Salida', render: (row) => row.fecha_hora_salida?.split('T')[1]?.slice(0, 5) },
-    { id: 'fecha_hora_llegada', label: 'Llegada', render: (row) => row.fecha_hora_llegada?.split('T')[1]?.slice(0, 5) || 'N/A' },
-    { id: 'pasajeros_transportados', label: 'Pasajeros' },
-    {
-      id: 'estado',
-      label: 'Estado',
-      render: (row) => (
-        <span className={`px-3 py-1 rounded-full text-xs font-bold ${getEstadoColor(row.estado)}`}>
-          {row.estado}
-        </span>
-      ),
-    },
-  ];
+  const getTipoTurnoColor = (tipo) => {
+    const colors = {
+      'mañana': 'bg-amber-100 text-amber-800',
+      'tarde': 'bg-orange-100 text-orange-800',
+      'noche': 'bg-indigo-100 text-indigo-800',
+      'completo': 'bg-purple-100 text-purple-800',
+    };
+    return colors[tipo] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getTipoTurnoEmoji = (tipo) => {
+    const emojis = {
+      'mañana': '',
+      'tarde': '',
+      'noche': '',
+      'completo': '',
+    };
+    return emojis[tipo] || '🚌';
+  };
+
+  // Si hay turno seleccionado, mostrar página de gestión
+  if (turnoSeleccionado) {
+    return (
+      <TurnoViajesPage
+        turno={turnoSeleccionado}
+        onVolver={handleVolverATurnos}
+      />
+    );
+  }
+
+  // Vista principal: Lista de turnos
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando turnos...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Viajes</h1>
-          <p className="text-gray-600 mt-2">Administra los viajes de transporte</p>
-        </div>
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={() => handleOpenDialog()}
-          className="flex items-center gap-2"
-        >
-          <Plus size={20} />
-          Nuevo Viaje
-        </Button>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900"> Gestión de Viajes</h1>
+        <p className="text-gray-600 mt-2">Administra los viajes de todos los turnos</p>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-          {error}
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
+          <strong>Error:</strong> {error}
         </div>
       )}
 
-      {/* Tabla */}
-      <Table
-        columns={columns}
-        data={viajes}
-        loading={loading}
-        onEdit={handleOpenDialog}
-        onDelete={handleDelete}
-      />
-
-      {/* Dialog */}
-      <FormDialog
-        isOpen={openDialog}
-        title={editingViaje ? 'Editar Viaje' : 'Nuevo Viaje'}
-        onSubmit={handleSave}
-        onCancel={handleCloseDialog}
-      >
-        <Select
-          label="Bus"
-          options={buses.map(bus => ({
-            id: bus.id,
-            label: `${bus.patente} - ${bus.marca} ${bus.modelo}`
-          }))}
-          value={formData.bus_id}
-          onChange={(e) => setFormData({ ...formData, bus_id: e.target.value })}
-          required
-        />
-
-        <Select
-          label="Conductor"
-          options={conductores.map(cond => ({
-            id: cond.id,
-            label: `${cond.empleado?.user?.nombre} ${cond.empleado?.user?.apellido}`
-          }))}
-          value={formData.conductor_id}
-          onChange={(e) => setFormData({ ...formData, conductor_id: e.target.value })}
-          required
-        />
-
-        <Select
-          label="Asistente (Opcional)"
-          options={[
-            { id: '', label: 'Sin asistente' },
-            ...asistentes.map(asist => ({
-              id: asist.id,
-              label: `${asist.empleado?.user?.nombre} ${asist.empleado?.user?.apellido}`
-            }))
-          ]}
-          value={formData.asistente_id}
-          onChange={(e) => setFormData({ ...formData, asistente_id: e.target.value })}
-        />
-
-        <Select
-          label="Ruta"
-          options={rutas.map(ruta => ({
-            id: ruta.id,
-            label: `${ruta.codigo_ruta} - ${ruta.nombre_ruta}`
-          }))}
-          value={formData.ruta_id}
-          onChange={(e) => setFormData({ ...formData, ruta_id: e.target.value })}
-          required
-        />
-
-        <Input
-          label="Fecha y Hora de Salida"
-          type="datetime-local"
-          value={formData.fecha_hora_salida}
-          onChange={(e) => setFormData({ ...formData, fecha_hora_salida: e.target.value })}
-          required
-        />
-
-        <Input
-          label="Fecha y Hora de Llegada"
-          type="datetime-local"
-          value={formData.fecha_hora_llegada}
-          onChange={(e) => setFormData({ ...formData, fecha_hora_llegada: e.target.value })}
-        />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Selector de Fecha */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex items-center gap-4">
+          <Calendar size={24} className="text-blue-600" />
+          <label className="text-sm font-medium text-gray-700">Seleccionar fecha:</label>
           <Input
-            label="Pasajeros Transportados"
-            type="number"
-            value={formData.pasajeros_transportados}
-            onChange={(e) => setFormData({ ...formData, pasajeros_transportados: parseInt(e.target.value) })}
+            type="date"
+            value={fechaSeleccionada}
+            onChange={(e) => setFechaSeleccionada(e.target.value)}
+            className="w-auto"
           />
-
-          <Input
-            label="Combustible Gastado (L)"
-            type="number"
-            value={formData.combustible_gastado}
-            onChange={(e) => setFormData({ ...formData, combustible_gastado: parseFloat(e.target.value) })}
-          />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setFechaSeleccionada(new Date().toISOString().split('T')[0])}
+          >
+            Hoy
+          </Button>
+          <div className="ml-auto text-sm text-gray-600">
+            <strong>{turnos.length}</strong> turno{turnos.length !== 1 ? 's' : ''} programados
+          </div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Kilometraje Inicial"
-            type="number"
-            value={formData.kilometraje_inicial}
-            onChange={(e) => setFormData({ ...formData, kilometraje_inicial: parseInt(e.target.value) })}
-          />
-
-          <Input
-            label="Kilometraje Final"
-            type="number"
-            value={formData.kilometraje_final}
-            onChange={(e) => setFormData({ ...formData, kilometraje_final: parseInt(e.target.value) })}
-          />
+      {/* Lista de Turnos */}
+      {turnos.length === 0 ? (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
+          <p className="text-yellow-800 font-medium text-lg">
+            No hay turnos programados para el {new Date(fechaSeleccionada + 'T00:00:00').toLocaleDateString('es-CL')}
+          </p>
+          <p className="text-yellow-600 text-sm mt-2">
+            Ve a la página de Turnos para crear nuevos turnos
+          </p>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {turnos.map((turno) => (
+            <div
+              key={turno.id}
+              className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-start justify-between">
+                {/* Columna Izquierda: Info del Turno */}
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-3xl">{getTipoTurnoEmoji(turno.tipo_turno)}</span>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-xl font-bold text-gray-900 capitalize">
+                          Turno {turno.tipo_turno}
+                        </h3>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getTipoTurnoColor(turno.tipo_turno)}`}>
+                          {turno.tipo_turno}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getEstadoColor(turno.estado)}`}>
+                          {turno.estado}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Clock size={16} />
+                        <span className="font-semibold">{turno.hora_inicio} - {turno.hora_termino}</span>
+                      </div>
+                    </div>
+                  </div>
 
-        <Select
-          label="Estado"
-          options={ESTADOS_VIAJE.map(e => ({ id: e, label: e }))}
-          value={formData.estado}
-          onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-          required
-        />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    {/* Bus */}
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Bus size={20} className="text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600">Bus Asignado</p>
+                        <p className="font-bold text-gray-900 text-lg">
+                          {turno.bus?.patente || 'N/A'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {turno.bus?.marca} {turno.bus?.modelo}
+                        </p>
+                      </div>
+                    </div>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Observaciones
-          </label>
-          <textarea
-            value={formData.observaciones}
-            onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            rows={2}
-          />
+                    {/* Conductores */}
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-green-100 rounded-lg">
+                        <Users size={20} className="text-green-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600">Conductores</p>
+                        {turno.conductores && turno.conductores.length > 0 ? (
+                          <div className="space-y-1">
+                            {turno.conductores.map((c, i) => (
+                              <p key={i} className="text-sm font-medium text-gray-900">
+                                {c.empleado?.user?.nombre} {c.empleado?.user?.apellido}
+                                <span className="text-xs text-gray-500 ml-1">
+                                  ({c.pivot?.rol})
+                                </span>
+                              </p>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">Sin conductores</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Viajes */}
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-purple-100 rounded-lg">
+                        <MapPin size={20} className="text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600">Viajes</p>
+                        <p className="font-bold text-gray-900 text-2xl">
+                          {turno.cantidad_viajes}
+                        </p>
+                        <div className="flex gap-2 text-xs mt-1">
+                          <span className="text-green-600">
+                            ✓ {turno.viajes_completados} completados
+                          </span>
+                          {turno.viajes_en_curso > 0 && (
+                            <span className="text-yellow-600">
+                                  {turno.viajes_en_curso} en curso
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {turno.observaciones && (
+                    <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700">
+                      <strong>Observaciones:</strong> {turno.observaciones}
+                    </div>
+                  )}
+                </div>
+
+                {/* Columna Derecha: Botón de Acción */}
+                <div className="ml-6">
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    onClick={() => handleGestionarViajes(turno)}
+                    className="flex items-center gap-2"
+                  >
+                    Gestionar Viajes
+                    <ChevronRight size={20} />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Incidentes
-          </label>
-          <textarea
-            value={formData.incidentes}
-            onChange={(e) => setFormData({ ...formData, incidentes: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            rows={2}
-          />
-        </div>
-      </FormDialog>
+      )}
     </div>
   );
 }

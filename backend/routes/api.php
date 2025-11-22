@@ -77,10 +77,19 @@ Route::middleware('jwt.auth')->group(function () {
 
     // RUTAS
     Route::get('/rutas', [RutaController::class, 'index']);
+    Route::get('/rutas/activas', [RutaController::class, 'rutasActivas']);
     Route::get('/rutas/{id}', [RutaController::class, 'show']);
     Route::post('/rutas', [RutaController::class, 'store']);
     Route::put('/rutas/{id}', [RutaController::class, 'update']);
     Route::delete('/rutas/{id}', [RutaController::class, 'destroy']);
+
+    // rutas ges paradas
+    Route::post('/rutas/{rutaId}/paradas', [RutaController::class, 'agregarParada']);
+    Route::post('/rutas/{rutaId}/paradas/guardar', [RutaController::class, 'guardarParadas']);
+    Route::put('/rutas/{rutaId}/paradas/{paradaId}', [RutaController::class, 'actualizarParada']);
+    Route::delete('/rutas/{rutaId}/paradas/{paradaId}', [RutaController::class, 'eliminarParada']);
+
+    
 
     // ASISTENTES
     Route::get('/asistentes', [AsistenteController::class, 'index']);
@@ -91,9 +100,13 @@ Route::middleware('jwt.auth')->group(function () {
 
     // VIAJES
     Route::get('/viajes', [ViajeController::class, 'index']);
+    Route::get('/viajes/activos', [ViajeController::class, 'activos']);
+    Route::get('/viajes/turno/{turnoId}', [ViajeController::class, 'porTurno']);
     Route::get('/viajes/{id}', [ViajeController::class, 'show']);
     Route::post('/viajes', [ViajeController::class, 'store']);
     Route::put('/viajes/{id}', [ViajeController::class, 'update']);
+    Route::post('/viajes/{id}/finalizar', [ViajeController::class, 'finalizar']);
+    Route::post('/viajes/{id}/cancelar', [ViajeController::class, 'cancelar']);
     Route::delete('/viajes/{id}', [ViajeController::class, 'destroy']);
 
 

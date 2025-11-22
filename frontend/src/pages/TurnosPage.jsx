@@ -148,7 +148,7 @@ export default function TurnosPage() {
       // Editar turno existente
       setEditingTurno(turno);
       setFormData({
-        bus_id: turno.bus_id,
+        bus_id: turno.bus?.id || turno.bus_id,
         fecha_turno: turno.fecha_turno.split('T')[0],
         hora_inicio: turno.hora_inicio,
         hora_termino: turno.hora_termino,
@@ -611,7 +611,7 @@ export default function TurnosPage() {
             />
             {busSeleccionado && (
               <div className="mt-2 p-3 bg-blue-50 rounded-lg text-sm">
-                <p><strong>Tipo:</strong> {busSeleccionado.tipo_bus === 'doble_piso' ? '🚌🚌 Doble Piso' : '🚌 Simple'}</p>
+                <p><strong>Tipo:</strong> {busSeleccionado.tipo_bus === 'doble_piso' ? ' Doble Piso' : ' Simple'}</p>
                 <p><strong>Capacidad:</strong> {busSeleccionado.capacidad_pasajeros} pasajeros</p>
                 {requiresAsistente && (
                   <p className="text-blue-700 mt-2">

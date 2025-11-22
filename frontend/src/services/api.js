@@ -327,6 +327,33 @@ export const deleteRuta = async (id) => {
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();
 };
+// rutas detalles y gestion
+export const fetchRutaById = async (id) => {
+  const response = await fetch(`${API_URL}/rutas/${id}`, fetchOptions('GET'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+/**
+ * Guardar las paradas de una ruta
+ * @param {number} rutaId - ID de la ruta
+ * @param {Object} data - { paradas: [{ciudad, orden, distancia_desde_anterior_km, tiempo_desde_anterior_min}] }
+ */
+export const guardarParadasRuta = async (rutaId, data) => {
+  const response = await fetch(`${API_URL}/rutas/${rutaId}/paradas/guardar`, fetchOptions('POST', data));
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
+/**
+ * Guardar las tarifas de una ruta
+ * @param {number} rutaId - ID de la ruta
+ * @param {Object} data - { tarifas: [{tipo_pasajero, tarifa}] }
+ */
+
 
 // ========== ASISTENTES ==========
 export const fetchAsistentes = async () => {
@@ -354,28 +381,135 @@ export const deleteAsistente = async (id) => {
 };
 
 // ========== VIAJES ==========
-export const fetchViajes = async () => {
-  const response = await fetch(`${API_URL}/viajes`, fetchOptions('GET'));
+
+/**
+ * Obtener todos los viajes con filtros opcionales
+ * @param {Object} filters - { turno_id, fecha, ruta_id, estado }
+ */
+export const fetchViajes = async (filters = {}) => {
+  const queryParams = new URLSearchParams();
+  Object.keys(filters).forEach(key => {
+    if (filters[key]) {
+      queryParams.append(key, filters[key]);
+    }
+  });
+  
+  const url = `${API_URL}/viajes${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions('GET'));
+  
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();
 };
 
+/**
+ * Obtener viajes activos (en curso)
+ */
+export const fetchViajesActivos = async () => {
+  const response = await fetch(`${API_URL}/viajes/activos`, fetchOptions('GET'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+/**
+ * Obtener viajes de un turno específico
+ */
+export const fetchViajesPorTurno = async (turnoId) => {
+  const response = await fetch(`${API_URL}/viajes/turno/${turnoId}`, fetchOptions('GET'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+/**
+ * Obtener un viaje específico por ID
+ */
+export const fetchViajeById = async (id) => {
+  const response = await fetch(`${API_URL}/viajes/${id}`, fetchOptions('GET'));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+/**
+ * Crear un nuevo viaje
+ * @param {Object} viajeData - { asignacion_turno_id, ruta_id, fecha_hora_salida, observaciones }
+ */
 export const createViaje = async (viajeData) => {
   const response = await fetch(`${API_URL}/viajes`, fetchOptions('POST', viajeData));
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  return response.json();
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    if (data.errors) {
+      const errorMessages = Object.values(data.errors).flat().join(', ');
+      throw new Error(errorMessages);
+    }
+    throw new Error(data.error || data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
 };
 
+/**
+ * Actualizar un viaje existente
+ */
 export const updateViaje = async (id, viajeData) => {
   const response = await fetch(`${API_URL}/viajes/${id}`, fetchOptions('PUT', viajeData));
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  return response.json();
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
 };
 
+/**
+ * Finalizar un viaje (registrar hora de llegada)
+ * @param {number} id - ID del viaje
+ * @param {Object} data - { fecha_hora_llegada, observaciones }
+ */
+export const finalizarViaje = async (id, data) => {
+  const response = await fetch(`${API_URL}/viajes/${id}/finalizar`, fetchOptions('POST', data));
+  
+  const responseData = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(responseData.error || responseData.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return responseData;
+};
+
+/**
+ * Cancelar un viaje
+ * @param {number} id - ID del viaje
+ * @param {string} motivo - Motivo de la cancelación
+ */
+export const cancelarViaje = async (id, motivo) => {
+  const response = await fetch(`${API_URL}/viajes/${id}/cancelar`, fetchOptions('POST', { motivo }));
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Eliminar un viaje
+ */
 export const deleteViaje = async (id) => {
   const response = await fetch(`${API_URL}/viajes/${id}`, fetchOptions('DELETE'));
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  return response.json();
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
 };
 
 // ========== MECANICOS ==========

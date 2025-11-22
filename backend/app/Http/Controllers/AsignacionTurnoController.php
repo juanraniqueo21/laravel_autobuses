@@ -114,6 +114,16 @@ class AsignacionTurnoController extends Controller
     public function store(Request $request)
     {
         try {
+
+
+            // Debug: ver que datos llegan
+            \Log::info('=== DATOS RECIBIDOS EN TURNO ===');
+            \Log::info('Request all: ' . json_encode($request->all()));
+            \Log::info('Request input: ' . json_encode($request->input()));
+            \Log::info('Request getContent: ' . $request->getContent());
+            \Log::info('Content-Type: ' . $request->header('Content-Type'));
+            \Log::info('================================');
+            
             // Validaciones básicas
             $validator = Validator::make($request->all(), [
                 'bus_id' => 'required|exists:buses,id',
