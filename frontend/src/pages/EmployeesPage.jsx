@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ChevronDown, ChevronUp, Phone, MapPin, DollarSign, Search, X, Mail, AlertTriangle } from 'lucide-react';
-import Table from '../components/tables/Table';
+import { 
+  Plus, ChevronDown, ChevronUp, Phone, MapPin, DollarSign, 
+  Search, X, Mail, AlertTriangle, Edit2, Trash2, UserX,
+  Briefcase, Heart, CreditCard, User, Users // Agregado Users para el icono grande
+} from 'lucide-react';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import Button from '../components/common/Button';
-import { fetchEmpleados, fetchUsers, fetchAfps, fetchIsapres, createEmpleado, updateEmpleado, deleteEmpleado, darDeBajaEmpleado } from '../services/api';
+import { 
+  fetchEmpleados, fetchUsers, fetchAfps, fetchIsapres, 
+  createEmpleado, updateEmpleado, deleteEmpleado, darDeBajaEmpleado 
+} from '../services/api';
+import { useNotifications } from '../context/NotificationContext';
+import usePagination from '../hooks/usePagination';
 
 const CONTRATOS = ['indefinido', 'plazo_fijo', 'practicante'];
 const ESTADOS = ['activo', 'licencia', 'suspendido', 'terminado'];
@@ -25,7 +33,9 @@ const TIPOS_CUENTA = [
   { id: 'ahorro', label: 'Ahorro' },
 ];
 
-// Utilidades
+// ==========================================
+// UTILIDADES
+// ==========================================
 const formatPhoneChile = (phone) => {
   if (!phone) return '';
   const cleaned = phone.replace(/\D/g, '');
@@ -55,20 +65,30 @@ const formatRUT = (rut, verificador) => {
 };
 
 export default function EmployeesPage() {
-  const [empleados, setEmpleados] = useState([]);
+  // --- ESTADO DE DATOS ---
+  const [allEmpleados, setAllEmpleados] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [afps, setAfps] = useState([]);
   const [isapres, setIsapres] = useState([]);
+  
+  // --- ESTADO DE UI Y USUARIO ---
   const [currentUser, setCurrentUser] = useState(null);
   const [searchUsuario, setSearchUsuario] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [openDialog, setOpenDialog] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
+
+  // --- HOOK DE NOTIFICACIONES ---
+  const { addNotification } = useNotifications();
+
+  // --- MODALES ---
+  const [openDialog, setOpenDialog] = useState(false);
   const [editingEmpleado, setEditingEmpleado] = useState(null);
   const [openBajaDialog, setOpenBajaDialog] = useState(false);
   const [empleadoParaBaja, setEmpleadoParaBaja] = useState(null);
+
+  // --- FORMULARIOS ---
   const [bajaFormData, setBajaFormData] = useState({
     fecha_termino: '',
     motivo_termino: 'renuncia',
@@ -102,7 +122,6 @@ export default function EmployeesPage() {
   });
 
   useEffect(() => {
-    // obtener usuario actual del localStorage
     const user = JSON.parse(localStorage.getItem('user'));
     setCurrentUser(user);
     loadData();
@@ -117,81 +136,78 @@ export default function EmployeesPage() {
         fetchAfps(),
         fetchIsapres(),
       ]);
-      setEmpleados(empleadosData);
+      setAllEmpleados(empleadosData);
       setUsuarios(usuariosData);
       setAfps(afpsData);
       setIsapres(isapresData);
       setError(null);
     } catch (err) {
       setError('Error al cargar datos: ' + err.message);
+      addNotification('error', 'Error', 'No se pudieron cargar los datos.');
     } finally {
       setLoading(false);
     }
   };
 
+  // --- LÓGICA DE FILTRADO Y PAGINACIÓN ---
+  const getEmpleadosFiltrados = () => {
+    const sortedEmpleados = [...allEmpleados].sort((a, b) => b.id - a.id);
+
+    if (!searchTerm.trim()) return sortedEmpleados;
+
+    const busqueda = searchTerm.toLowerCase().trim();
+    
+    return sortedEmpleados.filter((empleado) => {
+      const user = usuarios.find(u => u.id === empleado.user_id);
+      if (!user) return false;
+
+      const nombreCompleto = `${user.nombre} ${user.apellido}`.toLowerCase();
+      const rut = `${user.rut}${user.rut_verificador}`.replace(/\D/g, '');
+      const rutFormateado = formatRUT(user.rut, user.rut_verificador).toLowerCase();
+      const numeroEmpleado = empleado.numero_empleado?.toLowerCase() || '';
+
+      return (
+        nombreCompleto.includes(busqueda) ||
+        rut.includes(busqueda) ||
+        rutFormateado.includes(busqueda) ||
+        numeroEmpleado.includes(busqueda)
+      );
+    });
+  };
+
+  const filteredEmpleados = getEmpleadosFiltrados();
+  const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(filteredEmpleados, 10);
+
+  useEffect(() => { setCurrentPage(1); }, [searchTerm]);
+
+  // --- HANDLERS ---
   const handleOpenDialog = (empleado = null) => {
     setPhoneErrors({});
     if (empleado) {
       setEditingEmpleado(empleado);
       setFormData({
+        ...empleado,
         user_id: empleado.user_id?.toString() || '',
-        numero_empleado: empleado.numero_empleado || '',
         fecha_contratacion: empleado.fecha_contratacion ? empleado.fecha_contratacion.split('T')[0] : '',
         fecha_termino: empleado.fecha_termino ? empleado.fecha_termino.split('T')[0] : '',
+        fecha_nacimiento: empleado.fecha_nacimiento ? empleado.fecha_nacimiento.split('T')[0] : '',
         tipo_contrato: empleado.tipo_contrato || 'indefinido',
         salario_base: empleado.salario_base || '',
         estado: empleado.estado || 'activo',
-        ciudad: empleado.ciudad || '',
-        direccion: empleado.direccion || '',
-        telefono_personal: empleado.telefono_personal || '',
-        fecha_nacimiento: empleado.fecha_nacimiento ? empleado.fecha_nacimiento.split('T')[0] : '',
-        genero: empleado.genero || '',
-        contacto_emergencia_nombre: empleado.contacto_emergencia_nombre || '',
-        contacto_emergencia_telefono: empleado.contacto_emergencia_telefono || '',
-        contacto_emergencia_relacion: empleado.contacto_emergencia_relacion || '',
-        afp_id: empleado.afp_id || '',
-        tipo_fonasa: empleado.tipo_fonasa || 'B',
-        isapre_id: empleado.isapre_id || '',
-        numero_seguro_cesantia: empleado.numero_seguro_cesantia || '',
-        banco: empleado.banco || '',
-        tipo_cuenta: empleado.tipo_cuenta || '',
-        numero_cuenta: empleado.numero_cuenta || '',
       });
     } else {
       setEditingEmpleado(null);
       setFormData({
-        user_id: '',
-        numero_empleado: '',
-        fecha_contratacion: '',
-        fecha_termino: '',
-        tipo_contrato: 'indefinido',
-        salario_base: '',
-        estado: 'activo',
-        ciudad: '',
-        direccion: '',
-        telefono_personal: '',
-        fecha_nacimiento: '',
-        genero: '',
-        contacto_emergencia_nombre: '',
-        contacto_emergencia_telefono: '',
-        contacto_emergencia_relacion: '',
-        afp_id: '',
-        tipo_fonasa: 'B',
-        isapre_id: '',
-        numero_seguro_cesantia: '',
-        banco: '',
-        tipo_cuenta: '',
-        numero_cuenta: '',
+        user_id: '', numero_empleado: '', fecha_contratacion: '', fecha_termino: '',
+        tipo_contrato: 'indefinido', salario_base: '', estado: 'activo', ciudad: '',
+        direccion: '', telefono_personal: '', fecha_nacimiento: '', genero: '',
+        contacto_emergencia_nombre: '', contacto_emergencia_telefono: '', contacto_emergencia_relacion: '',
+        afp_id: '', tipo_fonasa: 'B', isapre_id: '', numero_seguro_cesantia: '',
+        banco: '', tipo_cuenta: '', numero_cuenta: '',
       });
     }
     setSearchUsuario('');
     setOpenDialog(true);
-  };
-
-  // Obtener datos del usuario seleccionado
-  const getSelectedUserData = () => {
-    if (!formData.user_id) return null;
-    return usuarios.find(u => u.id === parseInt(formData.user_id));
   };
 
   const handleCloseDialog = () => {
@@ -204,7 +220,6 @@ export default function EmployeesPage() {
   const handlePhoneChange = (field, value) => {
     const cleaned = value.replace(/\D/g, '');
     setFormData({ ...formData, [field]: cleaned });
-
     if (cleaned && !isValidPhoneChile(cleaned)) {
       setPhoneErrors({ ...phoneErrors, [field]: 'Teléfono debe tener 9 dígitos y empezar con 9' });
     } else {
@@ -215,19 +230,13 @@ export default function EmployeesPage() {
   };
 
   const handleSave = async () => {
-    // Validar campos requeridos
     if (!formData.user_id || !formData.fecha_contratacion || !formData.salario_base) {
       setError('Por favor complete los campos requeridos (*)');
       return;
     }
-
-    // Validar teléfonos
-    if (formData.telefono_personal && !isValidPhoneChile(formData.telefono_personal)) {
-      setPhoneErrors({ ...phoneErrors, telefono_personal: 'Teléfono debe tener 9 dígitos y empezar con 9' });
-      return;
-    }
-    if (formData.contacto_emergencia_telefono && !isValidPhoneChile(formData.contacto_emergencia_telefono)) {
-      setPhoneErrors({ ...phoneErrors, contacto_emergencia_telefono: 'Teléfono debe tener 9 dígitos y empezar con 9' });
+    if ((formData.telefono_personal && !isValidPhoneChile(formData.telefono_personal)) || 
+        (formData.contacto_emergencia_telefono && !isValidPhoneChile(formData.contacto_emergencia_telefono))) {
+      setError('Verifique los números de teléfono');
       return;
     }
 
@@ -237,45 +246,42 @@ export default function EmployeesPage() {
         user_id: parseInt(formData.user_id),
         salario_base: parseInt(formData.salario_base) || 0
       };
-      // al crear, dejar el backend auto-genere los numeros
       if (!editingEmpleado) {
         delete dataToSave.numero_empleado;
         delete dataToSave.numero_funcional;
       }
-      console.log('📤 DATOS A ENVIAR:', dataToSave);
 
       if (editingEmpleado) {
         await updateEmpleado(editingEmpleado.id, dataToSave);
+        addNotification('success', 'Empleado Actualizado', `Se han guardado los cambios para ${getNombreUsuario(dataToSave.user_id)}.`);
       } else {
         await createEmpleado(dataToSave);
+        addNotification('success', 'Nuevo Empleado', 'El empleado ha sido registrado exitosamente.');
       }
       loadData();
       handleCloseDialog();
       setError(null);
     } catch (err) {
-      console.error('Error al guardar:', err);
-      if (err.response?.status === 400) {
-        setError('Datos inválidos: ' + (err.response.data?.message || 'Verifique los campos'));
-      } else if (err.response?.status === 409) {
-        setError('El número de empleado ya existe');
-      } else {
-        setError('Error al guardar: ' + (err.message || 'Intente nuevamente'));
-      }
+      addNotification('error', 'Error', 'No se pudo guardar el empleado.');
+      setError(err.response?.status === 409 ? 'El número de empleado ya existe' : 'Error al guardar: ' + err.message);
     }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('¿Estás seguro de que deseas eliminar este empleado?')) {
+    if (window.confirm('¿Estás seguro de eliminar este empleado?')) {
       try {
         await deleteEmpleado(id);
+        addNotification('warning', 'Empleado Eliminado', 'El registro ha sido eliminado del sistema.');
         loadData();
         setError(null);
       } catch (err) {
+        addNotification('error', 'Error', 'No se pudo eliminar el empleado.');
         setError('Error al eliminar: ' + err.message);
       }
     }
   };
-  // abrir modal de baja
+
+  // --- FUNCIONES DE BAJA ---
   const handleOpenBajaDialog = (empleado) => {
     setEmpleadoParaBaja(empleado);
     setBajaFormData({
@@ -285,7 +291,7 @@ export default function EmployeesPage() {
     });
     setOpenBajaDialog(true);
   };
-  // cerrar modal de baja
+
   const handleCloseBajaDialog = () => {
     setOpenBajaDialog(false);
     setEmpleadoParaBaja(null);
@@ -295,793 +301,329 @@ export default function EmployeesPage() {
       observaciones_termino: '',
     });
   };
-  // confirmar dar de baja
-  const handleConfirmarBaja = async () => {
-    console.log('🔴 INICIANDO DAR DE BAJA');
-    console.log('📋 Empleado:', empleadoParaBaja);
-    console.log('📋 Datos del formulario:', bajaFormData);
 
+  const handleConfirmarBaja = async () => {
     if (!bajaFormData.fecha_termino || !bajaFormData.motivo_termino) {
-      setError('Por favor complete los campos requeridos para la baja');
+      setError('Complete los campos de baja');
       return;
     }
     try {
-      console.log('📤 Enviando a darDeBajaEmpleado...');
-      const resultado = await darDeBajaEmpleado(empleadoParaBaja.id, bajaFormData);
-      console.log('📥 Resultado de darDeBajaEmpleado:', resultado);
+      await darDeBajaEmpleado(empleadoParaBaja.id, bajaFormData);
+      addNotification('warning', 'Baja Procesada', `El empleado ${getNombreUsuario(empleadoParaBaja.user_id)} ha sido dado de baja.`);
       loadData();
       handleCloseBajaDialog();
       setError(null);
     } catch (err) {
-      setError(err.message || 'Error al dar de baja el empleado');
-    }                                                                       
-  };
-  // verificar si el usuario tiene permiso para dar de baja
-  const canDarDeBaja = () => {
-    console.log('🔐 currentUser:', currentUser);
-    console.log('🔐 rol_id:', currentUser?.rol_id);
-    if (!currentUser) {
-      console.log('❌ No hay usuario actual');
-      return false;
+      addNotification('error', 'Error', 'No se pudo procesar la baja.');
+      setError(err.message || 'Error al dar de baja');
     }
-    // solo admin o recursos humanos
-    const tienePermiso = currentUser.rol_id === 1 || currentUser.rol_id === 6;
-    console.log('✅ Tiene permiso?', tienePermiso);
-    return tienePermiso;
   };
 
-  const getNombreUsuario = (userId) => {
-    const user = usuarios.find(u => u.id === userId);
-    return user ? `${user.nombre} ${user.apellido}` : 'N/A';
-  };
-
-  const getRUTUsuario = (userId) => {
-    const user = usuarios.find(u => u.id === userId);
-    return user ? formatRUT(user.rut, user.rut_verificador) : '-';
-  };
-
-  const getNombreAfp = (afpId) => {
-    const afp = afps.find(a => a.id === afpId);
-    return afp ? afp.nombre : '-';
-  };
-
-  const getNombreIsapre = (isapreId) => {
-    const isapre = isapres.find(i => i.id === isapreId);
-    return isapre ? isapre.nombre : '-';
-  };
-
-  const getEstadoColor = (estado) => {
-    const colors = {
-      'activo': 'bg-green-100 text-green-800',
-      'licencia': 'bg-blue-100 text-blue-800',
-      'suspendido': 'bg-orange-100 text-orange-800',
-      'terminado': 'bg-red-100 text-red-800',
-    };
-    return colors[estado] || 'bg-gray-100 text-gray-800';
-  };
-
+  // --- HELPERS ---
+  const canDarDeBaja = () => currentUser && (currentUser.rol_id === 1 || currentUser.rol_id === 6);
+  const getNombreUsuario = (userId) => { const u = usuarios.find(u => u.id === userId); return u ? `${u.nombre} ${u.apellido}` : 'N/A'; };
+  const getRUTUsuario = (userId) => { const u = usuarios.find(u => u.id === userId); return u ? formatRUT(u.rut, u.rut_verificador) : '-'; };
+  const getNombreAfp = (afpId) => afps.find(a => a.id === afpId)?.nombre || '-';
+  const getNombreIsapre = (isapreId) => isapres.find(i => i.id === isapreId)?.nombre || '-';
   const getUsuariosFiltrados = () => {
     return usuarios.filter(user => {
-      //filtro 1: por busqueda de rol
       const rol = user.rol?.nombre?.toLowerCase() || '';
       const busqueda = searchUsuario.toLowerCase();
-      if (busqueda && !rol.includes(busqueda)) {
-        return false;
-      }
-
-      //filtro 2: excluir usuarios ya asignados como empleados
-      const yaEsEmpleado = empleados.some(emp => emp.user_id === user.id);
-      // si estamos editando, permitir que aparezca el usuario actual
-      if (editingEmpleado && user.id === editingEmpleado.user_id) {
-        return true;
-      }
-      // nostrar solo si no es empleado
+      if (busqueda && !rol.includes(busqueda)) return false;
+      const yaEsEmpleado = allEmpleados.some(emp => emp.user_id === user.id);
+      if (editingEmpleado && user.id === editingEmpleado.user_id) return true;
       return !yaEsEmpleado;
     });
-     
   };
 
-  // MEJORADO: Filtrar empleados con sistema de puntuación
-  const getEmpleadosFiltrados = () => {
-    if (!searchTerm.trim()) {
-      return empleados; // Mostrar todos cuando no hay búsqueda
-    }
+  const getEstadoColor = (estado) => ({
+    'activo': 'bg-green-100 text-green-800', 'licencia': 'bg-blue-100 text-blue-800',
+    'suspendido': 'bg-orange-100 text-orange-800', 'terminado': 'bg-red-100 text-red-800'
+  }[estado] || 'bg-gray-100 text-gray-800');
 
-    const busqueda = searchTerm.toLowerCase().trim();
-    
-    const resultados = empleados
-      .map((empleado) => {
-        const user = usuarios.find(u => u.id === empleado.user_id);
-        if (!user) return null;
-
-        const nombreCompleto = `${user.nombre} ${user.apellido}`.toLowerCase();
-        const nombre = user.nombre.toLowerCase();
-        const apellido = user.apellido.toLowerCase();
-        const rut = `${user.rut}${user.rut_verificador}`.replace(/\D/g, '');
-        const rutFormateado = formatRUT(user.rut, user.rut_verificador).toLowerCase();
-        const numeroEmpleado = empleado.numero_empleado?.toLowerCase() || '';
-
-        // 🎯 SISTEMA DE PUNTUACIÓN (mayor puntaje = más relevante)
-        let score = 0;
-
-        // COINCIDENCIA EXACTA DE NOMBRE COMPLETO (100 puntos)
-        if (nombreCompleto === busqueda) {
-          score += 100;
-        }
-        // NOMBRE COMPLETO COMIENZA CON LA BÚSQUEDA (80 puntos)
-        else if (nombreCompleto.startsWith(busqueda)) {
-          score += 80;
-        }
-        // NOMBRE COMPLETO CONTIENE LA BÚSQUEDA (50 puntos)
-        else if (nombreCompleto.includes(busqueda)) {
-          score += 50;
-        }
-
-        // COINCIDENCIA EXACTA DE NOMBRE O APELLIDO (70 puntos)
-        if (nombre === busqueda || apellido === busqueda) {
-          score += 70;
-        }
-        // NOMBRE O APELLIDO COMIENZA CON LA BÚSQUEDA (60 puntos)
-        else if (nombre.startsWith(busqueda) || apellido.startsWith(busqueda)) {
-          score += 60;
-        }
-        // NOMBRE O APELLIDO CONTIENE LA BÚSQUEDA (30 puntos)
-        else if (nombre.includes(busqueda) || apellido.includes(busqueda)) {
-          score += 30;
-        }
-
-        // COINCIDENCIA DE RUT (90 puntos - alta prioridad)
-        const busquedaLimpia = busqueda.replace(/\D/g, '');
-        if (rut === busquedaLimpia || rutFormateado.includes(busqueda)) {
-          score += 90;
-        }
-
-        // COINCIDENCIA DE NÚMERO DE EMPLEADO (85 puntos)
-        if (numeroEmpleado === busqueda) {
-          score += 85;
-        } else if (numeroEmpleado.includes(busqueda)) {
-          score += 40;
-        }
-
-        // Si no hay coincidencia, devolver null
-        if (score === 0) return null;
-
-        return {
-          empleado,
-          score
-        };
-      })
-      .filter(item => item !== null) // Eliminar nulls
-      .sort((a, b) => b.score - a.score) // Ordenar por score descendente
-      .map(item => item.empleado); // Devolver solo el empleado
-
-    return resultados;
-  };
-
-  // Limpiar búsqueda
   const handleClearSearch = () => {
     setSearchTerm('');
   };
 
-  // Tabla expandible personalizada
-  const renderEmpleadosTable = () => {
-    const empleadosFiltrados = getEmpleadosFiltrados();
-
-    return (
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        {/* Barra de búsqueda */}
-        <div className="p-4 border-b bg-gray-50">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Busca por RUT, nombre o número de empleado..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
-            {searchTerm && (
-              <button
-                onClick={handleClearSearch}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            )}
-          </div>
-          {searchTerm && (
-            <p className="text-sm text-gray-600 mt-2">
-              {empleadosFiltrados.length} empleado(s) encontrado(s)
-            </p>
-          )}
-        </div>
-
-        {/* Estado vacío cuando no hay empleados */}
-        {empleadosFiltrados.length === 0 ? (
-          <div className="text-center py-16 px-4">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-              <Search className="text-gray-400" size={32} />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {searchTerm ? 'No se encontraron empleados' : 'No hay empleados registrados'}
-            </h3>
-            <p className="text-gray-600 max-w-md mx-auto">
-              {searchTerm 
-                ? `No hay resultados para "${searchTerm}". Intenta con otro término de búsqueda.`
-                : 'Comienza agregando el primer empleado usando el botón "Nuevo Empleado".'
-              }
-            </p>
-          </div>
-        ) : (
-          // Tabla con resultados
-          <table className="w-full">
-            <thead className="bg-gray-100 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Usuario</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">RUT</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">N° Empleado</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">N° Funcional</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Contratación</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Salario</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Estado</th>
-                <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {empleadosFiltrados.map((empleado) => (
-                <React.Fragment key={empleado.id}>
-                  <tr className="border-b hover:bg-gray-50 cursor-pointer">
-                    <td className="px-6 py-4 text-sm text-gray-900">{getNombreUsuario(empleado.user_id)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{getRUTUsuario(empleado.user_id)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{empleado.numero_empleado}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-mono">
-                        {empleado.numero_funcional || '-'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{formatDate(empleado.fecha_contratacion)}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{formatCurrency(empleado.salario_base)}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${getEstadoColor(empleado.estado)}`}>
-                        {empleado.estado}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center space-x-2">
-                      <button
-                        onClick={() => handleOpenDialog(empleado)}
-                        className="text-blue-600 hover:text-blue-900 font-medium text-sm"
-                      >
-                        Editar
-                      </button>
-                      {/* Botón para dar de baja - solo para empleados activos*/}
-                      {empleado.estado === 'activo' &&  canDarDeBaja() && (
-                        <button
-                          onClick={() => handleOpenBajaDialog(empleado)}
-                          className="text-orange-600 hover:text-orange-900 font-medium text-sm"
-                        >
-                          Dar de baja
-                        </button>
+  // --- TABLA RENDERIZADA ---
+  const renderEmpleadosTable = () => (
+    <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+      <table className="w-full">
+        <thead className="bg-gray-100 border-b border-gray-200">
+          <tr>
+            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Usuario</th>
+            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">RUT</th>
+            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">N° Empleado</th>
+            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Cargo</th>
+            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Contratación</th>
+            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
+            <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">Acciones</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {paginatedData.length === 0 ? (
+            <tr><td colSpan="7" className="px-6 py-8 text-center text-gray-500">No se encontraron empleados</td></tr>
+          ) : (
+            paginatedData.map((empleado) => (
+              <React.Fragment key={empleado.id}>
+                <tr 
+                  onClick={() => setExpandedRow(expandedRow === empleado.id ? null : empleado.id)}
+                  className="hover:bg-gray-100 transition-colors even:bg-gray-50 cursor-pointer"
+                >
+                  <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap font-medium">{getNombreUsuario(empleado.user_id)}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">{getRUTUsuario(empleado.user_id)}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">{empleado.numero_empleado}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap capitalize">{usuarios.find(u => u.id === empleado.user_id)?.rol?.nombre || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">{formatDate(empleado.fecha_contratacion)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(empleado.estado)}`}>{empleado.estado}</span>
+                  </td>
+                  <td className="px-6 py-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex justify-center gap-2">
+                      <button onClick={() => handleOpenDialog(empleado)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors font-medium"><Edit2 size={16} /> Editar</button>
+                      {empleado.estado === 'activo' && canDarDeBaja() && (
+                        <button onClick={() => handleOpenBajaDialog(empleado)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100 hover:border-orange-300 transition-colors font-medium"><UserX size={16} /> Baja</button>
                       )}
-                      <button
-                        onClick={() => handleDelete(empleado.id)}
-                        className="text-red-600 hover:text-red-900 font-medium text-sm"
-                      >
-                        Eliminar
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedRow(expandedRow === empleado.id ? null : empleado.id);
-                        }}
-                        className="text-gray-600 hover:text-gray-900 font-medium text-sm inline-flex items-center"
-                      >
+                      <button onClick={() => handleDelete(empleado.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 transition-colors font-medium"><Trash2 size={16} /> Eliminar</button>
+                      <button onClick={() => setExpandedRow(expandedRow === empleado.id ? null : empleado.id)} className="flex items-center justify-center w-9 h-9 bg-gray-100 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-200 transition-colors ml-1">
                         {expandedRow === empleado.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                       </button>
-                    </td>
-                  </tr>
-
-                  {/* Fila expandida con todos los detalles */}
-                  {expandedRow === empleado.id && (
-                    <tr className="bg-gray-50 border-b">
-                      <td colSpan="7" className="px-6 py-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                          {/* Datos Personales */}
-                          <div>
-                            <h4 className="font-semibold text-gray-900 mb-3">Datos Personales</h4>
-                            <div className="space-y-2 text-sm">
-                              <p><span className="text-gray-600">RUT:</span> {getRUTUsuario(empleado.user_id)}</p>
-                              <p><span className="text-gray-600">Email:</span> {(() => {
-                                const user = usuarios.find(u => u.id === empleado.user_id);
-                                return user ? user.email : '-';
-                              })()}</p>
-                              <p><span className="text-gray-600">Fecha Nacimiento:</span> {formatDate(empleado.fecha_nacimiento)}</p>
-                              <p><span className="text-gray-600">Género:</span> {empleado.genero || '-'}</p>
-                              <p className="flex items-center gap-2">
-                                <Phone size={14} className="text-gray-500" />
-                                <span>{formatPhoneChile(empleado.telefono_personal)}</span>
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Ubicación */}
-                          <div>
-                            <h4 className="font-semibold text-gray-900 mb-3">Ubicación</h4>
-                            <div className="space-y-2 text-sm">
-                              <p className="flex items-center gap-2">
-                                <MapPin size={14} className="text-gray-500" />
-                                <span>{empleado.ciudad || '-'}</span>
-                              </p>
-                              <p><span className="text-gray-600">Dirección:</span> {empleado.direccion || '-'}</p>
-                            </div>
-                          </div>
-
-                          {/* Contacto Emergencia */}
-                          <div>
-                            <h4 className="font-semibold text-gray-900 mb-3">Contacto Emergencia</h4>
-                            <div className="space-y-2 text-sm">
-                              <p><span className="text-gray-600">Nombre:</span> {empleado.contacto_emergencia_nombre || '-'}</p>
-                              <p><span className="text-gray-600">Teléfono:</span> {formatPhoneChile(empleado.contacto_emergencia_telefono)}</p>
-                              <p><span className="text-gray-600">Relación:</span> {empleado.contacto_emergencia_relacion || '-'}</p>
-                            </div>
-                          </div>
-
-                          {/* Beneficios */}
-                          <div>
-                            <h4 className="font-semibold text-gray-900 mb-3">Beneficios Sociales</h4>
-                            <div className="space-y-2 text-sm">
-                              <p><span className="text-gray-600">AFP:</span> {getNombreAfp(empleado.afp_id)}</p>
-                              <p><span className="text-gray-600">FONASA:</span> {empleado.tipo_fonasa}</p>
-                              <p><span className="text-gray-600">Isapre:</span> {getNombreIsapre(empleado.isapre_id)}</p>
-                              <p><span className="text-gray-600">Cesantía:</span> {empleado.numero_seguro_cesantia || '-'}</p>
-                            </div>
-                          </div>
-
-                          {/* Datos Bancarios */}
-                          <div>
-                            <h4 className="font-semibold text-gray-900 mb-3">Datos Bancarios</h4>
-                            <div className="space-y-2 text-sm">
-                              <p><span className="text-gray-600">Banco:</span> {empleado.banco || '-'}</p>
-                              <p><span className="text-gray-600">Tipo Cuenta:</span> {empleado.tipo_cuenta || '-'}</p>
-                              <p><span className="text-gray-600">Número Cuenta:</span> {empleado.numero_cuenta || '-'}</p>
-                            </div>
-                          </div>
-
-                          {/* Contrato */}
-                          <div>
-                            <h4 className="font-semibold text-gray-900 mb-3">Contrato</h4>
-                            <div className="space-y-2 text-sm">
-                              <p><span className="text-gray-600">Tipo:</span> {empleado.tipo_contrato}</p>
-                              <p><span className="text-gray-600">Termino:</span> {formatDate(empleado.fecha_termino)}</p>
-                            </div>
+                    </div>
+                  </td>
+                </tr>
+                {expandedRow === empleado.id && (
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <td colSpan="7" className="px-6 py-6 cursor-default">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                        <div className="space-y-3">
+                          <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><User size={16}/> Datos Personales</h4>
+                          <p><span className="text-gray-500">Email:</span> {usuarios.find(u => u.id === empleado.user_id)?.email}</p>
+                          <p><span className="text-gray-500">F. Nacimiento:</span> {formatDate(empleado.fecha_nacimiento)}</p>
+                          <p><span className="text-gray-500">Género:</span> {empleado.genero}</p>
+                          <p className="flex items-center gap-2"><Phone size={14} className="text-gray-400"/> {formatPhoneChile(empleado.telefono_personal)}</p>
+                          <p className="flex items-center gap-2"><MapPin size={14} className="text-gray-400"/> {empleado.direccion}, {empleado.ciudad}</p>
+                        </div>
+                        <div className="space-y-3">
+                          <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><Briefcase size={16}/> Contrato & Finanzas</h4>
+                          <p><span className="text-gray-500">Tipo Contrato:</span> <span className="capitalize">{empleado.tipo_contrato.replace('_', ' ')}</span></p>
+                          <p><span className="text-gray-500">Salario Base:</span> {formatCurrency(empleado.salario_base)}</p>
+                          <p><span className="text-gray-500">AFP:</span> {getNombreAfp(empleado.afp_id)}</p>
+                          <p><span className="text-gray-500">Salud:</span> {getNombreIsapre(empleado.isapre_id)} ({empleado.tipo_fonasa})</p>
+                          <p><span className="text-gray-500">Seg. Cesantía:</span> {empleado.numero_seguro_cesantia || '-'}</p>
+                        </div>
+                        <div className="space-y-3">
+                          <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><Heart size={16}/> Emergencia & Banco</h4>
+                          <p><span className="text-gray-500">Contacto:</span> {empleado.contacto_emergencia_nombre}</p>
+                          <p><span className="text-gray-500">Relación:</span> {empleado.contacto_emergencia_relacion}</p>
+                          <p><span className="text-gray-500">Tel:</span> {formatPhoneChile(empleado.contacto_emergencia_telefono)}</p>
+                          <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
+                            <div className="flex items-center gap-2 mb-1"><CreditCard size={14}/> <strong>Datos Bancarios</strong></div>
+                            <p>Banco: {empleado.banco}</p>
+                            <p>{empleado.tipo_cuenta} • {empleado.numero_cuenta}</p>
                           </div>
                         </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    );
-  };
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Empleados</h1>
-          <p className="text-gray-600 mt-2">Administra los empleados de la empresa</p>
+      
+      {/* HEADER CARD NUEVO */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Gestión de Empleados</h1>
+            <p className="mt-2 text-slate-300 max-w-xl">Administra los empleados de la empresa.</p>
+          </div>
+          <Button variant="primary" size="lg" onClick={() => handleOpenDialog()} className="flex items-center gap-2 shadow-lg">
+            <Plus size={20} /> Nuevo Empleado
+          </Button>
         </div>
-        <Button 
-          variant="primary" 
-          size="lg"
-          onClick={() => handleOpenDialog()}
-          className="flex items-center gap-2"
-        >
-          <Plus size={20} />
-          Nuevo Empleado
-        </Button>
+        <Users className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
       {/* Error */}
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-          {error}
-          <button 
-            onClick={() => setError(null)}
-            className="float-right text-red-900 hover:text-red-700"
-          >
-            <X size={16} />
-          </button>
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex justify-between items-center">
+          <span>{error}</span>
+          <button onClick={() => setError(null)}><X size={16} /></button>
         </div>
       )}
 
+      {/* Buscador */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Buscar por nombre, RUT o número de empleado..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          />
+          {searchTerm && (
+            <button onClick={handleClearSearch} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Tabla */}
-      {loading ? (
-        <div className="text-center py-8">Cargando...</div>
-      ) : (
-        renderEmpleadosTable()
+      {loading ? <div className="text-center py-8">Cargando...</div> : renderEmpleadosTable()}
+
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <div className="flex justify-between items-center mt-6">
+          <span className="text-sm text-gray-700">
+            Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
+            <span className="ml-2 text-gray-500">(Total: {filteredEmpleados.length})</span>
+          </span>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1} className="flex items-center gap-1.5">
+              <ChevronDown className="rotate-90" size={16}/> Anterior
+            </Button>
+            <Button variant="secondary" onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage === totalPages} className="flex items-center gap-1.5">
+              Siguiente <ChevronDown className="-rotate-90" size={16}/>
+            </Button>
+          </div>
+        </div>
       )}
 
-      {/* Dialog */}
+      {/* MODAL: Formulario Completo */}
       <FormDialog
         isOpen={openDialog}
         title={editingEmpleado ? 'Editar Empleado' : 'Nuevo Empleado'}
         onSubmit={handleSave}
         onCancel={handleCloseDialog}
       >
-        {/* SECCIÓN 1: DATOS LABORALES */}
-        <div className="border-b pb-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Datos Laborales</h3>
-          
-          <Select
-            label="Filtrar por Rol"
-            options={[
-              { id: '', label: 'Todos los usuarios' },
-              { id: 'admin', label: 'Administradores' },
-              { id: 'conductor', label: 'Conductores' },
-              { id: 'mecanico', label: 'Mecánicos' },
-              { id: 'asistente', label: 'Asistentes' },
-              { id: 'rrhh', label: 'RRHH' },
-            ]}
-            value={searchUsuario}
-            onChange={(e) => setSearchUsuario(e.target.value)}
-          />
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Usuario <span className="text-red-600">*</span>
-            </label>
-            <select
-              value={formData.user_id}
-              onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            >
-              <option value="">Seleccione un usuario</option>
-              {getUsuariosFiltrados().map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.nombre} {user.apellido} - {user.rol?.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Auto-rellenado de email y RUT */}
-          {(() => {
-            const selectedUser = formData.user_id ? usuarios.find(u => u.id === parseInt(formData.user_id)) : null;
-            return selectedUser && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
-                  <Mail size={16} />
-                  Datos del Usuario Seleccionado
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-blue-700 font-medium mb-1">Email</p>
-                    <p className="text-sm text-blue-900 font-mono bg-white px-3 py-2 rounded border border-blue-200">
-                      {selectedUser.email}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-blue-700 font-medium mb-1">RUT</p>
-                    <p className="text-sm text-blue-900 font-mono bg-white px-3 py-2 rounded border border-blue-200">
-                      {selectedUser.rut_completo || `${selectedUser.rut}-${selectedUser.rut_verificador}`}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-blue-600 mt-2">
-                  
-                </p>
-              </div>
-            );
-          })()}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* numero de empleado se auto-genera*/}
-            {editingEmpleado && (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <p className="text-sm text-gray-600 font-medium mb-1">Número de Empleado</p>
-                <p className="text-sm text-grey-900 font-mono">
-                  {formData.numero_empleado || 'se genera automaticamente'}
-                </p>
-              </div>
-            )}
-                
-            <Input
-              label="Fecha de Contratación"
-              type="date"
-              value={formData.fecha_contratacion}
-              onChange={(e) => setFormData({ ...formData, fecha_contratacion: e.target.value })}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-6">
+          {/* 1. Usuario */}
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase">1. Usuario de Sistema</h4>
             <Select
-              label="Tipo de Contrato"
-              options={CONTRATOS.map(c => ({ id: c, label: c }))}
-              value={formData.tipo_contrato}
-              onChange={(e) => setFormData({ ...formData, tipo_contrato: e.target.value })}
-              required
+              label="Filtrar por Rol"
+              options={[
+                { id: '', label: 'Todos' }, { id: 'admin', label: 'Administradores' },
+                { id: 'conductor', label: 'Conductores' }, { id: 'mecanico', label: 'Mecánicos' },
+                { id: 'asistente', label: 'Asistentes' }, { id: 'rrhh', label: 'RRHH' },
+              ]}
+              value={searchUsuario}
+              onChange={(e) => setSearchUsuario(e.target.value)}
             />
-            <Input
-              label="Fecha de Término (Opcional)"
-              type="date"
-              value={formData.fecha_termino}
-              onChange={(e) => setFormData({ ...formData, fecha_termino: e.target.value })}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Salario Base (CLP) <span className="text-red-600">*</span>
-              </label>
-              <div className="relative">
-                <DollarSign size={18} className="absolute left-3 top-3 text-gray-500" />
-                <input
-                  type="number"
-                  value={formData.salario_base}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setFormData({ ...formData, salario_base: value === '' ? '' : parseInt(value) || 0 });
-                  }}
-                  className="w-full pl-10 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Usuario *</label>
+              <select
+                value={formData.user_id}
+                onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                disabled={!!editingEmpleado}
+              >
+                <option value="">Seleccione un usuario...</option>
+                {getUsuariosFiltrados().map(u => (
+                  <option key={u.id} value={u.id}>{u.nombre} {u.apellido} ({u.rut}-{u.rut_verificador})</option>
+                ))}
+              </select>
             </div>
-            <Select
-              label="Estado"
-              options={ESTADOS.map(e => ({ id: e, label: e }))}
-              value={formData.estado}
-              onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-              required
-            />
-          </div>
-        </div>
-
-        {/* SECCIÓN 2: DATOS PERSONALES */}
-        <div className="border-b pb-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Datos Personales</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Fecha de Nacimiento"
-              type="date"
-              value={formData.fecha_nacimiento}
-              onChange={(e) => setFormData({ ...formData, fecha_nacimiento: e.target.value })}
-            />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Select
-              label="Género"
-              options={GENEROS}
-              value={formData.genero}
-              onChange={(e) => setFormData({ ...formData, genero: e.target.value })}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Input
-                label="Teléfono Personal"
-                type="tel"
-                value={formData.telefono_personal}
-                onChange={(e) => handlePhoneChange('telefono_personal', e.target.value)}
-                placeholder="9 7604 6231"
-                maxLength="9"
-                error={phoneErrors.telefono_personal}
-              />
-              {formData.telefono_personal && (
-                <p className="text-sm text-gray-500 mt-1">
-                  Formato: {formatPhoneChile(formData.telefono_personal)}
-                </p>
-              )}
-            </div>
-            <Input
-              label="Ciudad"
-              value={formData.ciudad}
-              onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
-              placeholder="Santiago"
-            />
-          </div>
-
-          <Input
-            label="Dirección"
-            value={formData.direccion}
-            onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
-            placeholder="Calle Principal 123, Depto 4"
-          />
-        </div>
-
-        {/* SECCIÓN 3: CONTACTO EMERGENCIA */}
-        <div className="border-b pb-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Contacto de Emergencia</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Nombre"
-              value={formData.contacto_emergencia_nombre}
-              onChange={(e) => setFormData({ ...formData, contacto_emergencia_nombre: e.target.value })}
-            />
-            <Input
-              label="Relación"
-              value={formData.contacto_emergencia_relacion}
-              onChange={(e) => setFormData({ ...formData, contacto_emergencia_relacion: e.target.value })}
-              placeholder="Padre, Madre, Cónyuge, etc"
-            />
-          </div>
-
+          {/* 2. Contrato */}
           <div>
-            <Input
-              label="Teléfono"
-              type="tel"
-              value={formData.contacto_emergencia_telefono}
-              onChange={(e) => handlePhoneChange('contacto_emergencia_telefono', e.target.value)}
-              placeholder="9 XXXX XXXX"
-              maxLength="9"
-              error={phoneErrors.contacto_emergencia_telefono}
-            />
-            {formData.contacto_emergencia_telefono && (
-              <p className="text-sm text-gray-500 mt-1">
-                Formato: {formatPhoneChile(formData.contacto_emergencia_telefono)}
-              </p>
-            )}
+            <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase border-b pb-1">2. Información Contractual</h4>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="F. Contratación *" type="date" value={formData.fecha_contratacion} onChange={e => setFormData({...formData, fecha_contratacion: e.target.value})} />
+              <Select label="Tipo Contrato *" options={CONTRATOS.map(c => ({ id: c, label: c.replace('_', ' ') }))} value={formData.tipo_contrato} onChange={e => setFormData({...formData, tipo_contrato: e.target.value})} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Salario Base *" type="number" value={formData.salario_base} onChange={e => setFormData({...formData, salario_base: e.target.value})} />
+              <Select label="Estado *" options={ESTADOS.map(e => ({ id: e, label: e }))} value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value})} />
+            </div>
+            <div className="mt-4">
+              <Input label="Fecha Término (Opcional)" type="date" value={formData.fecha_termino} onChange={e => setFormData({...formData, fecha_termino: e.target.value})} />
+            </div>
+          </div>
+
+          {/* 3. Personal */}
+          <div>
+            <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase border-b pb-1">3. Datos Personales</h4>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="F. Nacimiento" type="date" value={formData.fecha_nacimiento} onChange={e => setFormData({...formData, fecha_nacimiento: e.target.value})} />
+              <Select label="Género" options={GENEROS} value={formData.genero} onChange={e => setFormData({...formData, genero: e.target.value})} />
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Teléfono" value={formData.telefono_personal} onChange={e => handlePhoneChange('telefono_personal', e.target.value)} maxLength={9} placeholder="912345678" error={phoneErrors.telefono_personal} />
+              <Input label="Ciudad" value={formData.ciudad} onChange={e => setFormData({...formData, ciudad: e.target.value})} />
+            </div>
+            <Input label="Dirección" value={formData.direccion} onChange={e => setFormData({...formData, direccion: e.target.value})} />
+          </div>
+
+          {/* 4. Emergencia */}
+          <div>
+            <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase border-b pb-1">4. Contacto Emergencia</h4>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Nombre" value={formData.contacto_emergencia_nombre} onChange={e => setFormData({...formData, contacto_emergencia_nombre: e.target.value})} />
+              <Input label="Relación" value={formData.contacto_emergencia_relacion} onChange={e => setFormData({...formData, contacto_emergencia_relacion: e.target.value})} />
+            </div>
+            <Input label="Teléfono Emergencia" value={formData.contacto_emergencia_telefono} onChange={e => handlePhoneChange('contacto_emergencia_telefono', e.target.value)} maxLength={9} error={phoneErrors.contacto_emergencia_telefono} />
+          </div>
+
+          {/* 5. Previsión */}
+          <div>
+            <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase border-b pb-1">5. Previsión y Salud</h4>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Select label="AFP" options={[{id:'', label:'Seleccione...'}, ...afps.map(a => ({id:a.id, label:a.nombre}))]} value={formData.afp_id} onChange={e => setFormData({...formData, afp_id: e.target.value})} />
+              <Select label="Tramo FONASA" options={TRAMOS_FONASA} value={formData.tipo_fonasa} onChange={e => setFormData({...formData, tipo_fonasa: e.target.value})} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Isapre" options={[{id:'', label:'Seleccione...'}, ...isapres.map(i => ({id:i.id, label:i.nombre}))]} value={formData.isapre_id} onChange={e => setFormData({...formData, isapre_id: e.target.value})} />
+              <Input label="Seguro Cesantía" value={formData.numero_seguro_cesantia} onChange={e => setFormData({...formData, numero_seguro_cesantia: e.target.value})} />
+            </div>
+          </div>
+
+          {/* 6. Bancarios */}
+          <div>
+            <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase border-b pb-1">6. Datos Bancarios</h4>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <Input label="Banco" value={formData.banco} onChange={e => setFormData({...formData, banco: e.target.value})} />
+              <Select label="Tipo Cuenta" options={TIPOS_CUENTA} value={formData.tipo_cuenta} onChange={e => setFormData({...formData, tipo_cuenta: e.target.value})} />
+            </div>
+            <Input label="Número Cuenta" value={formData.numero_cuenta} onChange={e => setFormData({...formData, numero_cuenta: e.target.value})} />
           </div>
         </div>
+      </FormDialog>
 
-        {/* SECCIÓN 4: BENEFICIOS SOCIALES */}
-        <div className="border-b pb-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Beneficios Sociales</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Select
-              label="AFP"
-              options={[{ id: '', label: 'Seleccione AFP' }, ...afps.map(a => ({ id: a.id, label: `${a.nombre} (${a.porcentaje_descuento}%)` }))]}
-              value={formData.afp_id}
-              onChange={(e) => setFormData({ ...formData, afp_id: e.target.value })}
-            />
-            <Select
-              label="Tramo FONASA"
-              options={TRAMOS_FONASA}
-              value={formData.tipo_fonasa}
-              onChange={(e) => setFormData({ ...formData, tipo_fonasa: e.target.value })}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Select
-              label="Isapre"
-              options={[{ id: '', label: 'Seleccione Isapre o FONASA' }, ...isapres.map(i => ({ id: i.id, label: i.nombre }))]}
-              value={formData.isapre_id}
-              onChange={(e) => setFormData({ ...formData, isapre_id: e.target.value })}
-            />
-            <Input
-              label="Número Seguro Cesantía"
-              value={formData.numero_seguro_cesantia}
-              onChange={(e) => setFormData({ ...formData, numero_seguro_cesantia: e.target.value })}
-            />
+      {/* MODAL: Baja */}
+      <FormDialog isOpen={openBajaDialog} title="Dar de Baja" onSubmit={handleConfirmarBaja} onCancel={handleCloseBajaDialog}>
+        <div className="bg-yellow-50 p-4 rounded border border-yellow-200 mb-4 flex gap-3">
+          <AlertTriangle className="text-yellow-600 shrink-0" />
+          <div className="text-sm text-yellow-800">
+            <p className="font-bold">¿Confirmar término de contrato?</p>
+            <p>El empleado pasará a estado "terminado".</p>
           </div>
         </div>
-
-        {/* SECCIÓN 5: DATOS BANCARIOS */}
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Datos Bancarios</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Banco"
-              value={formData.banco}
-              onChange={(e) => setFormData({ ...formData, banco: e.target.value })}
-              placeholder="BancoEstado, Itaú, etc"
-            />
-            <Select
-              label="Tipo de Cuenta"
-              options={[{ id: '', label: 'Seleccione tipo' }, ...TIPOS_CUENTA]}
-              value={formData.tipo_cuenta}
-              onChange={(e) => setFormData({ ...formData, tipo_cuenta: e.target.value })}
-            />
-          </div>
-
-          <Input
-            label="Número de Cuenta"
-            value={formData.numero_cuenta}
-            onChange={(e) => setFormData({ ...formData, numero_cuenta: e.target.value })}
-            placeholder="1234567890"
+        <Input label="Fecha Término *" type="date" value={bajaFormData.fecha_termino} onChange={e => setBajaFormData({...bajaFormData, fecha_termino: e.target.value})} required />
+        <div className="mt-4">
+          <Select label="Motivo" options={[{id:'renuncia', label:'Renuncia'}, {id:'despido', label:'Despido'}, {id:'termino_contrato', label:'Fin Contrato'}]} value={bajaFormData.motivo_termino} onChange={e => setBajaFormData({...bajaFormData, motivo_termino: e.target.value})} />
+        </div>
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
+          <textarea 
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+            rows={3}
+            value={bajaFormData.observaciones_termino}
+            onChange={e => setBajaFormData({...bajaFormData, observaciones_termino: e.target.value})}
           />
         </div>
       </FormDialog>
-
-      {/* MODAL DE DAR DE BAJA */}
-      <FormDialog
-        isOpen={openBajaDialog}
-        title="Dar de Baja a Empleado"
-        onSubmit={handleConfirmarBaja}
-        onCancel={handleCloseBajaDialog}
-      >
-        {empleadoParaBaja && (
-          <>
-            {/* Información del empleado */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="text-yellow-600 flex-shrink-0 mt-1" size={20} />
-                <div>
-                  <h4 className="font-semibold text-yellow-900 mb-2">
-                    ¿Estás seguro de dar de baja a este empleado?
-                  </h4>
-                  <p className="text-sm text-yellow-800">
-                    <span className="font-medium">Empleado:</span> {getNombreUsuario(empleadoParaBaja.user_id)}
-                  </p>
-                  <p className="text-sm text-yellow-800">
-                    <span className="font-medium">N° Empleado:</span> {empleadoParaBaja.numero_empleado}
-                  </p>
-                  <p className="text-sm text-yellow-800">
-                    <span className="font-medium">RUT:</span> {getRUTUsuario(empleadoParaBaja.user_id)}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Formulario de baja */}
-            <div className="space-y-4">
-              <Input
-                label="Fecha de Término"
-                type="date"
-                value={bajaFormData.fecha_termino}
-                onChange={(e) => setBajaFormData({ ...bajaFormData, fecha_termino: e.target.value })}
-                required
-              />
-
-              <Select
-                label="Motivo de Término"
-                options={[
-                  { id: 'renuncia', label: 'Renuncia Voluntaria' },
-                  { id: 'despido', label: 'Despido' },
-                  { id: 'termino_contrato', label: 'Término de Contrato' },
-                  { id: 'jubilacion', label: 'Jubilación' },
-                  { id: 'otro', label: 'Otro' },
-                ]}
-                value={bajaFormData.motivo_termino}
-                onChange={(e) => setBajaFormData({ ...bajaFormData, motivo_termino: e.target.value })}
-                required
-              />
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Observaciones
-                </label>
-                <textarea
-                  value={bajaFormData.observaciones_termino}
-                  onChange={(e) => setBajaFormData({ ...bajaFormData, observaciones_termino: e.target.value })}
-                  rows="4"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Detalles adicionales sobre el término de la relación laboral..."
-                  maxLength="500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  {bajaFormData.observaciones_termino.length}/500 caracteres
-                </p>
-              </div>
-            </div>
-
-            {/* Advertencia */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-4">
-              <p className="text-sm text-gray-700">
-                <span className="font-semibold">Nota:</span> Esta acción cambiará el estado del empleado a "terminado" 
-                y marcará como inactivo sus roles específicos (conductor, mecánico, asistente). 
-                El historial completo se mantendrá en el sistema.
-              </p>
-            </div>
-          </>
-        )}
-      </FormDialog>
-
     </div>
   );
 }

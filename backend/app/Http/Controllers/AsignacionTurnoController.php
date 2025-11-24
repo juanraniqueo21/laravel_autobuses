@@ -316,10 +316,8 @@ class AsignacionTurnoController extends Controller
 
                 // Asignar conductores
                 foreach ($request->conductores as $conductorData) {
-                    TurnoConductor::create([
-                        'asignacion_turno_id' => $turno->id,
-                        'conductor_id' => $conductorData['conductor_id'],
-                        'rol' => $conductorData['rol'],
+                    $turno->conductores()->attach($conductorData['conductor_id'], [
+                    'rol' => $conductorData['rol']
                     ]);
                 }
 

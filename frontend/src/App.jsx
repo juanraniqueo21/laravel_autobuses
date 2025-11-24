@@ -16,6 +16,7 @@ import MantencionesPage from './pages/MantencionesPage';
 import LogisticPage from './pages/LogisticPage';
 import TurnosPage from './pages/TurnosPage';
 import { logout, me } from './services/api';
+import { NotificationProvider } from './context/NotificationContext'; // <--- IMPORTAR
 import './index.css';
 
 function App() {
@@ -96,13 +97,15 @@ function App() {
   }
 
   return (
+    <NotificationProvider>
     <MainLayout 
       user={user} 
       onLogout={handleLogout}
       currentPage={currentPage}
       onPageChange={setCurrentPage}
     >
-      {currentPage === 'dashboard' && <DashboardPage />}
+      {/* CORRECCIÓN AQUÍ: Se pasa onNavigate={setCurrentPage} */}
+      {currentPage === 'dashboard' && <DashboardPage onNavigate={setCurrentPage} />}
       {currentPage === 'roles' && <RolesPage />}
       {currentPage === 'usuarios' && <UsersPage />}
       {currentPage === 'empleados' && <EmployeesPage />}
@@ -116,6 +119,7 @@ function App() {
       {currentPage === 'logistica' && <LogisticPage />}
       {currentPage === 'turnos' && <TurnosPage />}
     </MainLayout>
+    </NotificationProvider>
   );
 }
 

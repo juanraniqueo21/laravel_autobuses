@@ -1,15 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { 
+  Plus, ChevronDown, ChevronUp, AlertCircle, Search, X, 
+  Edit2, Trash2, User, FileText 
+} from 'lucide-react';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import Button from '../components/common/Button';
 import { fetchConductores, fetchEmpleados, createConductor, updateConductor, deleteConductor } from '../services/api';
+import usePagination from '../hooks/usePagination';
+import { useNotifications } from '../context/NotificationContext'; // IMPORTACIÓN AGREGADA
 
 const CLASES_LICENCIA = ['A', 'A2', 'A3', 'B', 'C', 'D', 'E'];
 const ESTADOS = ['activo', 'licencia_medica', 'suspendido', 'inactivo'];
-const ESTADOS_LICENCIA = ['vigente', 'vencida', 'suspendida'];
 
+// ==========================================
+// UTILIDADES
+// ==========================================
 const formatDate = (date) => {
   if (!date) return '-';
   return new Date(date).toLocaleDateString('es-CL', {
@@ -19,14 +26,28 @@ const formatDate = (date) => {
   });
 };
 
+const formatRUT = (rut, verificador) => {
+  if (!rut) return '-';
+  return `${new Intl.NumberFormat('es-CL').format(rut)}-${verificador}`;
+};
+
 export default function ConductoresPage() {
+  // --- ESTADOS DE DATOS ---
   const [conductores, setConductores] = useState([]);
   const [empleados, setEmpleados] = useState([]);
+  
+  // --- ESTADOS DE UI ---
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
   const [editingConductor, setEditingConductor] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // --- HOOK DE NOTIFICACIONES ---
+  const { addNotification } = useNotifications();
+
+  // --- FORMULARIO ---
   const [formData, setFormData] = useState({
     empleado_id: '',
     numero_licencia: '',
@@ -48,6 +69,64 @@ export default function ConductoresPage() {
     vencimiento_defensa: '',
   });
 
+  // --- HELPERS ---
+  const getNombreEmpleado = (empleadoId) => {
+    const empleado = empleados.find(e => e.id === parseInt(empleadoId));
+    if (empleado?.user) {
+      return `${empleado.user.nombre} ${empleado.user.apellido}`;
+    }
+    return 'N/A';
+  };
+
+  const getRutEmpleado = (empleadoId) => {
+    const empleado = empleados.find(e => e.id === empleadoId);
+    if (empleado?.user) {
+      return formatRUT(empleado.user.rut, empleado.user.rut_verificador);
+    }
+    return '';
+  };
+
+  const getEstadoColor = (estado) => {
+    const colors = {
+      'activo': 'bg-green-100 text-green-800',
+      'licencia_medica': 'bg-blue-100 text-blue-800',
+      'suspendido': 'bg-orange-100 text-orange-800',
+      'inactivo': 'bg-red-100 text-red-800',
+    };
+    return colors[estado] || 'bg-gray-100 text-gray-800';
+  };
+
+  const isLicenseExpiring = (date) => {
+    if (!date) return false;
+    const today = new Date();
+    const expiryDate = new Date(date);
+    const daysLeft = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+    return daysLeft < 60 && daysLeft > 0;
+  };
+
+  const isLicenseExpired = (date) => {
+    if (!date) return false;
+    const today = new Date();
+    const expiryDate = new Date(date);
+    return expiryDate < today;
+  };
+
+  const getEmpleadosDisponibles = () => {
+    return empleados.filter(empleado => {
+      if (empleado.estado !== 'activo') return false;
+      // Asumiendo rol 3 es conductor
+      if (empleado.user?.rol_id !== 3) return false;
+      
+      const yaEsConductorActivo = conductores.some(
+        c => c.empleado_id === empleado.id && c.estado === 'activo'
+      );
+
+      if (editingConductor && empleado.id === editingConductor.empleado_id) return true;
+      return !yaEsConductorActivo;
+    });
+  };
+
+  // --- CARGA INICIAL ---
   useEffect(() => {
     loadConductores();
   }, []);
@@ -57,40 +136,66 @@ export default function ConductoresPage() {
       setLoading(true);
       const [conductoresData, empleadosData] = await Promise.all([
         fetchConductores(),
-        fetchEmpleados(''),
+        fetchEmpleados(''), 
       ]);
       setConductores(conductoresData);
       setEmpleados(empleadosData);
       setError(null);
     } catch (err) {
       setError('Error al cargar conductores: ' + err.message);
+      addNotification('error', 'Error', 'No se pudieron cargar los datos de los conductores.');
     } finally {
       setLoading(false);
     }
   };
 
+  // --- LÓGICA DE FILTRADO Y PAGINACIÓN ---
+  const getFilteredData = () => {
+    // 1. Ordenar por ID descendente
+    const sortedData = [...conductores].sort((a, b) => b.id - a.id);
+
+    if (!searchTerm.trim()) return sortedData;
+
+    const term = searchTerm.toLowerCase();
+    return sortedData.filter(c => {
+      const nombre = getNombreEmpleado(c.empleado_id).toLowerCase();
+      const rut = getRutEmpleado(c.empleado_id).toLowerCase();
+      const rutSinPuntos = rut.replace(/\./g, '');
+      const licencia = c.numero_licencia ? c.numero_licencia.toLowerCase() : '';
+      const estado = c.estado.toLowerCase();
+      
+      return nombre.includes(term) || 
+             rut.includes(term) || 
+             rutSinPuntos.includes(term) || 
+             licencia.includes(term) || 
+             estado.includes(term);
+    });
+  };
+
+  const filteredConductores = getFilteredData();
+  const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(filteredConductores, 10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // --- HANDLERS ---
   const handleOpenDialog = (conductor = null) => {
     if (conductor) {
       setEditingConductor(conductor);
       setFormData({
+        ...conductor,
         empleado_id: conductor.empleado_id || '',
-        numero_licencia: conductor.numero_licencia || '',
-        clase_licencia: conductor.clase_licencia || 'E',
-        fecha_vencimiento_licencia: conductor.fecha_vencimiento_licencia || '',
-        fecha_primera_licencia: conductor.fecha_primera_licencia || '',
-        estado: conductor.estado || 'activo',
-        anios_experiencia: conductor.anios_experiencia || 0,
-        estado_licencia: conductor.estado_licencia || 'vigente',
-        observaciones_licencia: conductor.observaciones_licencia || '',
-        cantidad_infracciones: conductor.cantidad_infracciones || 0,
-        cantidad_accidentes: conductor.cantidad_accidentes || 0,
-        historial_sanciones: conductor.historial_sanciones || '',
-        fecha_examen_ocupacional: conductor.fecha_examen_ocupacional || '',
-        apto_conducir: conductor.apto_conducir !== undefined ? conductor.apto_conducir : true,
-        certificado_rcp: conductor.certificado_rcp !== undefined ? conductor.certificado_rcp : false,
-        vencimiento_rcp: conductor.vencimiento_rcp || '',
-        certificado_defensa: conductor.certificado_defensa !== undefined ? conductor.certificado_defensa : false,
-        vencimiento_defensa: conductor.vencimiento_defensa || '',
+        // Asegurar formatos de fecha para inputs
+        fecha_vencimiento_licencia: conductor.fecha_vencimiento_licencia ? conductor.fecha_vencimiento_licencia.split('T')[0] : '',
+        fecha_primera_licencia: conductor.fecha_primera_licencia ? conductor.fecha_primera_licencia.split('T')[0] : '',
+        fecha_examen_ocupacional: conductor.fecha_examen_ocupacional ? conductor.fecha_examen_ocupacional.split('T')[0] : '',
+        vencimiento_rcp: conductor.vencimiento_rcp ? conductor.vencimiento_rcp.split('T')[0] : '',
+        vencimiento_defensa: conductor.vencimiento_defensa ? conductor.vencimiento_defensa.split('T')[0] : '',
+        // Asegurar booleanos
+        apto_conducir: conductor.apto_conducir !== undefined ? !!conductor.apto_conducir : true,
+        certificado_rcp: conductor.certificado_rcp !== undefined ? !!conductor.certificado_rcp : false,
+        certificado_defensa: conductor.certificado_defensa !== undefined ? !!conductor.certificado_defensa : false,
       });
     } else {
       setEditingConductor(null);
@@ -127,215 +232,166 @@ export default function ConductoresPage() {
     try {
       if (editingConductor) {
         await updateConductor(editingConductor.id, formData);
+        const nombre = getNombreEmpleado(formData.empleado_id);
+        addNotification('success', 'Conductor Actualizado', `Los datos del conductor ${nombre} han sido actualizados.`);
       } else {
         await createConductor(formData);
+        addNotification('success', 'Nuevo Conductor', 'El conductor ha sido registrado exitosamente.');
       }
       loadConductores();
       handleCloseDialog();
+      setError(null);
     } catch (err) {
+      addNotification('error', 'Error', 'No se pudieron guardar los datos del conductor.');
       setError('Error al guardar: ' + err.message);
     }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('¿Estás seguro?')) {
+    if (window.confirm('¿Estás seguro de eliminar este conductor?')) {
       try {
         await deleteConductor(id);
+        addNotification('warning', 'Conductor Eliminado', 'El registro ha sido eliminado del sistema.');
         loadConductores();
+        setError(null);
       } catch (err) {
+        addNotification('error', 'Error', 'No se pudo eliminar el conductor.');
         setError('Error al eliminar: ' + err.message);
       }
     }
   };
 
-  const isLicenseExpiring = (date) => {
-    if (!date) return false;
-    const today = new Date();
-    const expiryDate = new Date(date);
-    const daysLeft = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
-    return daysLeft < 60 && daysLeft > 0;
+  const handleClearSearch = () => {
+    setSearchTerm('');
   };
 
-  const isLicenseExpired = (date) => {
-    if (!date) return false;
-    const today = new Date();
-    const expiryDate = new Date(date);
-    return expiryDate < today;
-  };
-
-  const getEstadoColor = (estado) => {
-    const colors = {
-      'activo': 'bg-green-100 text-green-800',
-      'licencia_medica': 'bg-blue-100 text-blue-800',
-      'suspendido': 'bg-orange-100 text-orange-800',
-      'inactivo': 'bg-red-100 text-red-800',
-    };
-    return colors[estado] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getNombreEmpleado = (empleadoId) => {
-    const empleado = empleados.find(e => e.id === empleadoId);
-    if (empleado?.user) {
-      return `${empleado.user.nombre} ${empleado.user.apellido}`;
-    }
-    return 'N/A';
-  };
-
-  const getEmpleadosDisponibles = () => {
-    return empleados.filter(empleado => {
-      // 1. Empleado activo
-      if (empleado.estado !== 'activo') {
-        return false;
-      }
-      // 2. Rol conductor (rol_id = 3)
-      if (empleado.user?.rol_id !== 3) {
-        return false;
-      }
-      // 3, verificar que no sea conductor ACTIVO
-      const yaEsConductorActivo = conductores.some(
-        c => c.empleado_id === empleado.id && c.estado === 'activo'
-      );
-
-      // 4. si se esta editando, permitir el empleado actual
-      if (editingConductor && empleado.id === editingConductor.empleado_id) {
-        return true;
-      }
-      return !yaEsConductorActivo;
-    });
-  };
-      
-
-  // Tabla expandible personalizada
+  // --- RENDERIZADO DE TABLA ---
   const renderConductoresTable = () => {
     return (
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
         <table className="w-full">
-          <thead className="bg-gray-100 border-b">
+          <thead className="bg-gray-100 border-b border-gray-200">
             <tr>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Conductor</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Licencia</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Clase</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Vencimiento</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Experiencia</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Estado</th>
-              <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">Acciones</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Conductor</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Licencia</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Clase</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Vencimiento</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Exp.</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
+              <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">Acciones</th>
             </tr>
           </thead>
-          <tbody>
-            {conductores.map((conductor) => (
-              <React.Fragment key={conductor.id}>
-                <tr className="border-b hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-900 font-medium">{getNombreEmpleado(conductor.empleado_id)}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{conductor.numero_licencia}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{conductor.clase_licencia}</td>
-                  <td className="px-6 py-4 text-sm">
-                    <div className={
-                      isLicenseExpired(conductor.fecha_vencimiento_licencia) 
-                        ? 'text-red-600 font-bold' 
-                        : isLicenseExpiring(conductor.fecha_vencimiento_licencia) 
-                        ? 'text-orange-600 font-bold' 
-                        : ''
-                    }>
-                      {formatDate(conductor.fecha_vencimiento_licencia)}
-                      {isLicenseExpired(conductor.fecha_vencimiento_licencia) && ' ❌'}
-                      {isLicenseExpiring(conductor.fecha_vencimiento_licencia) && !isLicenseExpired(conductor.fecha_vencimiento_licencia) && ' ⚠️'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{conductor.anios_experiencia} años</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${getEstadoColor(conductor.estado)}`}>
-                      {conductor.estado}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center space-x-2">
-                    <button
-                      onClick={() => handleOpenDialog(conductor)}
-                      className="text-blue-600 hover:text-blue-900 font-medium text-sm"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleDelete(conductor.id)}
-                      className="text-red-600 hover:text-red-900 font-medium text-sm"
-                    >
-                      Eliminar
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedRow(expandedRow === conductor.id ? null : conductor.id);
-                      }}
-                      className="text-gray-600 hover:text-gray-900"
-                    >
-                      {expandedRow === conductor.id ? '▲' : '▼'}
-                    </button>
-                  </td>
-                </tr>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {paginatedData.length === 0 ? (
+              <tr><td colSpan="7" className="px-6 py-8 text-center text-gray-500">No se encontraron conductores</td></tr>
+            ) : (
+              paginatedData.map((conductor) => (
+                <React.Fragment key={conductor.id}>
+                  <tr 
+                    className="hover:bg-gray-100 transition-colors even:bg-gray-50 cursor-pointer"
+                    onClick={() => setExpandedRow(expandedRow === conductor.id ? null : conductor.id)}
+                  >
+                    {/* NOMBRE Y RUT */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {getNombreEmpleado(conductor.empleado_id)}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5 font-mono">
+                        {getRutEmpleado(conductor.empleado_id)}
+                      </div>
+                    </td>
 
-                {/* Fila expandida con detalles */}
-                {expandedRow === conductor.id && (
-                  <tr className="bg-gray-50 border-b">
-                    <td colSpan="7" className="px-6 py-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {/* Licencia */}
-                        <div>
-                          <h4 className="font-semibold text-gray-900 mb-3">Información de Licencia</h4>
-                          <div className="space-y-2 text-sm">
-                            <p><span className="text-gray-600">Número:</span> {conductor.numero_licencia}</p>
-                            <p><span className="text-gray-600">Clase:</span> {conductor.clase_licencia}</p>
-                            <p><span className="text-gray-600">Emisión:</span> {formatDate(conductor.fecha_primera_licencia)}</p>
-                            <p><span className="text-gray-600">Vencimiento:</span> {formatDate(conductor.fecha_vencimiento_licencia)}</p>
-                            <p><span className="text-gray-600">Estado:</span> {conductor.estado_licencia}</p>
-                            {conductor.observaciones_licencia && (
-                              <p><span className="text-gray-600">Observaciones:</span> {conductor.observaciones_licencia}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Experiencia y Sanciones */}
-                        <div>
-                          <h4 className="font-semibold text-gray-900 mb-3">Experiencia & Sanciones</h4>
-                          <div className="space-y-2 text-sm">
-                            <p><span className="text-gray-600">Años de experiencia:</span> {conductor.anios_experiencia}</p>
-                            <p><span className="text-gray-600">Infracciones:</span> {conductor.cantidad_infracciones}</p>
-                            <p><span className="text-gray-600">Accidentes:</span> {conductor.cantidad_accidentes}</p>
-                            {conductor.historial_sanciones && (
-                              <p><span className="text-gray-600">Historial:</span> {conductor.historial_sanciones}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Salud y Certificados */}
-                        <div>
-                          <h4 className="font-semibold text-gray-900 mb-3">Salud & Certificados</h4>
-                          <div className="space-y-2 text-sm">
-                            <p><span className="text-gray-600">Fecha Examen Ocupacional:</span> {formatDate(conductor.fecha_examen_ocupacional)}</p>
-                            <p><span className="text-gray-600">Apto para conducir:</span> {conductor.apto_conducir ? '✅ Sí' : '❌ No'}</p>
-                            <p><span className="text-gray-600">RCP:</span> {conductor.certificado_rcp ? '✅ Sí' : '❌ No'}</p>
-                            {conductor.vencimiento_rcp && (
-                              <p><span className="text-gray-600">Vencimiento RCP:</span> {formatDate(conductor.vencimiento_rcp)}</p>
-                            )}
-                            <p><span className="text-gray-600">Defensa:</span> {conductor.certificado_defensa ? '✅ Sí' : '❌ No'}</p>
-                            {conductor.vencimiento_defensa && (
-                              <p><span className="text-gray-600">Vencimiento Defensa:</span> {formatDate(conductor.vencimiento_defensa)}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Estado General */}
-                        <div>
-                          <h4 className="font-semibold text-gray-900 mb-3">Estado General</h4>
-                          <div className="space-y-2 text-sm">
-                            <p><span className="text-gray-600">Estado:</span> {conductor.estado}</p>
-                            <p><span className="text-gray-600">Empleado:</span> {getNombreEmpleado(conductor.empleado_id)}</p>
-                          </div>
-                        </div>
+                    <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
+                      {conductor.numero_licencia}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap font-bold">
+                      {conductor.clase_licencia}
+                    </td>
+                    <td className="px-6 py-4 text-sm whitespace-nowrap">
+                      <div className={
+                        isLicenseExpired(conductor.fecha_vencimiento_licencia) 
+                          ? 'text-red-600 font-bold flex items-center gap-1' 
+                          : isLicenseExpiring(conductor.fecha_vencimiento_licencia) 
+                          ? 'text-orange-600 font-bold flex items-center gap-1' 
+                          : 'text-gray-600'
+                      }>
+                        {formatDate(conductor.fecha_vencimiento_licencia)}
+                        {isLicenseExpired(conductor.fecha_vencimiento_licencia) && <AlertCircle size={14}/>}
+                        {isLicenseExpiring(conductor.fecha_vencimiento_licencia) && !isLicenseExpired(conductor.fecha_vencimiento_licencia) && <AlertCircle size={14}/>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
+                      {conductor.anios_experiencia} años
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(conductor.estado)}`}>
+                        {conductor.estado}
+                      </span>
+                    </td>
+                    
+                    <td className="px-6 py-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => handleOpenDialog(conductor)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors font-medium"
+                          title="Editar"
+                        >
+                          <Edit2 size={16} /> Editar
+                        </button>
+                        <button
+                          onClick={() => handleDelete(conductor.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 transition-colors font-medium"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={16} /> Eliminar
+                        </button>
+                        <button
+                          onClick={() => setExpandedRow(expandedRow === conductor.id ? null : conductor.id)}
+                          className="flex items-center justify-center w-9 h-9 bg-gray-100 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-200 transition-colors ml-1"
+                        >
+                          {expandedRow === conductor.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </button>
                       </div>
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
+
+                  {expandedRow === conductor.id && (
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <td colSpan="7" className="px-6 py-6 cursor-default">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                          
+                          <div className="space-y-3">
+                            <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><FileText size={16}/> Detalle Licencia</h4>
+                            <p><span className="text-gray-500">N° Licencia:</span> {conductor.numero_licencia}</p>
+                            <p><span className="text-gray-500">Clase:</span> {conductor.clase_licencia}</p>
+                            <p><span className="text-gray-500">Emisión:</span> {formatDate(conductor.fecha_primera_licencia)}</p>
+                            <p><span className="text-gray-500">Vencimiento:</span> {formatDate(conductor.fecha_vencimiento_licencia)}</p>
+                            <p className="text-xs text-gray-400 italic mt-1">Obs: {conductor.observaciones_licencia || 'Sin observaciones'}</p>
+                          </div>
+
+                          <div className="space-y-3">
+                            <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><AlertCircle size={16}/> Historial</h4>
+                            <p><span className="text-gray-500">Experiencia:</span> {conductor.anios_experiencia} años</p>
+                            <p><span className="text-gray-500">Infracciones:</span> <span className={conductor.cantidad_infracciones > 0 ? 'text-red-600 font-bold' : ''}>{conductor.cantidad_infracciones}</span></p>
+                            <p><span className="text-gray-500">Accidentes:</span> <span className={conductor.cantidad_accidentes > 0 ? 'text-red-600 font-bold' : ''}>{conductor.cantidad_accidentes}</span></p>
+                            <p className="text-xs text-gray-400 mt-1">{conductor.historial_sanciones || 'Sin sanciones registradas'}</p>
+                          </div>
+
+                          <div className="space-y-3">
+                            <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><User size={16}/> Salud & Certs</h4>
+                            <p><span className="text-gray-500">Examen Ocupacional:</span> {formatDate(conductor.fecha_examen_ocupacional)}</p>
+                            <p><span className="text-gray-500">Apto Conducir:</span> {conductor.apto_conducir ? '✅ SÍ' : '❌ NO'}</p>
+                            <p><span className="text-gray-500">RCP:</span> {conductor.certificado_rcp ? '✅ Vigente' : '❌ Pendiente'}</p>
+                            <p><span className="text-gray-500">Manejo Defensivo:</span> {conductor.certificado_defensa ? '✅ Vigente' : '❌ Pendiente'}</p>
+                          </div>
+
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -344,21 +400,25 @@ export default function ConductoresPage() {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Conductores</h1>
-          <p className="text-gray-600 mt-2">Administra los conductores de la empresa</p>
+      
+      {/* HEADER CARD NUEVO */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Gestión de Conductores</h1>
+            <p className="mt-2 text-slate-300 max-w-xl">Administra los conductores de la empresa.</p>
+          </div>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => handleOpenDialog()}
+            className="flex items-center gap-2 shadow-lg"
+          >
+            <Plus size={20} />
+            Nuevo Conductor
+          </Button>
         </div>
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={() => handleOpenDialog()}
-          className="flex items-center gap-2"
-        >
-          <Plus size={20} />
-          Nuevo Conductor
-        </Button>
+        <User className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
       {/* Error */}
@@ -369,6 +429,28 @@ export default function ConductoresPage() {
         </div>
       )}
 
+      {/* BUSCADOR UNIFICADO */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Buscar por nombre, RUT o número de licencia..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          />
+          {searchTerm && (
+            <button 
+              onClick={handleClearSearch}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Tabla */}
       {loading ? (
         <div className="text-center py-8 text-gray-500">Cargando...</div>
@@ -376,6 +458,34 @@ export default function ConductoresPage() {
         <div className="text-center py-8 text-gray-500">No hay conductores registrados</div>
       ) : (
         renderConductoresTable()
+      )}
+
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <div className="flex justify-between items-center mt-6">
+          <span className="text-sm text-gray-700">
+            Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
+            <span className="ml-2 text-gray-500">(Total: {filteredConductores.length} conductores)</span>
+          </span>
+          <div className="flex gap-2">
+            <Button 
+              variant="secondary" 
+              onClick={() => setCurrentPage(prev => prev - 1)} 
+              disabled={currentPage === 1}
+              className="flex items-center gap-1.5"
+            >
+              <ChevronDown className="rotate-90" size={16}/> Anterior
+            </Button>
+            <Button 
+              variant="secondary" 
+              onClick={() => setCurrentPage(prev => prev + 1)} 
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-1.5"
+            >
+              Siguiente <ChevronDown className="-rotate-90" size={16}/>
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Dialog */}
@@ -401,8 +511,6 @@ export default function ConductoresPage() {
             value={formData.empleado_id}
             onChange={(e) => setFormData({ ...formData, empleado_id: e.target.value })}
             required
-
-                
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">

@@ -24,6 +24,7 @@ class Mecanico extends Model
         'fecha_certificacion' => 'date',
         'fecha_examen_ocupacional' => 'date',
         'empleado_id' => 'integer',
+        'especialidad' => 'array', // <--- ESTO ES VITAL
     ];
 
     public function empleado(): BelongsTo

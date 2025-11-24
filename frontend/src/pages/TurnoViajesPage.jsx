@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Clock, MapPin, CheckCircle, XCircle, Calendar, Bus, Users } from 'lucide-react';
+import { ArrowLeft, Plus, Clock, MapPin, CheckCircle, XCircle, Calendar, Bus, Users, Map, Trash2 } from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
@@ -254,57 +254,59 @@ export default function TurnoViajesPage({ turno, onVolver }) {
       render: (row) => (
         <div className="flex gap-2">
           {row.estado === 'programado' && (
-            <Button
-              variant="primary"
-              size="sm"
+            <button
               onClick={() => handleIniciarViaje(row.id)}
-              className="flex items-center gap-1"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors font-medium"
+              title="Iniciar Viaje"
             >
-              <Clock size={14} />
-              Iniciar
-            </Button>
+              <Clock size={14} /> Iniciar
+            </button>
           )}
           
           {row.estado === 'en_curso' && (
-            <Button
-              variant="primary"
-              size="sm"
+            <button
               onClick={() => handleOpenFinalizar(row)}
-              className="flex items-center gap-1"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-50 text-green-700 border border-green-200 rounded-md hover:bg-green-100 hover:border-green-300 transition-colors font-medium"
+              title="Finalizar Viaje"
             >
-              <CheckCircle size={14} />
-              Finalizar
-            </Button>
+              <CheckCircle size={14} /> Finalizar
+            </button>
           )}
           
           {row.estado !== 'completado' && row.estado !== 'cancelado' && (
-            <Button
-              variant="secondary"
-              size="sm"
+            <button
               onClick={() => handleCancelar(row.id)}
-              className="flex items-center gap-1"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100 hover:border-orange-300 transition-colors font-medium"
+              title="Cancelar Viaje"
             >
-              <XCircle size={14} />
-              Cancelar
-            </Button>
+              <XCircle size={14} /> Cancelar
+            </button>
           )}
+
+          <button
+            onClick={() => handleDelete(row.id)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 transition-colors font-medium"
+            title="Eliminar"
+          >
+            <Trash2 size={14} />
+          </button>
         </div>
       ),
     },
   ];
+
   // Si se ha seleccionado un viaje, mostrar detalle
-    if (viajeSeleccionado) {
-      return (
-        <ViajeDetallePage
-          viajeId={viajeSeleccionado}
-          onVolver={() => {
+  if (viajeSeleccionado) {
+    return (
+      <ViajeDetallePage
+        viajeId={viajeSeleccionado}
+        onVolver={() => {
           setViajeSeleccionado(null);
           loadData();
         }}
-          
-        />
-      );
-    }
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -319,19 +321,36 @@ export default function TurnoViajesPage({ turno, onVolver }) {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="mb-8">
-        <Button
-          variant="secondary"
+      
+      {/* Navegación Breadcrumb */}
+      <div className="mb-6">
+        <button
           onClick={onVolver}
-          className="mb-4 flex items-center gap-2"
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors font-medium"
         >
           <ArrowLeft size={20} />
           Volver a Turnos
-        </Button>
+        </button>
+      </div>
 
-        <h1 className="text-3xl font-bold text-gray-900"> Gestión de Viajes del Turno</h1>
-        <p className="text-gray-600 mt-2">Agrega y administra los viajes de este turno</p>
+      {/* HEADER CARD */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Gestión de Viajes</h1>
+            <p className="mt-2 text-slate-300 max-w-xl">Administra los viajes asociados al turno actual.</p>
+          </div>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={handleOpenDialog}
+            className="flex items-center gap-2 shadow-lg"
+          >
+            <Plus size={20} />
+            Agregar Viaje
+          </Button>
+        </div>
+        <Map className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
       {/* Error */}
@@ -405,18 +424,6 @@ export default function TurnoViajesPage({ turno, onVolver }) {
               )}
             </div>
           </div>
-        </div>
-
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={handleOpenDialog}
-            className="flex items-center gap-2"
-          >
-            <Plus size={20} />
-            Agregar Viaje
-          </Button>
         </div>
       </div>
 

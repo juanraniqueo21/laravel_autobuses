@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Wrench } from 'lucide-react'; // Agregado Wrench para el icono grande
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
@@ -13,6 +13,7 @@ import {
   updateMantenimiento, 
   deleteMantenimiento 
 } from '../services/api';
+import { useNotifications } from '../context/NotificationContext'; // IMPORTACIÓN AGREGADA
 
 const TIPOS_MANTENIMIENTO = ['preventivo', 'correctivo', 'revision'];
 const ESTADOS_MANTENIMIENTO = ['en_proceso', 'completado', 'cancelado'];
@@ -25,6 +26,10 @@ export default function MantencionesPage() {
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingMantenimiento, setEditingMantenimiento] = useState(null);
+  
+  // --- HOOK DE NOTIFICACIONES ---
+  const { addNotification } = useNotifications();
+
   const [formData, setFormData] = useState({
     bus_id: '',
     mecanico_id: '',
@@ -65,6 +70,7 @@ export default function MantencionesPage() {
       setError(null);
     } catch (err) {
       setError('Error al cargar datos: ' + err.message);
+      addNotification('error', 'Error', 'No se pudieron cargar los datos de mantenimiento.');
     } finally {
       setLoading(false);
     }
@@ -101,12 +107,15 @@ export default function MantencionesPage() {
     try {
       if (editingMantenimiento) {
         await updateMantenimiento(editingMantenimiento.id, formData);
+        addNotification('success', 'Mantenimiento Actualizado', 'El registro ha sido modificado correctamente.');
       } else {
         await createMantenimiento(formData);
+        addNotification('success', 'Mantenimiento Creado', 'Se ha registrado un nuevo mantenimiento.');
       }
       loadData();
       handleCloseDialog();
     } catch (err) {
+      addNotification('error', 'Error', 'No se pudo guardar el registro.');
       setError('Error al guardar: ' + err.message);
     }
   };
@@ -115,8 +124,10 @@ export default function MantencionesPage() {
     if (window.confirm('¿Estás seguro?')) {
       try {
         await deleteMantenimiento(id);
+        addNotification('warning', 'Mantenimiento Eliminado', 'El registro ha sido eliminado.');
         loadData();
       } catch (err) {
+        addNotification('error', 'Error', 'No se pudo eliminar el registro.');
         setError('Error al eliminar: ' + err.message);
       }
     }
@@ -165,21 +176,25 @@ export default function MantencionesPage() {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Mantenimiento</h1>
-          <p className="text-gray-600 mt-2">Administra el mantenimiento de los buses</p>
+      
+      {/* HEADER CARD NUEVO */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Gestión de Mantenimiento</h1>
+            <p className="mt-2 text-slate-300 max-w-xl">Control de reparaciones y servicios de flota.</p>
+          </div>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => handleOpenDialog()}
+            className="flex items-center gap-2 shadow-lg"
+          >
+            <Plus size={20} />
+            Nuevo Mantenimiento
+          </Button>
         </div>
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={() => handleOpenDialog()}
-          className="flex items-center gap-2"
-        >
-          <Plus size={20} />
-          Nuevo Mantenimiento
-        </Button>
+        <Wrench className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
       {/* Error */}

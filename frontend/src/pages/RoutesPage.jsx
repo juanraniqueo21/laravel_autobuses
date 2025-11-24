@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, MapPin, DollarSign, Navigation } from 'lucide-react';
+import { Plus, MapPin, Search, ArrowRight, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
@@ -11,362 +11,139 @@ import { fetchRutas, createRuta, updateRuta, deleteRuta } from '../services/api'
 const ESTADOS_RUTA = ['activa', 'inactiva', 'en_revision'];
 
 export default function RutasPage() {
-  // ============================================
-  // ESTADOS
-  // ============================================
-  const [rutas, setRutas] = useState([]);
+  const [allRutas, setAllRutas] = useState([]);
+  const [filteredRutas, setFilteredRutas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
-  const [editingRuta, setEditingRuta] = useState(null);
-  const [selectedRutaId, setSelectedRutaId] = useState(null); // ← NUEVO
+  const [selectedRutaId, setSelectedRutaId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  
   const [formData, setFormData] = useState({
-    nombre_ruta: '',
-    codigo_ruta: '',
-    origen: '',
-    destino: '',
-    descripcion: '',
-    estado: 'activa',
+    nombre_ruta: '', codigo_ruta: '', origen: '', destino: '', descripcion: '', estado: 'activa',
   });
 
-  // ============================================
-  // EFFECTS
-  // ============================================
-  useEffect(() => {
-    loadRutas();
-  }, []);
+  useEffect(() => { loadRutas(); }, []);
 
-  // ============================================
-  // FUNCIONES
-  // ============================================
+  useEffect(() => {
+    const results = allRutas.filter(ruta => 
+      ruta.nombre_ruta.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ruta.codigo_ruta.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ruta.origen.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ruta.destino.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setFilteredRutas(results);
+    setCurrentPage(1);
+  }, [searchTerm, allRutas]);
+
   const loadRutas = async () => {
     try {
       setLoading(true);
       const data = await fetchRutas();
-      setRutas(data);
+      const sortedData = data.sort((a, b) => b.id - a.id);
+      setAllRutas(sortedData);
+      setFilteredRutas(sortedData);
       setError(null);
     } catch (err) {
-      console.error('Error completo:', err);
       setError('Error al cargar rutas: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenDialog = (ruta = null) => {
-    if (ruta) {
-      // Si hay ruta, abrir página de detalle
-      setSelectedRutaId(ruta.id);
-    } else {
-      // Si no hay ruta, abrir modal para crear
-      setEditingRuta(null);
-      setFormData({
-        nombre_ruta: '',
-        codigo_ruta: '',
-        origen: '',
-        destino: '',
-        descripcion: '',
-        estado: 'activa',
-      });
-      setOpenDialog(true);
-    }
-  };
+  // Paginación
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const paginatedData = filteredRutas.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredRutas.length / itemsPerPage);
 
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setEditingRuta(null);
-  };
+  const handleOpenDialog = () => { setFormData({ nombre_ruta: '', codigo_ruta: '', origen: '', destino: '', descripcion: '', estado: 'activa' }); setOpenDialog(true); };
+  const handleCloseDialog = () => setOpenDialog(false);
+  const handleSave = async () => { try { await createRuta(formData); loadRutas(); handleCloseDialog(); } catch (e) { setError(e.message); } };
+  const handleDelete = async (id) => { if(confirm('¿Eliminar?')) try { await deleteRuta(id); loadRutas(); } catch(e){setError(e.message)} };
 
-  const handleSave = async () => {
-    try {
-      await createRuta(formData);
-      loadRutas();
-      handleCloseDialog();
-    } catch (err) {
-      console.error('Error al guardar:', err);
-      setError('Error al guardar: ' + err.message);
-    }
-  };
+  const StatusBadge = ({ status }) => (
+    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase border ${status === 'activa' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-600'}`}>
+      {status.replace('_', ' ')}
+    </span>
+  );
 
-  const handleDelete = async (id) => {
-    if (window.confirm('¿Estás seguro de eliminar esta ruta?')) {
-      try {
-        await deleteRuta(id);
-        loadRutas();
-      } catch (err) {
-        setError('Error al eliminar: ' + err.message);
-      }
-    }
-  };
-
-  const getEstadoColor = (estado) => {
-    const colors = {
-      'activa': 'bg-green-100 text-green-800',
-      'inactiva': 'bg-red-100 text-red-800',
-      'en_revision': 'bg-yellow-100 text-yellow-800',
-    };
-    return colors[estado] || 'bg-gray-100 text-gray-800';
-  };
-
-  // ============================================
-  // COLUMNAS DE LA TABLA
-  // ============================================
   const columns = [
+    { id: 'codigo_ruta', label: 'Código', render: (row) => <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded border border-blue-100">{row.codigo_ruta}</span> },
+    { id: 'nombre_ruta', label: 'Ruta', render: (row) => <div><div className="font-semibold text-gray-900">{row.nombre_ruta}</div><div className="flex items-center gap-1 text-xs text-gray-500">{row.origen} <ArrowRight size={10}/> {row.destino}</div></div> },
     { 
-      id: 'codigo_ruta', 
-      label: 'Código',
+      id: 'stats', label: 'Métricas',
       render: (row) => (
-        <span className="font-mono font-semibold text-blue-600">
-          {row.codigo_ruta}
-        </span>
-      )
-    },
-    { 
-      id: 'nombre_ruta', 
-      label: 'Nombre',
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <Navigation size={16} className="text-gray-400" />
-          <span className="font-medium">{row.nombre_ruta}</span>
+        <div className="flex items-center gap-3 text-xs text-gray-600">
+          <span className="flex items-center gap-1" title="Distancia"><MapPin size={12}/> {row.distancia_km ? `${row.distancia_km}km` : '-'}</span>
+          <span className="flex items-center gap-1" title="Tiempo"><Clock size={12}/> {row.tiempo_estimado_minutos ? `${Math.floor(row.tiempo_estimado_minutos / 60)}h ${row.tiempo_estimado_minutos % 60}m` : '-'}</span>
         </div>
       )
     },
-    { 
-      id: 'origen', 
-      label: 'Origen',
-      render: (row) => (
-        <span className="text-gray-700">{row.origen}</span>
-      )
-    },
-    { 
-      id: 'destino', 
-      label: 'Destino',
-      render: (row) => (
-        <span className="text-gray-700">{row.destino}</span>
-      )
-    },
-    { 
-      id: 'distancia_km', 
-      label: 'Distancia',
-      render: (row) => (
-        <span className="text-gray-600">
-          {row.distancia_km ? `${row.distancia_km} km` : '-'}
-        </span>
-      )
-    },
-    { 
-      id: 'tiempo_estimado_minutos', 
-      label: 'Tiempo',
-      render: (row) => {
-        if (!row.tiempo_estimado_minutos) return '-';
-        const horas = Math.floor(row.tiempo_estimado_minutos / 60);
-        const minutos = row.tiempo_estimado_minutos % 60;
-        return `${horas}h ${minutos}min`;
-      }
-    },
-    { 
-      id: 'paradas', 
-      label: 'Paradas',
-      render: (row) => (
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold">
-          <MapPin size={12} />
-          {row.paradas?.length || 0}
-        </span>
-      )
-    },
-    { 
-      id: 'tarifas', 
-      label: 'Tarifas',
-      render: (row) => (
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded-full text-xs font-semibold">
-          <DollarSign size={12} />
-          {row.tarifas?.length || 0}
-        </span>
-      )
-    },
-    {
-      id: 'estado',
-      label: 'Estado',
-      render: (row) => (
-        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(row.estado)}`}>
-          {row.estado}
-        </span>
-      ),
-    },
+    { id: 'paradas', label: 'Paradas', render: (row) => <span className="bg-gray-100 px-2 py-1 rounded text-xs font-bold text-gray-600">{row.paradas?.length || 0}</span> },
+    { id: 'estado', label: 'Estado', render: (row) => <StatusBadge status={row.estado} /> },
   ];
 
-  // ============================================
-  // RENDER CONDICIONAL
-  // ============================================
+  if (selectedRutaId) return <RutaDetallePage rutaId={selectedRutaId} onClose={() => { setSelectedRutaId(null); loadRutas(); }} />;
 
-  // Si hay una ruta seleccionada, mostrar página de detalle
-  if (selectedRutaId) {
-    return (
-      <RutaDetallePage
-        rutaId={selectedRutaId}
-        onClose={() => {
-          setSelectedRutaId(null);
-          loadRutas();
-        }}
-      />
-    );
-  }
-
-  // ============================================
-  // RENDER PRINCIPAL (Lista de rutas)
-  // ============================================
   return (
-    <div className="p-8 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">🗺️ Gestión de Rutas</h1>
-          <p className="text-gray-600 mt-2">Administra las rutas, paradas y tarifas del sistema</p>
+    <div className="p-6 max-w-7xl mx-auto min-h-screen space-y-6">
+      {/* HEADER CARD */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Catálogo de Rutas</h1>
+            <p className="mt-2 text-slate-300 max-w-xl">Administración de trazados y paradas.</p>
+          </div>
+          <Button variant="primary" onClick={handleOpenDialog} className="flex gap-2 shadow-lg">
+            <Plus size={20} /> Nueva Ruta
+          </Button>
         </div>
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={() => handleOpenDialog()}
-          className="flex items-center gap-2"
-        >
-          <Plus size={20} />
-          Nueva Ruta
-        </Button>
+        <MapPin className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm">Total Rutas</p>
-              <p className="text-3xl font-bold text-gray-900">{rutas.length}</p>
-            </div>
-            <div className="bg-blue-100 p-3 rounded-full">
-              <Navigation className="text-blue-600" size={24} />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm">Rutas Activas</p>
-              <p className="text-3xl font-bold text-green-600">
-                {rutas.filter(r => r.estado === 'activa').length}
-              </p>
-            </div>
-            <div className="bg-green-100 p-3 rounded-full">
-              <MapPin className="text-green-600" size={24} />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm">En Revisión</p>
-              <p className="text-3xl font-bold text-yellow-600">
-                {rutas.filter(r => r.estado === 'en_revision').length}
-              </p>
-            </div>
-            <div className="bg-yellow-100 p-3 rounded-full">
-              <DollarSign className="text-yellow-600" size={24} />
-            </div>
-          </div>
+      {/* Buscador */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <input 
+            type="text" 
+            placeholder="Buscar ruta por nombre, código o ciudad..." 
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
         </div>
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <Table
-          columns={columns}
-          data={rutas}
-          loading={loading}
-          onEdit={handleOpenDialog}
-          onDelete={handleDelete}
-        />
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <Table columns={columns} data={paginatedData} loading={loading} onEdit={(r) => setSelectedRutaId(r.id)} onDelete={handleDelete} />
+        
+        {/* Controles Paginación */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <span className="text-sm text-gray-600">Página {currentPage} de {totalPages}</span>
+            <div className="flex gap-2">
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 hover:bg-gray-200 rounded disabled:opacity-50"><ChevronLeft size={20}/></button>
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 hover:bg-gray-200 rounded disabled:opacity-50"><ChevronRight size={20}/></button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Dialog - Solo para CREAR nueva ruta */}
-      <FormDialog
-        isOpen={openDialog}
-        title="Nueva Ruta"
-        onSubmit={handleSave}
-        onCancel={handleCloseDialog}
-      >
-        <div className="space-y-4">
-          <Input
-            label="Código de Ruta *"
-            value={formData.codigo_ruta}
-            onChange={(e) => setFormData({ ...formData, codigo_ruta: e.target.value.toUpperCase() })}
-            placeholder="PM-TEM-001"
-            required
-          />
-
-          <Input
-            label="Nombre de Ruta *"
-            value={formData.nombre_ruta}
-            onChange={(e) => setFormData({ ...formData, nombre_ruta: e.target.value })}
-            placeholder="Puerto Montt - Temuco"
-            required
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Ciudad de Origen *"
-              value={formData.origen}
-              onChange={(e) => setFormData({ ...formData, origen: e.target.value })}
-              placeholder="Puerto Montt"
-              required
-            />
-
-            <Input
-              label="Ciudad de Destino *"
-              value={formData.destino}
-              onChange={(e) => setFormData({ ...formData, destino: e.target.value })}
-              placeholder="Temuco"
-              required
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Descripción
-            </label>
-            <textarea
-              value={formData.descripcion}
-              onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              rows={3}
-              placeholder="Ruta principal del sur de Chile..."
-            />
-          </div>
-
-          <Select
-            label="Estado *"
-            options={ESTADOS_RUTA.map(e => ({ 
-              id: e, 
-              label: e.charAt(0).toUpperCase() + e.slice(1).replace('_', ' ') 
-            }))}
-            value={formData.estado}
-            onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-            required
-          />
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-            <p className="text-sm text-blue-800">
-              ℹ️ <strong>Nota:</strong> Después de crear la ruta, podrás agregar paradas y tarifas haciendo clic en "Editar".
-            </p>
-          </div>
-        </div>
+      <FormDialog isOpen={openDialog} title="Nueva Ruta" onSubmit={handleSave} onCancel={handleCloseDialog}>
+         <div className="space-y-4">
+            <Input label="Código" value={formData.codigo_ruta} onChange={(e)=>setFormData({...formData, codigo_ruta:e.target.value})} required/>
+            <Input label="Nombre" value={formData.nombre_ruta} onChange={(e)=>setFormData({...formData, nombre_ruta:e.target.value})} required/>
+            <div className="grid grid-cols-2 gap-4">
+                <Input label="Origen" value={formData.origen} onChange={(e)=>setFormData({...formData, origen:e.target.value})} required/>
+                <Input label="Destino" value={formData.destino} onChange={(e)=>setFormData({...formData, destino:e.target.value})} required/>
+            </div>
+            <Select label="Estado" options={ESTADOS_RUTA.map(e=>({id:e, label:e}))} value={formData.estado} onChange={(e)=>setFormData({...formData, estado:e.target.value})} required/>
+         </div>
       </FormDialog>
     </div>
   );

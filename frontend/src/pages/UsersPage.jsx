@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Mail } from 'lucide-react';
+import { Plus, Mail, Search, X, Users } from 'lucide-react'; // Agregado Users
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import Button from '../components/common/Button';
 import { fetchUsers, fetchRoles, createUser, updateUser, deleteUser } from '../services/api';
+import { useNotifications } from '../context/NotificationContext'; 
 
 const ESTADOS = ['activo', 'inactivo', 'suspendido'];
 
@@ -15,46 +16,26 @@ const ESTADOS = ['activo', 'inactivo', 'suspendido'];
 
 /**
  * Formatear RUT chileno mientras se escribe
- * Entrada: 215264092 o 21526409-2
- * Salida: 21526409-2
  */
 const formatRutChile = (rut) => {
-  // Limpiar: solo números y K
   let cleaned = rut.replace(/[^0-9kK]/g, '').toUpperCase();
-  
   if (cleaned.length === 0) return '';
-  
-  // Separar número y dígito verificador
   let numero = cleaned.slice(0, -1);
   let dv = cleaned.slice(-1);
-  
-  // Si solo hay un carácter, no agregar guión
   if (cleaned.length === 1) return cleaned;
-  
-  // Formatear: 21526409-2
   return `${numero}-${dv}`;
 };
 
 /**
  * Validar formato básico de RUT
- * Solo verifica que tenga números y que el DV sea 0-9 o K
  */
 const isValidRutFormat = (rut) => {
-  // Limpiar
   const cleaned = rut.replace(/[^0-9kK]/g, '').toUpperCase();
-  
   if (cleaned.length < 2) return false;
-  
-  // Separar
   const numero = cleaned.slice(0, -1);
   const dv = cleaned.slice(-1);
-  
-  // Verificar que el número sea numérico
   if (!/^\d+$/.test(numero)) return false;
-  
-  // Verificar que el DV sea 0-9 o K
   if (!/^[0-9K]$/.test(dv)) return false;
-  
   return true;
 };
 
@@ -62,52 +43,46 @@ const isValidRutFormat = (rut) => {
  * Calcular dígito verificador de RUT (Módulo 11)
  */
 const calcularDVRut = (rut) => {
-  // Limpiar y obtener solo el número
   const numero = rut.replace(/[^0-9]/g, '');
-  
   let suma = 0;
   let multiplo = 2;
-  
-  // Recorrer de derecha a izquierda
   for (let i = numero.length - 1; i >= 0; i--) {
     suma += parseInt(numero[i]) * multiplo;
     multiplo = multiplo < 7 ? multiplo + 1 : 2;
   }
-  
   const resto = suma % 11;
   const dv = 11 - resto;
-  
   if (dv === 11) return '0';
   if (dv === 10) return 'K';
   return dv.toString();
 };
 
 /**
- * Validar RUT completo (formato y dígito verificador)
+ * Validar RUT completo
  */
 const isValidRutComplete = (rut) => {
   if (!isValidRutFormat(rut)) return false;
-  
-  // Limpiar
   const cleaned = rut.replace(/[^0-9kK]/g, '').toUpperCase();
   const numero = cleaned.slice(0, -1);
   const dvIngresado = cleaned.slice(-1);
-  
-  // Calcular DV correcto
   const dvCalculado = calcularDVRut(numero);
-  
-  // Comparar
   return dvIngresado === dvCalculado;
 };
 
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]); 
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [rutError, setRutError] = useState('');
+  const [searchTerm, setSearchTerm] = useState(''); 
+
+  // --- HOOK DE NOTIFICACIONES ---
+  const { addNotification } = useNotifications();
+
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
@@ -122,6 +97,25 @@ export default function UsersPage() {
     loadData();
   }, []);
 
+  // Efecto para filtrar cuando cambian los usuarios o el término de búsqueda
+  useEffect(() => {
+    if (!searchTerm) {
+      setFilteredUsers(users);
+    } else {
+      const lowerTerm = searchTerm.toLowerCase();
+      const filtered = users.filter((user) => {
+        const nombreCompleto = `${user.nombre} ${user.apellido}`.toLowerCase();
+        const rut = user.rut_completo ? user.rut_completo.toLowerCase() : '';
+        const email = user.email.toLowerCase();
+        
+        return nombreCompleto.includes(lowerTerm) || 
+               rut.includes(lowerTerm) || 
+               email.includes(lowerTerm);
+      });
+      setFilteredUsers(filtered);
+    }
+  }, [users, searchTerm]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -134,6 +128,7 @@ export default function UsersPage() {
       setError(null);
     } catch (err) {
       setError('Error al cargar datos: ' + err.message);
+      addNotification('error', 'Error', 'No se pudieron cargar los usuarios.');
     } finally {
       setLoading(false);
     }
@@ -175,12 +170,9 @@ export default function UsersPage() {
 
   const handleRutChange = (e) => {
     let value = e.target.value;
-    
-    // Formatear automáticamente mientras escribe
     const formatted = formatRutChile(value);
     setFormData({ ...formData, rut_completo: formatted });
     
-    // Validar en tiempo real
     if (formatted.length > 0) {
       if (!isValidRutFormat(formatted)) {
         setRutError('Formato inválido. Solo números y K para el verificador');
@@ -195,7 +187,6 @@ export default function UsersPage() {
   };
 
   const handleSave = async () => {
-    // Validar RUT antes de guardar
     if (!formData.rut_completo || !isValidRutComplete(formData.rut_completo)) {
       setRutError('RUT inválido. Verifique el formato y el dígito verificador');
       return;
@@ -204,12 +195,15 @@ export default function UsersPage() {
     try {
       if (editingUser) {
         await updateUser(editingUser.id, formData);
+        addNotification('success', 'Usuario Actualizado', `Los datos de ${formData.nombre} han sido actualizados.`);
       } else {
         await createUser(formData);
+        addNotification('success', 'Usuario Creado', `El usuario ${formData.nombre} ha sido creado.`);
       }
       await loadData();
       handleCloseDialog();
     } catch (err) {
+      addNotification('error', 'Error', 'No se pudo guardar el usuario.');
       setError('Error al guardar: ' + err.message);
     }
   };
@@ -218,8 +212,10 @@ export default function UsersPage() {
     if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
       try {
         await deleteUser(id);
+        addNotification('warning', 'Usuario Eliminado', 'El usuario ha sido eliminado del sistema.');
         loadData();
       } catch (err) {
+        addNotification('error', 'Error', 'No se pudo eliminar el usuario.');
         setError('Error al eliminar: ' + err.message);
       }
     }
@@ -275,21 +271,25 @@ export default function UsersPage() {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
-          <p className="text-gray-600 mt-2">Administra los usuarios del sistema</p>
+      
+      {/* HEADER CARD NUEVO */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Gestión de Usuarios</h1>
+            <p className="mt-2 text-slate-300 max-w-xl">Administra los usuarios y accesos del sistema.</p>
+          </div>
+          <Button 
+            variant="primary" 
+            size="lg" 
+            onClick={() => handleOpenDialog()} 
+            className="flex items-center gap-2 shadow-lg"
+          >
+            <Plus size={20} />
+            Nuevo Usuario
+          </Button>
         </div>
-        <Button 
-          variant="primary" 
-          size="lg"
-          onClick={() => handleOpenDialog()}
-          className="flex items-center gap-2"
-        >
-          <Plus size={20} />
-          Nuevo Usuario
-        </Button>
+        <Users className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
       {/* Error */}
@@ -299,10 +299,32 @@ export default function UsersPage() {
         </div>
       )}
 
+      {/* BUSCADOR UNIFICADO */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Buscar por nombre, email o RUT..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          />
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Tabla */}
       <Table
         columns={columns}
-        data={users}
+        data={filteredUsers} // Usamos la lista filtrada
         loading={loading}
         onEdit={handleOpenDialog}
         onDelete={handleDelete}
@@ -315,7 +337,6 @@ export default function UsersPage() {
         onSubmit={handleSave}
         onCancel={handleCloseDialog}
       >
-        {/* Nombre y Apellido */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="Nombre"
@@ -333,7 +354,6 @@ export default function UsersPage() {
           />
         </div>
 
-        {/* Email */}
         <Input
           label="Email"
           type="email"
@@ -343,7 +363,6 @@ export default function UsersPage() {
           required
         />
 
-        {/* Contraseña (solo en crear) */}
         {!editingUser && (
           <Input
             label="Contraseña"
@@ -355,7 +374,6 @@ export default function UsersPage() {
           />
         )}
 
-        {/* RUT - UN SOLO CAMPO */}
         <div>
           <Input
             label="RUT"
@@ -380,7 +398,6 @@ export default function UsersPage() {
           </p>
         </div>
 
-        {/* Rol y Estado */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Select
             label="Rol"

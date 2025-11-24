@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Filter, X, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { 
+  Plus, Filter, X, Eye, ChevronDown, ChevronUp, Search,
+  Edit2, Trash2, Bus, AlertCircle, Fuel, Calendar
+} from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import Button from '../components/common/Button';
 import { fetchBuses, createBus, updateBus, deleteBus } from '../services/api';
+import usePagination from '../hooks/usePagination';
+import { useNotifications } from '../context/NotificationContext'; // IMPORTACIÓN AGREGADA
 
 const ESTADOS_BUS = ['operativo', 'mantenimiento', 'desmantelado'];
 const TIPOS_COMBUSTIBLE = ['diesel', 'gasolina', 'gas', 'eléctrico', 'híbrido'];
@@ -15,22 +20,20 @@ const CANTIDAD_EJES = ['2', '3', '4'];
 const UBICACION_MOTOR = ['delantero', 'trasero', 'central'];
 
 export default function BusesPage() {
+  // --- ESTADOS ---
   const [buses, setBuses] = useState([]);
   const [filteredBuses, setFilteredBuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+  // Se eliminó el estado 'success' ya que se usa el contexto de notificaciones
+  
   const [openDialog, setOpenDialog] = useState(false);
   const [editingBus, setEditingBus] = useState(null);
-  const [showFilters, setShowFilters] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const [filters, setFilters] = useState({
-    patente: '',
-    estado: '',
-    anio: '',
-    marca: '',
-  });
+  // --- HOOK DE NOTIFICACIONES ---
+  const { addNotification } = useNotifications();
 
   const [formData, setFormData] = useState({
     patente: '',
@@ -50,7 +53,7 @@ export default function BusesPage() {
     cantidad_ejes: '2',
     marca_motor: '',
     modelo_motor: '',
-    ubicacion_motor: '',
+    ubicacion_motor: 'trasero',
     marca_chasis: '',
     modelo_chasis: '',
     marca_carroceria: '',
@@ -72,116 +75,62 @@ export default function BusesPage() {
     kilometraje_original: '',
   });
 
+  // --- EFECTOS ---
   useEffect(() => {
     loadBuses();
   }, []);
 
   useEffect(() => {
-    applyFilters();
-  }, [buses, filters]);
-
-  // Auto-ocultar mensajes de éxito/error
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => setSuccess(null), 3000);
-      return () => clearTimeout(timer);
+    if (!searchTerm) {
+      setFilteredBuses(buses);
+    } else {
+      const term = searchTerm.toLowerCase();
+      const filtered = buses.filter(b =>
+        b.patente.toLowerCase().includes(term) ||
+        b.marca.toLowerCase().includes(term) ||
+        b.modelo.toLowerCase().includes(term)
+      );
+      setFilteredBuses(filtered);
     }
-  }, [success]);
+  }, [buses, searchTerm]);
+
+  // Configuración de Paginación
+  const sortedData = [...filteredBuses].sort((a, b) => b.id - a.id);
+  const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(sortedData, 10);
 
   useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => setError(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const loadBuses = async () => {
     try {
       setLoading(true);
       const data = await fetchBuses();
-      
-      if (Array.isArray(data)) {
-        setBuses(data);
-      } else {
-        console.error('Los datos no son un array:', data);
-        setBuses([]);
-      }
-      
+      setBuses(Array.isArray(data) ? data : []);
       setError(null);
     } catch (err) {
       setError('Error al cargar buses: ' + err.message);
+      addNotification('error', 'Error', 'No se pudieron cargar los datos de los buses.');
       setBuses([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const applyFilters = () => {
-    if (!Array.isArray(buses)) {
-      setFilteredBuses([]);
-      return;
-    }
-
-    let filtered = buses;
-
-    if (filters.patente) {
-      filtered = filtered.filter(b =>
-        b.patente.toLowerCase().includes(filters.patente.toLowerCase())
-      );
-    }
-
-    if (filters.estado) {
-      filtered = filtered.filter(b => b.estado === filters.estado);
-    }
-
-    if (filters.anio) {
-      filtered = filtered.filter(b => b.anio == filters.anio);
-    }
-
-    if (filters.marca) {
-      filtered = filtered.filter(b =>
-        b.marca.toLowerCase().includes(filters.marca.toLowerCase())
-      );
-    }
-
-    setFilteredBuses(filtered);
-  };
-
-  const handleFilterChange = (field, value) => {
-    setFilters({ ...filters, [field]: value });
-  };
-
-  const handleClearFilters = () => {
-    setFilters({
-      patente: '',
-      estado: '',
-      anio: '',
-      marca: '',
-    });
-  };
-
-  // Formatear patente automáticamente (ABCD12 → AB·CD·12)
+  // --- HANDLERS ---
   const handlePatenteChange = (value) => {
-    // Remover espacios y puntos
-    let clean = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    
-    // Limitar a 6 caracteres
-    clean = clean.substring(0, 6);
-    
+    let clean = value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6);
     setFormData({ ...formData, patente: clean });
   };
 
-  // Formatear patente para visualización
   const formatPatente = (patente) => {
     if (!patente || patente.length !== 6) return patente;
     return `${patente.substring(0, 2)}·${patente.substring(2, 4)}·${patente.substring(4, 6)}`;
   };
 
-  // Formatear fecha (2025-10-31T00:00:00.000000Z → 31/10/2025)
   const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-CL');
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('es-CL');
   };
 
   const handleOpenDialog = (bus = null) => {
@@ -189,52 +138,27 @@ export default function BusesPage() {
       setEditingBus(bus);
       setFormData({
         ...bus,
-        // Convertir fechas ISO a formato YYYY-MM-DD para inputs
         fecha_adquisicion: bus.fecha_adquisicion ? bus.fecha_adquisicion.split('T')[0] : '',
         proxima_revision_tecnica: bus.proxima_revision_tecnica ? bus.proxima_revision_tecnica.split('T')[0] : '',
         ultima_revision_tecnica: bus.ultima_revision_tecnica ? bus.ultima_revision_tecnica.split('T')[0] : '',
         vencimiento_soap: bus.vencimiento_soap ? bus.vencimiento_soap.split('T')[0] : '',
         vencimiento_poliza: bus.vencimiento_poliza ? bus.vencimiento_poliza.split('T')[0] : '',
+        fecha_ultimo_mantenimiento: bus.fecha_ultimo_mantenimiento ? bus.fecha_ultimo_mantenimiento.split('T')[0] : '',
+        fecha_proximo_mantenimiento: bus.fecha_proximo_mantenimiento ? bus.fecha_proximo_mantenimiento.split('T')[0] : '',
       });
     } else {
       setEditingBus(null);
       setFormData({
-        patente: '',
-        patente_verificador: '',
-        marca: '',
-        modelo: '',
-        tipo_combustible: 'diesel',
-        anio: '',
-        numero_serie: '',
-        numero_motor: '',
-        numero_chasis: '',
-        capacidad_pasajeros: '',
-        fecha_adquisicion: '',
-        estado: 'operativo',
-        tipo_bus: 'simple',
-        cantidad_ejes: '2',
-        marca_motor: '',
-        modelo_motor: '',
-        ubicacion_motor: 'trasero',
-        marca_chasis: '',
-        modelo_chasis: '',
-        marca_carroceria: '',
-        modelo_carroceria: '',
-        proximo_mantenimiento_km: '',
-        fecha_ultimo_mantenimiento: '',
-        fecha_proximo_mantenimiento: '',
-        proxima_revision_tecnica: '',
-        ultima_revision_tecnica: '',
-        documento_revision_tecnica: '',
-        numero_soap: '',
-        vencimiento_soap: '',
-        compania_seguro: '',
-        numero_poliza: '',
-        tipo_cobertura_adicional: 'ninguna',
-        vencimiento_poliza: '',
-        numero_permiso_circulacion: '',
-        observaciones: '',
-        kilometraje_original: '',
+        patente: '', patente_verificador: '', marca: '', modelo: '', tipo_combustible: 'diesel',
+        color: '', anio: '', numero_serie: '', numero_motor: '', numero_chasis: '',
+        capacidad_pasajeros: '', fecha_adquisicion: '', estado: 'operativo', tipo_bus: 'simple',
+        cantidad_ejes: '2', marca_motor: '', modelo_motor: '', ubicacion_motor: 'trasero',
+        marca_chasis: '', modelo_chasis: '', marca_carroceria: '', modelo_carroceria: '',
+        proximo_mantenimiento_km: '', fecha_ultimo_mantenimiento: '', fecha_proximo_mantenimiento: '',
+        proxima_revision_tecnica: '', ultima_revision_tecnica: '', documento_revision_tecnica: '',
+        numero_soap: '', vencimiento_soap: '', compania_seguro: '', numero_poliza: '',
+        tipo_cobertura_adicional: 'ninguna', vencimiento_poliza: '', numero_permiso_circulacion: '',
+        observaciones: '', kilometraje_original: '',
       });
     }
     setOpenDialog(true);
@@ -249,14 +173,16 @@ export default function BusesPage() {
     try {
       if (editingBus) {
         await updateBus(editingBus.id, formData);
-        setSuccess('Bus actualizado exitosamente');
+        addNotification('success', 'Bus Actualizado', `La unidad patente ${formatPatente(formData.patente)} ha sido actualizada.`);
       } else {
         await createBus(formData);
-        setSuccess('Bus creado exitosamente');
+        addNotification('success', 'Bus Creado', `La nueva unidad patente ${formatPatente(formData.patente)} ha sido registrada.`);
       }
       loadBuses();
       handleCloseDialog();
+      setError(null);
     } catch (err) {
+      addNotification('error', 'Error', 'No se pudo guardar el bus.');
       setError('Error al guardar: ' + err.message);
     }
   };
@@ -265,12 +191,18 @@ export default function BusesPage() {
     if (window.confirm('¿Estás seguro de eliminar este bus?')) {
       try {
         await deleteBus(id);
-        setSuccess('Bus eliminado exitosamente');
+        addNotification('warning', 'Bus Eliminado', 'El registro del bus ha sido eliminado.');
         loadBuses();
+        setError(null);
       } catch (err) {
+        addNotification('error', 'Error', 'No se pudo eliminar el bus.');
         setError('Error al eliminar: ' + err.message);
       }
     }
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
   };
 
   const getEstadoColor = (estado) => {
@@ -283,522 +215,226 @@ export default function BusesPage() {
   };
 
   const getCoberturaLabel = (tipo) => {
-    const labels = {
-      'ninguna': 'Solo SOAP',
-      'terceros': 'Terceros',
-      'full': 'Full'
-    };
+    const labels = { 'ninguna': 'Solo SOAP', 'terceros': 'Terceros', 'full': 'Full' };
     return labels[tipo] || tipo;
   };
 
-  const marcas = Array.isArray(buses) ? [...new Set(buses.map(b => b.marca))].filter(Boolean) : [];
-  const anios = Array.isArray(buses) ? [...new Set(buses.map(b => b.anio))].sort((a, b) => b - a) : [];
-
-  const columns = [
-    { 
-      id: 'patente', 
-      label: 'Patente',
-      render: (row) => (
-        <span className="font-mono font-semibold text-blue-600">
-          {formatPatente(row.patente)}
-        </span>
-      )
-    },
-    { id: 'marca', label: 'Marca' },
-    { id: 'modelo', label: 'Modelo' },
-    { id: 'anio', label: 'Año' },
-    { 
-      id: 'tipo_combustible', 
-      label: 'Combustible',
-      render: (row) => (
-        <span className="capitalize">{row.tipo_combustible}</span>
-      )
-    },
-    { id: 'capacidad_pasajeros', label: 'Capacidad' },
-    {
-      id: 'estado',
-      label: 'Estado',
-      render: (row) => (
-        <span className={`px-3 py-1 rounded-full text-xs font-bold ${getEstadoColor(row.estado)}`}>
-          {row.estado}
-        </span>
-      ),
-    },
-    {
-      id: 'actions',
-      label: '',
-      render: (row) => (
-        <button
-          onClick={() => setExpandedRow(expandedRow === row.id ? null : row.id)}
-          className="text-blue-600 hover:text-blue-800 p-2"
-          title="Ver detalles"
-        >
-          {expandedRow === row.id ? <ChevronUp size={20} /> : <Eye size={20} />}
-        </button>
-      ),
-    },
-  ];
-
-  const renderExpandedRow = (bus) => (
-    <tr className="bg-gray-50">
-      <td colSpan="8" className="px-6 py-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {/* COLUMNA 1: IDENTIFICACIÓN */}
-          <div>
-            <h4 className="font-semibold text-gray-700 mb-3 border-b pb-2">Identificación</h4>
-            <div className="space-y-2 text-sm">
-              <div>
-                <span className="font-medium text-gray-600">Patente:</span>
-                <span className="ml-2 font-mono font-semibold text-blue-600">{formatPatente(bus.patente)}</span>
-              </div>
-              {bus.patente_verificador && (
-                <div>
-                  <span className="font-medium text-gray-600">Verificador:</span>
-                  <span className="ml-2">{bus.patente_verificador}</span>
-                </div>
-              )}
-              <div>
-                <span className="font-medium text-gray-600">Marca/Modelo:</span>
-                <span className="ml-2">{bus.marca} {bus.modelo}</span>
-              </div>
-              <div>
-                <span className="font-medium text-gray-600">Año:</span>
-                <span className="ml-2">{bus.anio}</span>
-              </div>
-              <div>
-                <span className="font-medium text-gray-600">Tipo:</span>
-                <span className="ml-2">
-                  {bus.tipo_bus === 'simple' ? 'Simple (1 Piso)' : 'Doble Piso'}
-                </span>
-              </div>
-              <div>
-                <span className="font-medium text-gray-600">Ejes:</span>
-                <span className="ml-2">{bus.cantidad_ejes || 'N/A'}</span>
-              </div>
-              <div>
-                <span className="font-medium text-gray-600">Combustible:</span>
-                <span className="ml-2 capitalize">{bus.tipo_combustible}</span>
-              </div>
-              {bus.numero_serie && (
-                <div>
-                  <span className="font-medium text-gray-600">N° Serie:</span>
-                  <span className="ml-2 font-mono text-xs">{bus.numero_serie}</span>
-                </div>
-              )}
-            </div>
-          </div>
-          {/* COLUMNA 2: COMPONENTES TECNICOS */}
-          <div>
-            <h4 className="font-semibold text-gray-700 mb-3 border-b pb-2">Componentes Técnicos</h4>
-
-            {/* MOTOR */}
-            {(bus.marca_motor || bus.modelo_motor || bus.ubicacion_motor) && (
-              <div className="mb-4">
-                <h5 className="text-xs font-semibold text-gray-500 uppercase mb-2">Motor</h5>
-                <div className="space-y-1 text-sm">
-                  {bus.marca_motor && (
-                    <div>
-                      <span className="font-medium text-gray-600">Marca:</span>
-                      <span className="ml-2">{bus.marca_motor}</span>
-                    </div>
-                  )}
-                  {bus.modelo_motor && (
-                    <div>
-                      <span className="font-medium text-gray-600">Modelo:</span>
-                      <span className="ml-2">{bus.modelo_motor}</span>
-                    </div>
-                  )}
-                  {bus.ubicacion_motor && (
-                    <div>
-                      <span className="font-medium text-gray-600">Ubicación:</span>
-                      <span className="ml-2 capitalize">{bus.ubicacion_motor}</span>
-                    </div>
-                  )}
-                  {bus.numero_motor && (
-                    <div>
-                      <span className="font-medium text-gray-600">N° Motor:</span>
-                      <span className="ml-2 font-mono text-xs">{bus.numero_motor}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            )}
-            {/* CHASIS */}
-            {(bus.marca_chasis || bus.modelo_chasis || bus.numero_chasis) && (
-              <div className="mb-4">
-                <h5 className="text-xs font-semibold text-gray-500 uppercase mb-2">Chasis</h5>
-                <div className="space-y-1 text-sm">
-                  {bus.marca_chasis && (
-                    <div>
-                      <span className="font-medium text-gray-600">Marca:</span>
-                      <span className="ml-2">{bus.marca_chasis}</span>
-                    </div>
-                  )}
-                  {bus.modelo_chasis && (
-                    <div>
-                      <span className="font-medium text-gray-600">Modelo:</span>
-                      <span className="ml-2">{bus.modelo_chasis}</span>
-                    </div>
-                  )}
-                  {bus.numero_chasis && (
-                    <div>
-                      <span className="font-medium text-gray-600">N° Chasis:</span>
-                      <span className="ml-2 font-mono text-xs">{bus.numero_chasis}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            {/* CARROCERÍA */}
-            {(bus.marca_carroceria || bus.modelo_carroceria) && (
-              <div>
-                <h5 className="text-xs font-semibold text-gray-500 uppercase mb-2">Carrocería</h5>
-                <div className="space-y-1 text-sm">
-                  {bus.marca_carroceria && (
-                    <div>
-                      <span className="font-medium text-gray-600">Marca:</span>
-                      <span className="ml-2">{bus.marca_carroceria}</span>
-                    </div>
-                  )}
-                  {bus.modelo_carroceria && (
-                    <div>
-                      <span className="font-medium text-gray-600">Modelo:</span>
-                      <span className="ml-2">{bus.modelo_carroceria}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          
-
-          {/* COLUMNA 3: OPERACIÓN y MANTENIMIENTO */}
-          <div>
-            <h4 className="font-semibold text-gray-700 mb-3 border-b pb-2">Operación</h4>
-            <div className="space-y-2 text-sm">
-              <div>
-                <span className="font-medium text-gray-600">Capacidad:</span>
-                <span className="ml-2">{bus.capacidad_pasajeros} pasajeros</span>
-              </div>
-              <div>
-                <span className="font-medium text-gray-600">Km Original:</span>
-                <span className="ml-2">{bus.kilometraje_original?.toLocaleString() || 0} km</span>
-              </div>
-              <div>
-                <span className="font-medium text-gray-600">Km Recorridos:</span>
-                <span className="ml-2">{((bus.kilometraje_actual || 0) - (bus.kilometraje_original || 0)).toLocaleString()} km</span>
-              </div>
-              {bus.fecha_adquisicion && (
-                <div>
-                  <span className="font-medium text-gray-600">Adquisición:</span>
-                  <span className="ml-2">{formatDate(bus.fecha_adquisicion)}</span>
-                </div>
-              )}
-              <div>
-                <span className="font-medium text-gray-600">Estado:</span>
-                <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${getEstadoColor(bus.estado)}`}>
-                  {bus.estado}
-                </span>
-              </div>
-            </div>
-            {/* MANTENIMIENTO */}
-            {(bus.proximo_mantenimiento_km || bus.fecha_ultimo_mantenimiento || bus.fecha_proximo_mantenimiento) && (
-              <>
-                <h4 className="font-semibold text-gray-700 mt-4 mb-2 border-b pb-2">Mantenimiento</h4>
-                <div className="space-y-2 text-sm">
-                  {bus.proximo_mantenimiento_km && (
-                    <div>
-                      <span className="font-medium text-gray-600">Cada:</span>
-                      <span className="ml-2">{bus.proximo_mantenimiento_km.toLocaleString()} km</span>
-                    </div>
-                  )}
-                  {bus.fecha_ultimo_mantenimiento && (
-                    <div>
-                      <span className="font-medium text-gray-600">Último:</span>
-                      <span className="ml-2">{formatDate(bus.fecha_ultimo_mantenimiento)}</span>
-                    </div>
-                  )}
-                  {bus.fecha_proximo_mantenimiento && (
-                    <div>
-                      <span className="font-medium text-gray-600">Próximo:</span>
-                      <span className="ml-2">{formatDate(bus.fecha_proximo_mantenimiento)}</span>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* REVISIÓN TÉCNICA */}
-            <h4 className="font-semibold text-gray-700 mt-4 mb-2 border-b pb-2">Revisión Técnica</h4>
-            <div className="space-y-2 text-sm">
-              {bus.ultima_revision_tecnica && (
-                <div>
-                  <span className="font-medium text-gray-600">Última:</span>
-                  <span className="ml-2">{formatDate(bus.ultima_revision_tecnica)}</span>
-                </div>
-              )}
-              {bus.proxima_revision_tecnica && (
-                <div>
-                  <span className="font-medium text-gray-600">Próxima:</span>
-                  <span className="ml-2">{formatDate(bus.proxima_revision_tecnica)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* COLUMNA 3: SEGUROS */}
-          <div>
-            <h4 className="font-semibold text-gray-700 mb-3 border-b pb-2">Seguros y Documentos</h4>
-            
-            {/* SOAP */}
-            <div className="mb-4">
-              <h5 className="text-xs font-semibold text-gray-500 uppercase mb-2">SOAP</h5>
-              <div className="space-y-2 text-sm">
-                {bus.numero_soap && (
-                  <div>
-                    <span className="font-medium text-gray-600">N° SOAP:</span>
-                    <span className="ml-2 font-mono text-xs">{bus.numero_soap}</span>
-                  </div>
-                )}
-                {bus.vencimiento_soap && (
-                  <div>
-                    <span className="font-medium text-gray-600">Vencimiento:</span>
-                    <span className="ml-2">{formatDate(bus.vencimiento_soap)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* COBERTURA ADICIONAL */}
-            <div>
-              <h5 className="text-xs font-semibold text-gray-500 uppercase mb-2">Cobertura Adicional</h5>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <span className="font-medium text-gray-600">Tipo:</span>
-                  <span className="ml-2">{getCoberturaLabel(bus.tipo_cobertura_adicional)}</span>
-                </div>
-                {bus.compania_seguro && (
-                  <div>
-                    <span className="font-medium text-gray-600">Compañía:</span>
-                    <span className="ml-2">{bus.compania_seguro}</span>
-                  </div>
-                )}
-                {bus.numero_poliza && (
-                  <div>
-                    <span className="font-medium text-gray-600">N° Póliza:</span>
-                    <span className="ml-2 font-mono text-xs">{bus.numero_poliza}</span>
-                  </div>
-                )}
-                {bus.vencimiento_poliza && (
-                  <div>
-                    <span className="font-medium text-gray-600">Vencimiento:</span>
-                    <span className="ml-2">{formatDate(bus.vencimiento_poliza)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* PERMISOS */}
-            {bus.numero_permiso_circulacion && (
-              <div className="mt-4">
-                <h5 className="text-xs font-semibold text-gray-500 uppercase mb-2">Permisos</h5>
-                <div className="text-sm">
-                  <span className="font-medium text-gray-600">Permiso Circulación:</span>
-                  <span className="ml-2 font-mono text-xs">{bus.numero_permiso_circulacion}</span>
-                </div>
-              </div>
-            )}
-
-            {/* OBSERVACIONES */}
-            {bus.observaciones && (
-              <div className="mt-4">
-                <h5 className="text-xs font-semibold text-gray-500 uppercase mb-2">Observaciones</h5>
-                <p className="text-sm text-gray-600 bg-white p-2 rounded border">
-                  {bus.observaciones}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </td>
-    </tr>
-  );
-
-  return (
-    <div className="p-8 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Buses</h1>
-          <p className="text-gray-600 mt-2">Administra la flota de buses de la empresa</p>
-        </div>
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={() => handleOpenDialog()}
-          className="flex items-center gap-2"
-        >
-          <Plus size={20} />
-          Nuevo Bus
-        </Button>
-      </div>
-
-      {/* Success Message */}
-      {success && (
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6 flex items-center justify-between">
-          <span>{success}</span>
-          <button onClick={() => setSuccess(null)} className="text-green-700 hover:text-green-900">
-            <X size={18} />
-          </button>
-        </div>
-      )}
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-700 hover:text-red-900">
-            <X size={18} />
-          </button>
-        </div>
-      )}
-
-      {/* Filtros */}
-      <div className="mb-6">
-        <Button
-          variant="outline"
-          onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center gap-2 mb-4"
-        >
-          <Filter size={18} />
-          {showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}
-        </Button>
-
-        {showFilters && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <Input
-                label="Buscar por Patente"
-                value={filters.patente}
-                onChange={(e) => handleFilterChange('patente', e.target.value)}
-                placeholder="ABCD12"
-              />
-
-              <Select
-                label="Estado"
-                options={[
-                  { id: '', label: 'Todos' },
-                  ...ESTADOS_BUS.map(e => ({ id: e, label: e.charAt(0).toUpperCase() + e.slice(1) }))
-                ]}
-                value={filters.estado}
-                onChange={(e) => handleFilterChange('estado', e.target.value)}
-              />
-
-              <Select
-                label="Año"
-                options={[
-                  { id: '', label: 'Todos' },
-                  ...anios.map(a => ({ id: a, label: a }))
-                ]}
-                value={filters.anio}
-                onChange={(e) => handleFilterChange('anio', e.target.value)}
-              />
-
-              <Select
-                label="Marca"
-                options={[
-                  { id: '', label: 'Todos' },
-                  ...marcas.map(m => ({ id: m, label: m }))
-                ]}
-                value={filters.marca}
-                onChange={(e) => handleFilterChange('marca', e.target.value)}
-              />
-            </div>
-
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleClearFilters}
-              className="flex items-center gap-2"
-            >
-              <X size={16} />
-              Limpiar Filtros
-            </Button>
-          </div>
-        )}
-
-        <div className="text-sm text-gray-600 mb-4">
-          Resultados: <strong>{filteredBuses.length}</strong> buses
-        </div>
-      </div>
-
-      {/* Tabla con filas expandibles */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-100">
+  // --- RENDERIZADO DE TABLA ---
+  const renderBusesTable = () => {
+    return (
+      <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+        <table className="w-full">
+          <thead className="bg-gray-100 border-b border-gray-200">
             <tr>
-              {columns.map((col) => (
-                <th
-                  key={col.id}
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  {col.label}
-                </th>
-              ))}
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Acciones
-              </th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Patente</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Marca</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Modelo</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Año</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Combustible</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Capacidad</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
+              <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">Acciones</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
-              <tr>
-                <td colSpan={columns.length + 1} className="px-6 py-4 text-center text-gray-500">
-                  Cargando...
-                </td>
-              </tr>
-            ) : filteredBuses.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length + 1} className="px-6 py-4 text-center text-gray-500">
-                  No hay buses registrados
-                </td>
-              </tr>
+            {paginatedData.length === 0 ? (
+              <tr><td colSpan="8" className="px-6 py-8 text-center text-gray-500">No se encontraron buses</td></tr>
             ) : (
-              filteredBuses.map((bus) => (
+              paginatedData.map((bus) => (
                 <React.Fragment key={bus.id}>
-                  <tr className="hover:bg-gray-50">
-                    {columns.map((col) => (
-                      <td key={col.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {col.render ? col.render(bus) : bus[col.id]}
-                      </td>
-                    ))}
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleOpenDialog(bus)}
-                        className="mr-2"
-                      >
-                        Editar
-                      </Button>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => handleDelete(bus.id)}
-                      >
-                        Eliminar
-                      </Button>
+                  {/* Fila Principal */}
+                  <tr 
+                    className="hover:bg-gray-100 transition-colors even:bg-gray-50 cursor-pointer"
+                    onClick={() => setExpandedRow(expandedRow === bus.id ? null : bus.id)}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="font-mono font-bold text-blue-600 text-sm">{formatPatente(bus.patente)}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bus.marca}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bus.modelo}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bus.anio}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 capitalize">{bus.tipo_combustible}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bus.capacidad_pasajeros} pax</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(bus.estado)}`}>
+                        {bus.estado}
+                      </span>
+                    </td>
+                    
+                    {/* Botones de Acción */}
+                    <td className="px-6 py-4 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => handleOpenDialog(bus)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors font-medium"
+                          title="Editar"
+                        >
+                          <Edit2 size={16} /> Editar
+                        </button>
+                        <button
+                          onClick={() => handleDelete(bus.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 transition-colors font-medium"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={16} /> Eliminar
+                        </button>
+                        <button
+                          onClick={() => setExpandedRow(expandedRow === bus.id ? null : bus.id)}
+                          className="flex items-center justify-center w-9 h-9 bg-gray-100 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-200 transition-colors ml-1"
+                          title="Ver detalles"
+                        >
+                          {expandedRow === bus.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                  {expandedRow === bus.id && renderExpandedRow(bus)}
+
+                  {/* Fila Expandida (Detalle) */}
+                  {expandedRow === bus.id && (
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <td colSpan="8" className="px-6 py-6 cursor-default">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm">
+                          
+                          {/* 1. Identificación */}
+                          <div className="space-y-2">
+                            <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><Bus size={16}/> Identificación</h4>
+                            <p><span className="text-gray-500">Verificador:</span> {bus.patente_verificador || '-'}</p>
+                            <p><span className="text-gray-500">Tipo:</span> {bus.tipo_bus === 'simple' ? 'Simple (1 Piso)' : 'Doble Piso'}</p>
+                            <p><span className="text-gray-500">Ejes:</span> {bus.cantidad_ejes}</p>
+                            <p><span className="text-gray-500">N° Serie:</span> {bus.numero_serie}</p>
+                          </div>
+
+                          {/* 2. Componentes Técnicos */}
+                          <div className="space-y-2">
+                            <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><Fuel size={16}/> Ficha Técnica</h4>
+                            <p><span className="text-gray-500">Motor:</span> {bus.marca_motor} {bus.modelo_motor}</p>
+                            <p><span className="text-gray-500">Chasis:</span> {bus.marca_chasis} {bus.modelo_chasis}</p>
+                            <p><span className="text-gray-500">Carrocería:</span> {bus.marca_carroceria} {bus.modelo_carroceria}</p>
+                            <p><span className="text-gray-500">Ubicación Motor:</span> {bus.ubicacion_motor}</p>
+                          </div>
+
+                          {/* 3. Operación */}
+                          <div className="space-y-2">
+                            <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><Calendar size={16}/> Operación</h4>
+                            <p><span className="text-gray-500">Adquisición:</span> {formatDate(bus.fecha_adquisicion)}</p>
+                            <p><span className="text-gray-500">Km Actual:</span> {((bus.kilometraje_actual || 0)).toLocaleString()} km</p>
+                            <p><span className="text-gray-500">Mantención:</span> Cada {bus.proximo_mantenimiento_km?.toLocaleString()} km</p>
+                            <p><span className="text-gray-500">Prox. Mantención:</span> {formatDate(bus.fecha_proximo_mantenimiento)}</p>
+                          </div>
+
+                          {/* 4. Documentación */}
+                          <div className="space-y-2">
+                            <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><AlertCircle size={16}/> Documentos</h4>
+                            <p><span className="text-gray-500">Rev. Técnica:</span> {formatDate(bus.proxima_revision_tecnica)}</p>
+                            <p><span className="text-gray-500">SOAP:</span> {formatDate(bus.vencimiento_soap)}</p>
+                            <p><span className="text-gray-500">Seguro:</span> {getCoberturaLabel(bus.tipo_cobertura_adicional)}</p>
+                            {bus.observaciones && (
+                              <div className="mt-2 p-2 bg-white border border-gray-200 rounded text-xs text-gray-600 italic">
+                                {bus.observaciones}
+                              </div>
+                            )}
+                          </div>
+
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </React.Fragment>
               ))
             )}
           </tbody>
         </table>
       </div>
+    );
+  };
+
+  return (
+    <div className="p-8 bg-gray-50 min-h-screen">
+      
+      {/* HEADER CARD NUEVO */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Gestión de Buses</h1>
+            <p className="mt-2 text-slate-300 max-w-xl">Administra la flota de buses de la empresa.</p>
+          </div>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => handleOpenDialog()}
+            className="flex items-center gap-2 shadow-lg"
+          >
+            <Plus size={20} />
+            Nuevo Bus
+          </Button>
+        </div>
+        <Bus className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
+      </div>
+
+      {/* Error - Se mantiene solo para errores persistentes de carga, no para éxito/acciones */}
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)}><X size={18} /></button>
+        </div>
+      )}
+
+      {/* BUSCADOR UNIFICADO */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Buscar por patente, marca, modelo o año..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          />
+          {searchTerm && (
+            <button 
+              onClick={handleClearSearch}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabla */}
+      {loading ? (
+        <div className="text-center py-8 text-gray-500">Cargando...</div>
+      ) : (
+        renderBusesTable()
+      )}
+
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <div className="flex justify-between items-center mt-6">
+          <span className="text-sm text-gray-700">
+            Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
+            <span className="ml-2 text-gray-500">(Total: {filteredBuses.length} buses)</span>
+          </span>
+          <div className="flex gap-2">
+            <Button 
+              variant="secondary" 
+              onClick={() => setCurrentPage(prev => prev - 1)} 
+              disabled={currentPage === 1}
+              className="flex items-center gap-1.5"
+            >
+              <ChevronDown className="rotate-90" size={16}/> Anterior
+            </Button>
+            <Button 
+              variant="secondary" 
+              onClick={() => setCurrentPage(prev => prev + 1)} 
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-1.5"
+            >
+              Siguiente <ChevronDown className="-rotate-90" size={16}/>
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Dialog */}
       <FormDialog
@@ -872,7 +508,6 @@ export default function BusesPage() {
             required
           />
           
-          
           <Input
             label="Año Fabricación *"
             type="number"
@@ -897,7 +532,7 @@ export default function BusesPage() {
             onChange={(e) => setFormData({ ...formData, numero_serie: e.target.value })}
           />
 
-          {/*motor*/}
+          {/* MOTOR */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Motor</h3>
           </div>
@@ -923,10 +558,11 @@ export default function BusesPage() {
             onChange={(e) => setFormData({ ...formData, ubicacion_motor: e.target.value })}
           />
           <Input
-            label="numero motor"
+            label="Número Motor"
             value={formData.numero_motor}
             onChange={(e) => setFormData({ ...formData, numero_motor: e.target.value })}
           />
+
           {/* CHASIS */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Chasis</h3>
@@ -948,9 +584,9 @@ export default function BusesPage() {
             value={formData.numero_chasis}
             onChange={(e) => setFormData({ ...formData, numero_chasis: e.target.value })}
           />
-          <div></div> {/*espaciador*/}
+          <div></div>
 
-          {/*carrocería*/}
+          {/* CARROCERÍA */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Carrocería</h3>
           </div>
@@ -967,6 +603,9 @@ export default function BusesPage() {
             placeholder="Ej: Paradiso, Apache"
           />
 
+          <div className="md:col-span-2 mt-4">
+            <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Estado y Operación</h3>
+          </div>
 
           <Input
             label="Fecha Adquisición"
@@ -982,7 +621,6 @@ export default function BusesPage() {
             required
           />
           
-          {/* KILOMETRAJE */}
           <Input
             label="Km Original"
             type="number"
@@ -990,6 +628,7 @@ export default function BusesPage() {
             onChange={(e) => setFormData({ ...formData, kilometraje_original: parseInt(e.target.value) || 0 })}
             min={0}
           />
+
           {/* MANTENIMIENTO */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Mantenimiento</h3>
@@ -1016,7 +655,7 @@ export default function BusesPage() {
             onChange={(e) => setFormData({ ...formData, fecha_proximo_mantenimiento: e.target.value })}
             helpText="Para alertas en dashboard"
           />
-          <div></div> {/*espaciador*/}
+          <div></div>
           
           {/* REVISIÓN TÉCNICA */}
           <div className="md:col-span-2 mt-4">

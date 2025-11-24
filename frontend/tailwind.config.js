@@ -5,7 +5,12 @@ export default {
     "./src/**/*.{js,jsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      // 3. EXTENDER LA FAMILIA DE FUENTES
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'], // Esto reemplaza la fuente por defecto
+      },
+    },
   },
   plugins: [],
 }

@@ -12,8 +12,12 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('empleado_id')->unique();
             $table->string('numero_certificacion', 50)->nullable();
-            $table->string('especialidad', 100)->nullable();
+            
+            // CAMBIO: json en lugar de string para soportar múltiples especialidades
+            $table->json('especialidad')->nullable(); 
+            
             $table->date('fecha_certificacion')->nullable();
+            $table->date('fecha_examen_ocupacional')->nullable();
             $table->enum('estado', ['activo', 'inactivo', 'suspendido'])->default('activo');
             $table->text('observaciones')->nullable();
             $table->timestamps();

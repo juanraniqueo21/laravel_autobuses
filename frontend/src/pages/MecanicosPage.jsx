@@ -1,26 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Search, X, ChevronLeft, ChevronRight, Wrench, AlertCircle } from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import Button from '../components/common/Button';
+import MultiSelect from '../components/common/MultiSelect'; 
 import { fetchMecanicos, fetchEmpleados, createMecanico, updateMecanico, deleteMecanico } from '../services/api';
+import usePagination from '../hooks/usePagination';
+import { useNotifications } from '../context/NotificationContext';
 
 const ESTADOS_MECANICO = ['activo', 'inactivo', 'suspendido'];
 const ESPECIALIDADES = ['Motor', 'Hidráulica', 'Electricidad', 'Frenos', 'Suspensión', 'Transmisión', 'General'];
 
 export default function MecanicosPage() {
+  // ==========================================
+  // 1. ESTADOS
+  // ==========================================
   const [mecanicos, setMecanicos] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingMecanico, setEditingMecanico] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // --- HOOK DE NOTIFICACIONES ---
+  const { addNotification } = useNotifications();
+  
   const [formData, setFormData] = useState({
     empleado_id: '',
     numero_certificacion: '',
-    especialidad: '',
+    especialidad: [],
     fecha_certificacion: '',
     fecha_examen_ocupacional: '', 
     estado: 'activo',
@@ -31,6 +42,9 @@ export default function MecanicosPage() {
     loadData();
   }, []);
 
+  // ==========================================
+  // 2. CARGA DE DATOS
+  // ==========================================
   const loadData = async () => {
     try {
       setLoading(true);
@@ -38,26 +52,71 @@ export default function MecanicosPage() {
         fetchMecanicos(),
         fetchEmpleados(),
       ]);
-      setMecanicos(mecanicosData);
-      setEmpleados(empleadosData);
-      
+      setMecanicos(Array.isArray(mecanicosData) ? mecanicosData : []);
+      setEmpleados(Array.isArray(empleadosData) ? empleadosData : []);
       setError(null);
     } catch (err) {
       setError('Error al cargar datos: ' + err.message);
+      addNotification('error', 'Error', 'No se pudieron cargar los datos de los mecánicos.');
     } finally {
       setLoading(false);
     }
   };
 
+  // ==========================================
+  // 3. LÓGICA DE FILTRO Y PAGINACIÓN
+  // ==========================================
+  const getFilteredData = () => {
+    let data = [...mecanicos].sort((a, b) => b.id - a.id);
+
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      data = data.filter(m => {
+        const nombre = getEmpleadoNombre(m.empleado_id).toLowerCase();
+        const cert = (m.numero_certificacion || '').toLowerCase();
+        let specs = '';
+        if (Array.isArray(m.especialidad)) specs = m.especialidad.join(' ');
+        else if (typeof m.especialidad === 'string') specs = m.especialidad;
+        
+        return nombre.includes(term) || cert.includes(term) || specs.toLowerCase().includes(term);
+      });
+    }
+    return data;
+  };
+
+  const filteredData = getFilteredData();
+  const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(filteredData, 10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // ==========================================
+  // 4. HANDLERS
+  // ==========================================
   const handleOpenDialog = (mecanico = null) => {
     if (mecanico) {
       setEditingMecanico(mecanico);
+      
+      let especialidadesArray = [];
+      if (Array.isArray(mecanico.especialidad)) {
+        especialidadesArray = mecanico.especialidad;
+      } else if (typeof mecanico.especialidad === 'string' && mecanico.especialidad.startsWith('[')) {
+          try {
+            especialidadesArray = JSON.parse(mecanico.especialidad);
+          } catch (e) {
+             especialidadesArray = [mecanico.especialidad];
+          }
+      } else if (mecanico.especialidad) {
+        especialidadesArray = [mecanico.especialidad];
+      }
+
       setFormData({
         empleado_id: mecanico.empleado_id,
         numero_certificacion: mecanico.numero_certificacion || '',
-        especialidad: mecanico.especialidad || '',
-        fecha_certificacion: mecanico.fecha_certificacion || '',
-        fecha_examen_ocupacional: mecanico.fecha_examen_ocupacional || '',
+        especialidad: especialidadesArray,
+        fecha_certificacion: mecanico.fecha_certificacion ? mecanico.fecha_certificacion.split('T')[0] : '',
+        fecha_examen_ocupacional: mecanico.fecha_examen_ocupacional ? mecanico.fecha_examen_ocupacional.split('T')[0] : '',
         estado: mecanico.estado || 'activo',
         observaciones: mecanico.observaciones || '',
       });
@@ -66,7 +125,7 @@ export default function MecanicosPage() {
       setFormData({
         empleado_id: '',
         numero_certificacion: '',
-        especialidad: '',
+        especialidad: [],
         fecha_certificacion: '',
         fecha_examen_ocupacional: '',
         estado: 'activo',
@@ -85,12 +144,16 @@ export default function MecanicosPage() {
     try {
       if (editingMecanico) {
         await updateMecanico(editingMecanico.id, formData);
+        const nombre = getEmpleadoNombre(formData.empleado_id);
+        addNotification('success', 'Mecánico Actualizado', `Los datos de ${nombre} han sido actualizados.`);
       } else {
         await createMecanico(formData);
+        addNotification('success', 'Nuevo Mecánico', 'El mecánico ha sido registrado exitosamente.');
       }
       loadData();
       handleCloseDialog();
     } catch (err) {
+      addNotification('error', 'Error', 'No se pudieron guardar los datos.');
       setError('Error al guardar: ' + err.message);
     }
   };
@@ -99,13 +162,16 @@ export default function MecanicosPage() {
     if (window.confirm('¿Estás seguro de eliminar este mecánico?')) {
       try {
         await deleteMecanico(id);
+        addNotification('warning', 'Mecánico Eliminado', 'El registro ha sido eliminado del sistema.');
         loadData();
       } catch (err) {
+        addNotification('error', 'Error', 'No se pudo eliminar el mecánico.');
         setError('Error al eliminar: ' + err.message);
       }
     }
   };
 
+  // Helpers
   const getEmpleadoNombre = (empleadoId) => {
     const emp = empleados.find(e => e.id === empleadoId) || 
                 mecanicos.find(m => m.empleado_id === empleadoId)?.empleado;
@@ -128,104 +194,164 @@ export default function MecanicosPage() {
   
   const getEmpleadosDisponibles = () => {
     return empleados.filter(empleado => {
-      // 1. solo empleados activos
-      if (empleado.estado !== 'activo') {
-        return false;
-      }
-      // 2. solo rol mecanico(4)
-      if (empleado.user?.rol_id !== 4) {
-        return false;
-      }
-      // 3. empleados que no son ya mecanicos
+      if (empleado.estado !== 'activo') return false;
+      if (empleado.user?.rol_id !== 4) return false;
+      
       const yaEsMecanicoActivo = mecanicos.some(
         m => m.empleado_id === empleado.id && m.estado === 'activo'
       );
-      // si estamos editando, permitir el empleado actual
+      
       if (editingMecanico && empleado.id === editingMecanico.empleado_id) {
         return true;
       }
       return !yaEsMecanicoActivo;
     });
   };
-  
-  console.log('🔍 empleados totales:', empleados.length);
-  console.log('🔍 empleados disponibles:', getEmpleadosDisponibles().length);
-  console.log('🔍 mecanicos activos:', mecanicos.filter(m => m.estado === 'activo').length);
 
+  // Columnas
   const columns = [
     { 
       id: 'empleado_id', 
       label: 'Nombre', 
-      render: (row) => getEmpleadoNombre(row.empleado_id) 
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <Wrench size={16} className="text-gray-400" />
+          <span className="font-medium text-gray-900">{getEmpleadoNombre(row.empleado_id)}</span>
+        </div>
+      )
     },
-    { id: 'especialidad', label: 'Especialidad' },
+    { 
+      id: 'especialidad', 
+      label: 'Especialidades',
+      render: (row) => {
+        const specs = Array.isArray(row.especialidad) 
+           ? row.especialidad 
+           : (row.especialidad ? [row.especialidad] : []);
+           
+        return (
+          <div className="flex flex-wrap gap-1">
+            {specs.map((esp, idx) => (
+              <span key={idx} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium border border-blue-100">
+                {esp}
+              </span>
+            ))}
+          </div>
+        );
+      }
+    },
     { id: 'numero_certificacion', label: 'Certificación' },
     { 
       id: 'fecha_certificacion', 
-      label: 'Fecha Certificación',
+      label: 'F. Certificación',
       render: (row) => formatDate(row.fecha_certificacion)
-    },
-    { 
-      id: 'fecha_examen_ocupacional', 
-      label: 'Examen Ocupacional',
-      render: (row) => formatDate(row.fecha_examen_ocupacional)
     },
     {
       id: 'estado',
       label: 'Estado',
       render: (row) => (
-        <span className={`px-3 py-1 rounded-full text-xs font-bold ${getEstadoColor(row.estado)}`}>
+        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(row.estado)}`}>
           {row.estado}
         </span>
       ),
     },
   ];
-  
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Mecánicos</h1>
-          <p className="text-gray-600 mt-2">Administra los mecánicos de la empresa</p>
+      {/* HEADER CARD */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Gestión de Mecánicos</h1>
+            <p className="mt-2 text-slate-300 max-w-xl">Administra el personal técnico y sus especialidades.</p>
+          </div>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={() => handleOpenDialog()}
+            className="flex items-center gap-2 shadow-lg"
+          >
+            <Plus size={20} />
+            Nuevo Mecánico
+          </Button>
         </div>
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={() => handleOpenDialog()}
-          className="flex items-center gap-2"
-          //disabled={getEmpleadosDisponibles && getEmpleadosDisponibles().length === 0}
-        >
-          <Plus size={20} />
-          Nuevo Mecánico
-        </Button>
+        <Wrench className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Mensaje si no hay empleados disponibles */}
       {empleados.length === 0 && !loading && (
-        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-6">
-          No hay empleados disponibles para asignar como mecánicos.
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-6 flex items-center gap-2">
+          <AlertCircle size={20} />
+          <span>No hay empleados disponibles para asignar como mecánicos.</span>
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
           {error}
         </div>
       )}
 
-      {/* Tabla */}
-      <Table
-        columns={columns}
-        data={mecanicos}
-        loading={loading}
-        onEdit={handleOpenDialog}
-        onDelete={handleDelete}
-      />
+      {/* Buscador */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Buscar por nombre, certificación o especialidad..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
 
-      {/* Dialog */}
+      {/* Tabla */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <Table
+          columns={columns}
+          data={paginatedData}
+          loading={loading}
+          onEdit={handleOpenDialog}
+          onDelete={handleDelete}
+        />
+      </div>
+
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <div className="flex justify-between items-center mt-6">
+          <span className="text-sm text-gray-700">
+            Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
+            <span className="ml-2">(Total: {filteredData.length} registros)</span>
+          </span>
+          <div className="flex gap-2">
+            <Button 
+              variant="secondary" 
+              onClick={() => setCurrentPage(prev => prev - 1)} 
+              disabled={currentPage === 1}
+              className="flex items-center gap-1"
+            >
+              <ChevronLeft size={16} /> Anterior
+            </Button>
+            <Button 
+              variant="secondary" 
+              onClick={() => setCurrentPage(prev => prev + 1)} 
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-1"
+            >
+              Siguiente <ChevronRight size={16} />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <FormDialog
         isOpen={openDialog}
         title={editingMecanico ? 'Editar Mecánico' : 'Nuevo Mecánico'}
@@ -233,7 +359,7 @@ export default function MecanicosPage() {
         onCancel={handleCloseDialog}
       >
         <Select
-          label="Empleado"
+          label="Empleado *"
           options={[
             { id: '', label: 'Seleccione un empleado' },
             ...getEmpleadosDisponibles().map(emp => ({
@@ -244,16 +370,14 @@ export default function MecanicosPage() {
           value={formData.empleado_id}
           onChange={(e) => setFormData({ ...formData, empleado_id: e.target.value })}
           required
+          disabled={!!editingMecanico} 
         />
 
-        <Select
-          label="Especialidad"
-          options={[
-            { id: '', label: 'Seleccione especialidad' },
-            ...ESPECIALIDADES.map(esp => ({ id: esp, label: esp }))
-          ]}
+        <MultiSelect
+          label="Especialidades *"
+          options={ESPECIALIDADES.map(esp => ({ id: esp, label: esp }))}
           value={formData.especialidad}
-          onChange={(e) => setFormData({ ...formData, especialidad: e.target.value })}
+          onChange={(newValue) => setFormData({ ...formData, especialidad: newValue })}
           required
         />
 
@@ -280,8 +404,8 @@ export default function MecanicosPage() {
         </div>
 
         <Select
-          label="Estado"
-          options={ESTADOS_MECANICO.map(e => ({ id: e, label: e }))}
+          label="Estado *"
+          options={ESTADOS_MECANICO.map(e => ({ id: e, label: e.charAt(0).toUpperCase() + e.slice(1) }))}
           value={formData.estado}
           onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
           required

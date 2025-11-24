@@ -1,12 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, MapPin, Trash2, Edit2, Save, X } from 'lucide-react';
+import { ArrowLeft, Plus, MapPin, Trash2, Edit2, Save, X, Map, Clock } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
-import { 
-  fetchRutaById, 
-  guardarParadasRuta, 
-  updateRuta,
-} from '../services/api';
+import { fetchRutaById, guardarParadasRuta, updateRuta } from '../services/api';
 
 export default function RutaDetallePage({ rutaId, onClose }) {
   const [ruta, setRuta] = useState(null);
@@ -14,495 +10,175 @@ export default function RutaDetallePage({ rutaId, onClose }) {
   const [error, setError] = useState(null);
   const [editingParadas, setEditingParadas] = useState(false);
   const [editingInfo, setEditingInfo] = useState(false);
-  const [infoData, setInfoData] = useState({
-    nombre_ruta: '',
-    codigo_ruta: '',
-    origen: '',
-    destino: '',
-    descripcion: '',
-    estado: '',
-  });
-
+  const [infoData, setInfoData] = useState({});
   const [paradas, setParadas] = useState([]);
 
-  useEffect(() => {
-    loadRuta();
-  }, [rutaId]);
+  useEffect(() => { loadRuta(); }, [rutaId]);
 
   const loadRuta = async () => {
     try {
       setLoading(true);
       const data = await fetchRutaById(rutaId);
       setRuta(data);
-
-      // cargar datos para edicion
       setInfoData({
-        nombre_ruta: data.nombre_ruta,
-        codigo_ruta: data.codigo_ruta,
-        origen: data.origen,
-        destino: data.destino,
-        descripcion: data.descripcion || '',
-        estado: data.estado,
+        nombre_ruta: data.nombre_ruta, codigo_ruta: data.codigo_ruta,
+        origen: data.origen, destino: data.destino,
+        descripcion: data.descripcion || '', estado: data.estado,
       });
-      
       if (data.paradas && data.paradas.length > 0) {
         setParadas(data.paradas);
       } else {
         setParadas([
-          {
-            ciudad: data.origen,
-            orden: 1,
-            es_origen: true,
-            es_destino: false,
-            distancia_desde_anterior_km: 0,
-            tiempo_desde_anterior_min: 0,
-            tarifa_adulto: 0,
-            tarifa_estudiante: 0,
-            tarifa_tercera_edad: 0,
-          },
-          {
-            ciudad: data.destino,
-            orden: 2,
-            es_origen: false,
-            es_destino: true,
-            distancia_desde_anterior_km: 0,
-            tiempo_desde_anterior_min: 0,
-            tarifa_adulto: 0,
-            tarifa_estudiante: 0,
-            tarifa_tercera_edad: 0,
-          },
+          { ciudad: data.origen, orden: 1, es_origen: true, es_destino: false, distancia_desde_anterior_km: 0, tiempo_desde_anterior_min: 0, tarifa_adulto: 0, tarifa_estudiante: 0, tarifa_tercera_edad: 0 },
+          { ciudad: data.destino, orden: 2, es_origen: false, es_destino: true, distancia_desde_anterior_km: 0, tiempo_desde_anterior_min: 0, tarifa_adulto: 0, tarifa_estudiante: 0, tarifa_tercera_edad: 0 },
         ]);
       }
-
       setError(null);
-    } catch (err) {
-      setError('Error al cargar ruta: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError('Error al cargar ruta: ' + err.message); } finally { setLoading(false); }
   };
 
   const agregarParadaIntermedia = () => {
-    const nuevasParadas = [...paradas];
-    
-    nuevasParadas.splice(nuevasParadas.length - 1, 0, {
-      ciudad: '',
-      orden: nuevasParadas.length,
-      es_origen: false,
-      es_destino: false,
-      distancia_desde_anterior_km: 0,
-      tiempo_desde_anterior_min: 0,
-      tarifa_adulto: 0,
-      tarifa_estudiante: 0,
-      tarifa_tercera_edad: 0,
-    });
-
-    nuevasParadas.forEach((p, index) => {
-      p.orden = index + 1;
-    });
-
-    setParadas(nuevasParadas);
+    const nuevas = [...paradas];
+    nuevas.splice(nuevas.length - 1, 0, { ciudad: '', orden: nuevas.length, es_origen: false, es_destino: false, distancia_desde_anterior_km: 0, tiempo_desde_anterior_min: 0, tarifa_adulto: 0, tarifa_estudiante: 0, tarifa_tercera_edad: 0 });
+    nuevas.forEach((p, i) => p.orden = i + 1);
+    setParadas(nuevas);
   };
-
-  const actualizarParada = (index, field, value) => {
-    const nuevasParadas = [...paradas];
-    nuevasParadas[index][field] = value;
-    setParadas(nuevasParadas);
-  };
-
+  
+  const actualizarParada = (i, f, v) => { const n = [...paradas]; n[i][f] = v; setParadas(n); };
+  
   const eliminarParada = (index) => {
-    if (paradas[index].es_origen || paradas[index].es_destino) {
-      alert('No se puede eliminar el origen o destino');
-      return;
-    }
-
-    const nuevasParadas = paradas.filter((_, i) => i !== index);
-    
-    nuevasParadas.forEach((p, i) => {
-      p.orden = i + 1;
-    });
-
-    setParadas(nuevasParadas);
+    if (paradas[index].es_origen || paradas[index].es_destino) return;
+    const n = paradas.filter((_, i) => i !== index);
+    n.forEach((p, i) => p.orden = i + 1);
+    setParadas(n);
   };
+  
+  const guardarParadas = async () => { try { await guardarParadasRuta(rutaId, { paradas }); setEditingParadas(false); loadRuta(); } catch (e) { alert(e.message); } };
+  const guardarInfo = async () => { try { await updateRuta(rutaId, infoData); setEditingInfo(false); loadRuta(); } catch (e) { alert(e.message); } };
 
-  const guardarParadas = async () => {
-    try {
-      const paradaVacia = paradas.find((p, i) => 
-        i > 0 && i < paradas.length - 1 && !p.ciudad.trim()
-      );
-
-      if (paradaVacia) {
-        alert('Todas las paradas intermedias deben tener nombre de ciudad');
-        return;
-      }
-
-      await guardarParadasRuta(rutaId, { paradas });
-      setEditingParadas(false);
-      loadRuta();
-      alert('Paradas y tarifas guardadas exitosamente');
-    } catch (err) {
-      alert('Error al guardar: ' + err.message);
-    }
-  };
-
-  const guardarInfo = async () => {
-    try {
-      await updateRuta(rutaId, infoData);
-      setEditingInfo(false);
-      loadRuta();
-      alert('Información de la ruta actualizada exitosamente');
-    } catch (err) {
-      alert('Error al actualizar: ' + err.message);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando ruta...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-8">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"/></div>;
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen">
-      <div className="mb-8">
-        <Button
-          variant="secondary"
-          onClick={onClose}
-          className="mb-4 flex items-center gap-2"
-        >
-          <ArrowLeft size={20} />
-          Volver a Rutas
-        </Button>
-      </div>
+    <div className="p-6 max-w-5xl mx-auto min-h-screen space-y-6">
+      <Button variant="secondary" onClick={onClose} className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
+        <ArrowLeft size={18} /> Volver al listado
+      </Button>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-700">Información de la Ruta</h2>
-          {!editingInfo ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setEditingInfo(true)}
-              className="flex items-center gap-2"
-            >
-              <Edit2 size={16} />
-              Editar Información
-            </Button>
-          ) : (
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setEditingInfo(false);
-                  loadRuta();
-                }}
-                className="flex items-center gap-2"
-              >
-                <X size={16} />
-                Cancelar
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={guardarInfo}
-                className="flex items-center gap-2"
-              >
-                <Save size={16} />
-                Guardar
-              </Button>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-gray-50/80 p-6 border-b border-gray-100 flex justify-between items-start backdrop-blur-sm">
+          <div>
+            <div className="flex items-center gap-3">
+              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-sm font-bold font-mono border border-blue-200">{ruta.codigo_ruta}</span>
+              <h1 className="text-2xl font-bold text-gray-900">{ruta.nombre_ruta}</h1>
             </div>
+            <p className="text-gray-500 mt-2 flex items-center gap-2 text-sm"><Map size={16}/> {ruta.origen} <span className="text-gray-300">➜</span> {ruta.destino}</p>
+          </div>
+          {!editingInfo && (
+            <Button variant="secondary" size="sm" onClick={() => setEditingInfo(true)} className="flex gap-2 border-gray-200 bg-white hover:bg-gray-50 shadow-sm"><Edit2 size={16}/> Editar Info</Button>
           )}
         </div>
 
-        {editingInfo ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Código de Ruta"
-                value={infoData.codigo_ruta}
-                onChange={(e) => setInfoData({ ...infoData, codigo_ruta: e.target.value.toUpperCase() })}
-                placeholder="PM-TEM-001"
-              />
-              <Input
-                label="Estado"
-                value={infoData.estado}
-                onChange={(e) => setInfoData({ ...infoData, estado: e.target.value })}
-              />
+        <div className="p-6">
+          {editingInfo ? (
+             <div className="grid grid-cols-2 gap-6 bg-gray-50 p-6 rounded-xl border border-gray-200">
+                <Input label="Nombre Ruta" value={infoData.nombre_ruta} onChange={(e)=>setInfoData({...infoData, nombre_ruta:e.target.value})} />
+                <Input label="Código" value={infoData.codigo_ruta} onChange={(e)=>setInfoData({...infoData, codigo_ruta:e.target.value})} />
+                <div className="col-span-2 flex justify-end gap-2 mt-2">
+                   <Button variant="secondary" onClick={()=>setEditingInfo(false)}>Cancelar</Button>
+                   <Button variant="primary" onClick={guardarInfo}>Guardar Cambios</Button>
+                </div>
+             </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               <div className="bg-blue-50/50 p-5 rounded-2xl border border-blue-100">
+                 <p className="text-xs uppercase text-blue-600 font-bold mb-1 tracking-wider">Distancia</p>
+                 <p className="text-3xl font-bold text-slate-800">{ruta.distancia_km || 0} <span className="text-base font-medium text-slate-400">km</span></p>
+               </div>
+               <div className="bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100">
+                 <p className="text-xs uppercase text-indigo-600 font-bold mb-1 tracking-wider">Tiempo</p>
+                 <p className="text-3xl font-bold text-slate-800">{Math.floor((ruta.tiempo_estimado_minutos||0)/60)}h {(ruta.tiempo_estimado_minutos||0)%60}m</p>
+               </div>
+               <div className="p-5 text-gray-600 text-sm italic bg-gray-50 rounded-2xl border border-gray-100 flex items-center">
+                 "{ruta.descripcion || 'Sin descripción adicional para esta ruta.'}"
+               </div>
             </div>
-
-            <Input
-              label="Nombre de Ruta"
-              value={infoData.nombre_ruta}
-              onChange={(e) => setInfoData({ ...infoData, nombre_ruta: e.target.value })}
-              placeholder="Puerto Montt - Temuco"
-            />
-
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Ciudad Origen"
-                value={infoData.origen}
-                onChange={(e) => setInfoData({ ...infoData, origen: e.target.value })}
-                placeholder="Puerto Montt"
-              />
-              <Input
-                label="Ciudad Destino"
-                value={infoData.destino}
-                onChange={(e) => setInfoData({ ...infoData, destino: e.target.value })}
-                placeholder="Temuco"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Descripción
-              </label>
-              <textarea
-                value={infoData.descripcion}
-                onChange={(e) => setInfoData({ ...infoData, descripcion: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={2}
-                placeholder="Descripción de la ruta..."
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                {ruta.codigo_ruta} - {ruta.nombre_ruta}
-              </h1>
-              <p className="text-gray-600 mt-2">
-                {ruta.origen} → {ruta.destino}
-              </p>
-              {ruta.descripcion && (
-                <p className="text-sm text-gray-500 mt-1">{ruta.descripcion}</p>
-              )}
-            </div>
-            <div className="text-right">
-              <div className="text-sm text-gray-600">Distancia Total</div>
-              <div className="text-2xl font-bold text-blue-600">
-                {ruta.distancia_km || 0} km
-              </div>
-              <div className="text-sm text-gray-600 mt-1">
-                {Math.floor((ruta.tiempo_estimado_minutos || 0) / 60)}h {(ruta.tiempo_estimado_minutos || 0) % 60}min
-              </div>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* PARADAS CON TARIFAS */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <MapPin className="text-blue-600" size={24} />
-            Paradas y Tarifas ({paradas.length})
-          </h2>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+        <div className="flex justify-between items-center mb-10">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Itinerario</h2>
+            <p className="text-sm text-gray-500">Secuencia de paradas y tiempos</p>
+          </div>
           {!editingParadas ? (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setEditingParadas(true)}
-              className="flex items-center gap-2"
-            >
-              <Edit2 size={16} />
-              Editar
-            </Button>
+            <Button variant="primary" size="sm" onClick={() => setEditingParadas(true)} className="flex gap-2 shadow-md shadow-blue-100"><Edit2 size={16}/> Modificar Paradas</Button>
           ) : (
             <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setEditingParadas(false);
-                  loadRuta();
-                }}
-                className="flex items-center gap-2"
-              >
-                <X size={16} />
-                Cancelar
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={guardarParadas}
-                className="flex items-center gap-2"
-              >
-                <Save size={16} />
-                Guardar
-              </Button>
+              <Button variant="secondary" size="sm" onClick={()=>{setEditingParadas(false); loadRuta();}}>Cancelar</Button>
+              <Button variant="primary" size="sm" onClick={guardarParadas} className="flex gap-2"><Save size={16}/> Guardar Cambios</Button>
             </div>
           )}
         </div>
 
-        <div className="space-y-4">
+        <div className="relative pl-4 space-y-0 max-w-4xl mx-auto">
+          <div className="absolute left-[39px] top-5 bottom-10 w-0.5 bg-slate-200 -z-0"></div>
+
           {paradas.map((parada, index) => (
-            <div
-              key={index}
-              className={`border rounded-lg p-4 ${
-                parada.es_origen || parada.es_destino
-                  ? 'bg-blue-50 border-blue-300'
-                  : 'bg-gray-50 border-gray-300'
-              }`}
-            >
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
-                    {index + 1}
-                  </div>
+            <div key={index} className="relative z-10 pb-10 last:pb-0 group">
+              <div className="flex items-start gap-6">
+                <div className={`flex-shrink-0 w-12 h-12 rounded-full border-[4px] border-white shadow-md flex items-center justify-center font-bold text-base z-10
+                  ${parada.es_origen ? 'bg-emerald-500 text-white' : parada.es_destino ? 'bg-rose-500 text-white' : 'bg-white text-slate-600 border-slate-200'}`}>
+                  {parada.es_origen ? 'A' : parada.es_destino ? 'B' : index + 1}
                 </div>
 
-                <div className="flex-1">
-                  {editingParadas && !parada.es_origen && !parada.es_destino ? (
-                    <Input
-                      value={parada.ciudad}
-                      onChange={(e) => actualizarParada(index, 'ciudad', e.target.value)}
-                      placeholder="Nombre de la ciudad"
-                    />
-                  ) : (
-                    <div className="font-semibold text-gray-900">
-                      {parada.ciudad}
-                      {parada.es_origen && (
-                        <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                          ORIGEN
-                        </span>
-                      )}
-                      {parada.es_destino && (
-                        <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                          DESTINO
-                        </span>
-                      )}
+                <div className="flex-1 bg-white hover:bg-slate-50 border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all rounded-2xl p-5 -mt-2">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="w-full">
+                      <div className="flex items-center justify-between">
+                        {editingParadas && !parada.es_origen && !parada.es_destino ? (
+                          <Input value={parada.ciudad} onChange={(e)=>actualizarParada(index,'ciudad',e.target.value)} placeholder="Nombre Ciudad" className="font-bold"/>
+                        ) : (
+                          <h3 className="font-bold text-gray-900 text-lg">{parada.ciudad || 'Nueva Parada'}</h3>
+                        )}
+                        <div className="flex gap-2">
+                          {parada.es_origen && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-bold tracking-wider uppercase">Origen</span>}
+                          {parada.es_destino && <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-1 rounded-full font-bold tracking-wider uppercase">Destino</span>}
+                          {editingParadas && !parada.es_origen && !parada.es_destino && (
+                            <button onClick={() => eliminarParada(index)} className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors"><Trash2 size={18}/></button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  )}
+                  </div>
 
                   {index > 0 && (
-                    <div className="grid grid-cols-2 gap-4 mt-3">
-                      <div>
-                        <label className="text-xs text-gray-600">Distancia desde anterior (km)</label>
-                        {editingParadas ? (
-                          <Input
-                            type="number"
-                            value={parada.distancia_desde_anterior_km || ''}
-                            onChange={(e) => actualizarParada(index, 'distancia_desde_anterior_km', parseFloat(e.target.value))}
-                            placeholder="0"
-                          />
-                        ) : (
-                          <div className="text-sm font-medium">{parada.distancia_desde_anterior_km || 0} km</div>
-                        )}
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100 border-dashed">
+                      <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-2 rounded-lg">
+                        <Map size={18} className="text-slate-400"/>
+                        {editingParadas ? <input type="number" className="w-20 p-1 border rounded text-center font-mono" value={parada.distancia_desde_anterior_km} onChange={(e)=>actualizarParada(index,'distancia_desde_anterior_km',e.target.value)}/> : <span className="font-mono font-medium">{parada.distancia_desde_anterior_km} km</span>} 
+                        <span className="text-xs text-slate-400 uppercase font-bold ml-auto">Distancia</span>
                       </div>
-
-                      <div>
-                        <label className="text-xs text-gray-600">Tiempo desde anterior (min)</label>
-                        {editingParadas ? (
-                          <Input
-                            type="number"
-                            value={parada.tiempo_desde_anterior_min || ''}
-                            onChange={(e) => actualizarParada(index, 'tiempo_desde_anterior_min', parseInt(e.target.value))}
-                            placeholder="0"
-                          />
-                        ) : (
-                          <div className="text-sm font-medium">{parada.tiempo_desde_anterior_min || 0} min</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {!parada.es_origen && (
-                    <div className="mt-4 p-3 bg-white rounded border border-gray-200">
-                      <div className="text-xs font-semibold text-gray-700 mb-2">
-                        💰 Tarifas desde origen
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="text-xs text-gray-600">Adulto</label>
-                          {editingParadas ? (
-                            <Input
-                              type="number"
-                              value={parada.tarifa_adulto || ''}
-                              onChange={(e) => actualizarParada(index, 'tarifa_adulto', parseInt(e.target.value) || 0)}
-                              placeholder="$0"
-                            />
-                          ) : (
-                            <div className="text-sm font-semibold text-green-600">
-                              ${(parada.tarifa_adulto || 0).toLocaleString('es-CL')}
-                            </div>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="text-xs text-gray-600">Estudiante</label>
-                          {editingParadas ? (
-                            <Input
-                              type="number"
-                              value={parada.tarifa_estudiante || ''}
-                              onChange={(e) => actualizarParada(index, 'tarifa_estudiante', parseInt(e.target.value) || 0)}
-                              placeholder="$0"
-                            />
-                          ) : (
-                            <div className="text-sm font-semibold text-green-600">
-                              ${(parada.tarifa_estudiante || 0).toLocaleString('es-CL')}
-                            </div>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="text-xs text-gray-600">3ra Edad</label>
-                          {editingParadas ? (
-                            <Input
-                              type="number"
-                              value={parada.tarifa_tercera_edad || ''}
-                              onChange={(e) => actualizarParada(index, 'tarifa_tercera_edad', parseInt(e.target.value) || 0)}
-                              placeholder="$0"
-                            />
-                          ) : (
-                            <div className="text-sm font-semibold text-green-600">
-                              ${(parada.tarifa_tercera_edad || 0).toLocaleString('es-CL')}
-                            </div>
-                          )}
-                        </div>
+                      <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-2 rounded-lg">
+                        <Clock size={18} className="text-slate-400"/>
+                        {editingParadas ? <input type="number" className="w-20 p-1 border rounded text-center font-mono" value={parada.tiempo_desde_anterior_min} onChange={(e)=>actualizarParada(index,'tiempo_desde_anterior_min',e.target.value)}/> : <span className="font-mono font-medium">{parada.tiempo_desde_anterior_min} min</span>}
+                        <span className="text-xs text-slate-400 uppercase font-bold ml-auto">Tiempo</span>
                       </div>
                     </div>
                   )}
                 </div>
-
-                {editingParadas && !parada.es_origen && !parada.es_destino && (
-                  <button
-                    onClick={() => eliminarParada(index)}
-                    className="text-red-600 hover:text-red-800"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                )}
               </div>
             </div>
           ))}
         </div>
 
         {editingParadas && (
-          <Button
-            variant="secondary"
-            onClick={agregarParadaIntermedia}
-            className="w-full mt-4 flex items-center justify-center gap-2"
-          >
-            <Plus size={20} />
-            Agregar Parada Intermedia
-          </Button>
+          <div className="flex justify-center mt-8">
+            <button onClick={agregarParadaIntermedia} className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-6 py-3 rounded-full transition-all shadow-sm hover:shadow-md border border-blue-200">
+              <Plus size={18} /> Añadir Parada Intermedia
+            </button>
+          </div>
         )}
       </div>
     </div>

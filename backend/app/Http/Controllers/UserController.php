@@ -15,7 +15,7 @@ class UserController extends Controller
     public function index()
     {
         $users = User::with('rol')
-            ->orderBy('id', 'asc')
+            ->orderBy('id', 'desc') // <-- CAMBIO AQUÍ
             ->get();
         
         return response()->json($users);

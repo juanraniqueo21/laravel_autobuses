@@ -3,21 +3,40 @@ import Header from '../common/Header';
 import Sidebar from '../common/Sidebar';
 
 export default function MainLayout({ children, user, onLogout, currentPage, onPageChange }) {
+  
+  // Estado del menú (empieza cerrado)
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
   return (
-    <div className="flex">
-      {/* Sidebar */}
-      <Sidebar current={currentPage} onSelect={onPageChange} />
+    <div className="min-h-screen w-full bg-gray-50 relative">
       
-      {/* Main Content */}
-      <div className="ml-64 w-full flex flex-col">
-        {/* Header */}
-        <Header user={user} onLogout={onLogout} />
-        
-        {/* Page Content */}
-        <main className="flex-1 bg-gray-50 overflow-auto">
+      {/* 1. HEADER: Se oculta cuando el menú está abierto */}
+      {!isMenuOpen && (
+        <Header 
+          user={user} 
+          onLogout={onLogout} 
+          onToggleMenu={() => setIsMenuOpen(true)} 
+        />
+      )}
+      
+      {/* 2. SIDEBAR: Superpuesto (Overlay) a la izquierda */}
+      <Sidebar 
+        current={currentPage} 
+        onSelect={(page) => {
+          onPageChange(page);
+          setIsMenuOpen(false); // Cerrar al navegar
+        }}
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)} 
+      />
+      
+      {/* 3. CONTENIDO: Siempre visible debajo */}
+      <main className="p-6 w-full">
+        <div className="max-w-7xl mx-auto">
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
+      
     </div>
   );
 }
