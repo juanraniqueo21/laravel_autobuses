@@ -13,6 +13,8 @@ use App\Http\Controllers\MecanicoController;
 use App\Http\Controllers\MantenimientoController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AsignacionTurnoController;
+use App\Http\Controllers\ConductorPanelController;
+use App\Http\Controllers\AsistentePanelController;
 
 // ============================================
 // RUTAS PÚBLICAS (sin autenticación)
@@ -130,6 +132,29 @@ Route::middleware('jwt.auth')->group(function () {
 
     // MANTENIMIENTOS
     Route::apiResource('mantenimientos', MantenimientoController::class);
+    
+     // ============================================
+    // PANEL CONDUCTOR - Rutas específicas para el rol conductor
+    // ============================================
+    Route::prefix('conductor')->group(function () {
+        Route::get('/dashboard', [ConductorPanelController::class, 'dashboard']);
+        Route::get('/mis-turnos', [ConductorPanelController::class, 'misTurnos']);
+        Route::get('/mis-turnos/{id}', [ConductorPanelController::class, 'verTurno']);
+        Route::get('/mis-viajes', [ConductorPanelController::class, 'misViajes']);
+        Route::get('/mis-viajes/{id}', [ConductorPanelController::class, 'verViaje']);
+    });
+
+    // ============================================
+    // PANEL ASISTENTE - Rutas específicas para el rol asistente
+    // ============================================
+    Route::prefix('asistente')->group(function () {
+        Route::get('/dashboard', [AsistentePanelController::class, 'dashboard']);
+        Route::get('/mis-turnos', [AsistentePanelController::class, 'misTurnos']);
+        Route::get('/mis-turnos/{id}', [AsistentePanelController::class, 'verTurno']);
+        Route::get('/mis-viajes', [AsistentePanelController::class, 'misViajes']);
+        Route::get('/mis-viajes/{id}', [AsistentePanelController::class, 'verViaje']);
+    });
 
     
 });
+

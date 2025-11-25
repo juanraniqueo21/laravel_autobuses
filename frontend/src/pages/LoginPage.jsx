@@ -51,11 +51,7 @@ export default function LoginPage({ onLoginSuccess }) {
 
         <div className="text-center mb-8">
           <div className="flex justify-center items-center mb-6">
-            <div className="p-5 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl shadow-xl shadow-blue-500/20 border border-blue-400/30 transform hover:scale-105 transition-transform duration-500">
-              <Bus className="h-16 w-16 text-white drop-shadow-md" strokeWidth={1.5} />
-            </div>
           </div>
-
           <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">
             ConectaFlota
           </h1>

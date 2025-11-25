@@ -515,7 +515,7 @@ export default function EmployeesPage() {
               options={[
                 { id: '', label: 'Todos' }, { id: 'admin', label: 'Administradores' },
                 { id: 'conductor', label: 'Conductores' }, { id: 'mecanico', label: 'Mecánicos' },
-                { id: 'asistente', label: 'Asistentes' }, { id: 'rrhh', label: 'RRHH' },
+                { id: 'asistente', label: 'Asistentes' }, { id: 'rrhh', label: 'RRHH' },{ id: 'gerente', label: 'Gerente' }
               ]}
               value={searchUsuario}
               onChange={(e) => setSearchUsuario(e.target.value)}
