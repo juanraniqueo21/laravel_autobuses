@@ -13,7 +13,9 @@ import {
   updateMantenimiento, 
   deleteMantenimiento 
 } from '../services/api';
-import { useNotifications } from '../context/NotificationContext'; // IMPORTACIÓN AGREGADA
+import { useNotifications } from '../context/NotificationContext';
+import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 const TIPOS_MANTENIMIENTO = ['preventivo', 'correctivo', 'revision'];
 const ESTADOS_MANTENIMIENTO = ['en_proceso', 'completado', 'cancelado'];
@@ -75,6 +77,10 @@ export default function MantencionesPage() {
       setLoading(false);
     }
   };
+
+  // IMPLEMENTACIÓN DE PAGINACIÓN
+  const sortedMantenimientos = [...mantenimientos].sort((a, b) => b.id - a.id);
+  const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(sortedMantenimientos, 10);
 
   const handleOpenDialog = (mantenimiento = null) => {
     if (mantenimiento) {
@@ -207,10 +213,17 @@ export default function MantencionesPage() {
       {/* Tabla */}
       <Table
         columns={columns}
-        data={mantenimientos}
+        data={paginatedData}
         loading={loading}
         onEdit={handleOpenDialog}
         onDelete={handleDelete}
+      />
+
+      {/* PAGINACIÓN COMPONENTE */}
+      <Pagination 
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
       />
 
       {/* Dialog */}

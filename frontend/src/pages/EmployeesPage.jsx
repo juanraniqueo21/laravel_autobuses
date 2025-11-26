@@ -2,18 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, ChevronDown, ChevronUp, Phone, MapPin, DollarSign, 
   Search, X, Mail, AlertTriangle, Edit2, Trash2, UserX,
-  Briefcase, Heart, CreditCard, User, Users // Agregado Users para el icono grande
+  Briefcase, Heart, CreditCard, User, Users, Filter 
 } from 'lucide-react';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import Button from '../components/common/Button';
 import { 
-  fetchEmpleados, fetchUsers, fetchAfps, fetchIsapres, 
+  fetchEmpleados, fetchUsers, fetchAfps, fetchIsapres, fetchRoles,
   createEmpleado, updateEmpleado, deleteEmpleado, darDeBajaEmpleado 
 } from '../services/api';
 import { useNotifications } from '../context/NotificationContext';
 import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 const CONTRATOS = ['indefinido', 'plazo_fijo', 'practicante'];
 const ESTADOS = ['activo', 'licencia', 'suspendido', 'terminado'];
@@ -70,11 +71,16 @@ export default function EmployeesPage() {
   const [usuarios, setUsuarios] = useState([]);
   const [afps, setAfps] = useState([]);
   const [isapres, setIsapres] = useState([]);
+  const [roles, setRoles] = useState([]); // Nuevo estado para Roles
   
   // --- ESTADO DE UI Y USUARIO ---
   const [currentUser, setCurrentUser] = useState(null);
   const [searchUsuario, setSearchUsuario] = useState('');
+  
+  // --- FILTROS PRINCIPALES ---
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterRol, setFilterRol] = useState(''); // Nuevo filtro por Rol
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
@@ -130,16 +136,19 @@ export default function EmployeesPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [empleadosData, usuariosData, afpsData, isapresData] = await Promise.all([
+      // Agregamos fetchRoles para tener los cargos disponibles
+      const [empleadosData, usuariosData, afpsData, isapresData, rolesData] = await Promise.all([
         fetchEmpleados(),
         fetchUsers(),
         fetchAfps(),
         fetchIsapres(),
+        fetchRoles(),
       ]);
       setAllEmpleados(empleadosData);
       setUsuarios(usuariosData);
       setAfps(afpsData);
       setIsapres(isapresData);
+      setRoles(rolesData);
       setError(null);
     } catch (err) {
       setError('Error al cargar datos: ' + err.message);
@@ -153,32 +162,36 @@ export default function EmployeesPage() {
   const getEmpleadosFiltrados = () => {
     const sortedEmpleados = [...allEmpleados].sort((a, b) => b.id - a.id);
 
-    if (!searchTerm.trim()) return sortedEmpleados;
-
-    const busqueda = searchTerm.toLowerCase().trim();
-    
     return sortedEmpleados.filter((empleado) => {
       const user = usuarios.find(u => u.id === empleado.user_id);
       if (!user) return false;
 
+      // 1. Filtro por Búsqueda (Texto)
+      const term = searchTerm.toLowerCase().trim();
       const nombreCompleto = `${user.nombre} ${user.apellido}`.toLowerCase();
       const rut = `${user.rut}${user.rut_verificador}`.replace(/\D/g, '');
       const rutFormateado = formatRUT(user.rut, user.rut_verificador).toLowerCase();
       const numeroEmpleado = empleado.numero_empleado?.toLowerCase() || '';
-
-      return (
-        nombreCompleto.includes(busqueda) ||
-        rut.includes(busqueda) ||
-        rutFormateado.includes(busqueda) ||
-        numeroEmpleado.includes(busqueda)
+      
+      const matchesSearch = !term || (
+        nombreCompleto.includes(term) ||
+        rut.includes(term) ||
+        rutFormateado.includes(term) ||
+        numeroEmpleado.includes(term)
       );
+
+      // 2. Filtro por Rol (Cargo)
+      const matchesRole = !filterRol || (user.rol_id.toString() === filterRol.toString());
+
+      return matchesSearch && matchesRole;
     });
   };
 
   const filteredEmpleados = getEmpleadosFiltrados();
+  
   const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(filteredEmpleados, 10);
 
-  useEffect(() => { setCurrentPage(1); }, [searchTerm]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, filterRol]);
 
   // --- HANDLERS ---
   const handleOpenDialog = (empleado = null) => {
@@ -319,12 +332,18 @@ export default function EmployeesPage() {
     }
   };
 
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    setFilterRol('');
+  };
+
   // --- HELPERS ---
   const canDarDeBaja = () => currentUser && (currentUser.rol_id === 1 || currentUser.rol_id === 6);
   const getNombreUsuario = (userId) => { const u = usuarios.find(u => u.id === userId); return u ? `${u.nombre} ${u.apellido}` : 'N/A'; };
   const getRUTUsuario = (userId) => { const u = usuarios.find(u => u.id === userId); return u ? formatRUT(u.rut, u.rut_verificador) : '-'; };
   const getNombreAfp = (afpId) => afps.find(a => a.id === afpId)?.nombre || '-';
   const getNombreIsapre = (isapreId) => isapres.find(i => i.id === isapreId)?.nombre || '-';
+  
   const getUsuariosFiltrados = () => {
     return usuarios.filter(user => {
       const rol = user.rol?.nombre?.toLowerCase() || '';
@@ -340,10 +359,6 @@ export default function EmployeesPage() {
     'activo': 'bg-green-100 text-green-800', 'licencia': 'bg-blue-100 text-blue-800',
     'suspendido': 'bg-orange-100 text-orange-800', 'terminado': 'bg-red-100 text-red-800'
   }[estado] || 'bg-gray-100 text-gray-800');
-
-  const handleClearSearch = () => {
-    setSearchTerm('');
-  };
 
   // --- TABLA RENDERIZADA ---
   const renderEmpleadosTable = () => (
@@ -362,7 +377,7 @@ export default function EmployeesPage() {
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {paginatedData.length === 0 ? (
-            <tr><td colSpan="7" className="px-6 py-8 text-center text-gray-500">No se encontraron empleados</td></tr>
+            <tr><td colSpan="7" className="px-6 py-8 text-center text-gray-500">No se encontraron empleados con los filtros seleccionados</td></tr>
           ) : (
             paginatedData.map((empleado) => (
               <React.Fragment key={empleado.id}>
@@ -437,7 +452,7 @@ export default function EmployeesPage() {
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       
-      {/* HEADER CARD NUEVO */}
+      {/* HEADER CARD */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -459,8 +474,10 @@ export default function EmployeesPage() {
         </div>
       )}
 
-      {/* Buscador */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex gap-4">
+      {/* BUSCADOR Y FILTROS UNIFICADOS */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4">
+        
+        {/* Buscador de Texto */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
           <input
@@ -470,34 +487,49 @@ export default function EmployeesPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
           />
-          {searchTerm && (
-            <button onClick={handleClearSearch} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <X size={16} />
-            </button>
-          )}
         </div>
+
+        {/* Filtro por Cargo (Rol) */}
+        <div className="w-full md:w-64">
+          <div className="relative">
+            <select
+              value={filterRol}
+              onChange={(e) => setFilterRol(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white cursor-pointer"
+            >
+              <option value="">Todos los Cargos</option>
+              {roles.map(rol => (
+                <option key={rol.id} value={rol.id}>
+                  {rol.nombre.charAt(0).toUpperCase() + rol.nombre.slice(1)}
+                </option>
+              ))}
+            </select>
+            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+          </div>
+        </div>
+
+        {/* Botón Limpiar */}
+        {(searchTerm || filterRol) && (
+           <button 
+             onClick={handleClearSearch}
+             className="px-4 py-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium border border-gray-200"
+           >
+             Limpiar
+           </button>
+        )}
+
       </div>
 
       {/* Tabla */}
       {loading ? <div className="text-center py-8">Cargando...</div> : renderEmpleadosTable()}
 
       {/* Paginación */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center mt-6">
-          <span className="text-sm text-gray-700">
-            Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-            <span className="ml-2 text-gray-500">(Total: {filteredEmpleados.length})</span>
-          </span>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1} className="flex items-center gap-1.5">
-              <ChevronDown className="rotate-90" size={16}/> Anterior
-            </Button>
-            <Button variant="secondary" onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage === totalPages} className="flex items-center gap-1.5">
-              Siguiente <ChevronDown className="-rotate-90" size={16}/>
-            </Button>
-          </div>
-        </div>
-      )}
+      <Pagination 
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
 
       {/* MODAL: Formulario Completo */}
       <FormDialog

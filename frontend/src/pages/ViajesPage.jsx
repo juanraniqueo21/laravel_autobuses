@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Activity } from 'lucide-react';
 import TurnoViajesPage from './TurnoViajesPage';
 import { fetchTurnos, fetchViajesPorTurno } from '../services/api';
-import { Clock, Bus, Users, ChevronRight } from 'lucide-react'; // Asegúrate de importar estos si los usas en el render
+import { Clock, Bus, Users, ChevronRight } from 'lucide-react';
+import usePagination from '../hooks/usePagination'; // IMPORTAR HOOK
+import Pagination from '../components/common/Pagination'; // IMPORTAR COMPONENTE
 
 export default function ViajesPage() {
   const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date().toISOString().split('T')[0]);
@@ -11,9 +13,6 @@ export default function ViajesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
-
   useEffect(() => { loadTurnos(); }, [fechaSeleccionada]);
 
   const loadTurnos = async () => {
@@ -21,7 +20,6 @@ export default function ViajesPage() {
       setLoading(true);
       const turnosData = await fetchTurnos({ fecha: fechaSeleccionada });
 
-      // VALIDACIÓN 1: Asegurarse de que sea un array
       if (!Array.isArray(turnosData)) {
         console.warn("La API no devolvió un array de turnos:", turnosData);
         setTurnos([]);
@@ -30,14 +28,12 @@ export default function ViajesPage() {
 
       const turnosConViajes = await Promise.all(
         turnosData.map(async (turno) => {
-          // VALIDACIÓN 2: Asegurarse de que el turno y su ID existan
           if (!turno || !turno.id) {
             return null;
           }
 
           try {
             const viajes = await fetchViajesPorTurno(turno.id);
-            // Validación extra por si viajes es null/undefined
             const viajesArray = Array.isArray(viajes) ? viajes : [];
             
             return {
@@ -52,12 +48,10 @@ export default function ViajesPage() {
         })
       );
 
-      // Filtrar nulos si hubo errores en el map y ordenar
       const validTurnos = turnosConViajes.filter(t => t !== null);
       validTurnos.sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
       
       setTurnos(validTurnos);
-      setCurrentPage(1);
       setError(null);
     } catch (err) {
       setError('Error al cargar turnos: ' + err.message);
@@ -67,10 +61,8 @@ export default function ViajesPage() {
     }
   };
 
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentTurnos = turnos.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(turnos.length / itemsPerPage);
+  // IMPLEMENTACIÓN DE PAGINACIÓN (Límite 10)
+  const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(turnos, 10);
 
   const getEstadoStyles = (estado) => {
     const styles = {
@@ -82,7 +74,6 @@ export default function ViajesPage() {
     return styles[estado] || 'bg-gray-50 text-gray-700 border-gray-200';
   };
 
-  // VALIDACIÓN 3: Asegurarse de que turnoSeleccionado tenga datos antes de renderizar el componente hijo
   if (turnoSeleccionado && turnoSeleccionado.id) {
     return (
       <TurnoViajesPage 
@@ -134,7 +125,7 @@ export default function ViajesPage() {
         </div>
       ) : (
         <div className="grid gap-6">
-          {currentTurnos.map((turno) => (
+          {paginatedData.map((turno) => (
             <div key={turno.id} className="group bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-200 overflow-hidden">
               <div className="flex flex-col lg:flex-row">
                 <div className="p-6 lg:w-1/3 border-b lg:border-b-0 lg:border-r border-gray-100 bg-gray-50/50">
@@ -172,25 +163,12 @@ export default function ViajesPage() {
         </div>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center gap-4 mt-6">
-          <button 
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-            disabled={currentPage === 1}
-            className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <span className="text-sm text-gray-600">Página {currentPage} de {totalPages}</span>
-          <button 
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
-            disabled={currentPage === totalPages}
-            className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50"
-          >
-            <ChevronRight size={20} />
-          </button>
-        </div>
-      )}
+      {/* PAGINACIÓN COMPONENTE */}
+      <Pagination 
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 }

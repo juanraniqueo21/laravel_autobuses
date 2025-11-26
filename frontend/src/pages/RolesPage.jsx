@@ -6,6 +6,7 @@ import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 import { fetchRoles, createRole, updateRole, deleteRole } from '../services/api';
 import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 import { useNotifications } from '../context/NotificationContext';
 
 export default function RolesPage() {
@@ -54,6 +55,8 @@ export default function RolesPage() {
   };
 
   const filteredData = getFilteredRoles();
+  
+  // IMPLEMENTACIÓN DE PAGINACIÓN
   const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(filteredData, 10);
 
   useEffect(() => {
@@ -180,33 +183,12 @@ export default function RolesPage() {
         onDelete={handleDelete}
       />
 
-      {/* Paginación */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center mt-6">
-          <span className="text-sm text-gray-700">
-            Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-            <span className="ml-2">(Total: {filteredData.length} roles)</span>
-          </span>
-          <div className="flex gap-2">
-            <Button 
-              variant="secondary" 
-              onClick={() => setCurrentPage(prev => prev - 1)} 
-              disabled={currentPage === 1}
-              className="flex items-center gap-1"
-            >
-              <ChevronLeft size={16} /> Anterior
-            </Button>
-            <Button 
-              variant="secondary" 
-              onClick={() => setCurrentPage(prev => prev + 1)} 
-              disabled={currentPage === totalPages}
-              className="flex items-center gap-1"
-            >
-              Siguiente <ChevronRight size={16} />
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* PAGINACIÓN COMPONENTE */}
+      <Pagination 
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
 
       <FormDialog
         isOpen={openDialog}

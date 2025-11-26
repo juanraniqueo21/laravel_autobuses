@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Clock, MapPin, CheckCircle, XCircle, Calendar, Bus, Users, Map, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Clock, MapPin, CheckCircle, XCircle, Calendar, Bus, Users, Map, Trash2, Pencil } from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
@@ -22,9 +22,15 @@ export default function TurnoViajesPage({ turno, onVolver }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
+  
+  // Estados para la edición
+  const [isEditing, setIsEditing] = useState(false);
+  const [editId, setEditId] = useState(null);
+
   const [openFinalizarDialog, setOpenFinalizarDialog] = useState(false);
   const [viajeAFinalizar, setViajeAFinalizar] = useState(null);
   const [viajeSeleccionado, setViajeSeleccionado] = useState(null);
+  
   const [formData, setFormData] = useState({
     ruta_id: '',
     origen: '',
@@ -40,12 +46,9 @@ export default function TurnoViajesPage({ turno, onVolver }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      
-      // Cargar viajes del turno
       const viajesData = await fetchViajesPorTurno(turno.id);
       setViajes(viajesData);
       
-      // Cargar rutas activas
       const rutasData = await fetchRutas();
       const rutasActivas = rutasData.filter(r => r.estado === 'activa');
       setRutas(rutasActivas);
@@ -60,8 +63,11 @@ export default function TurnoViajesPage({ turno, onVolver }) {
   };
 
   const handleOpenDialog = () => {
-    // Inicializar con hora actual
+    setIsEditing(false);
+    setEditId(null);
     const ahora = new Date();
+    // Ajuste zona horaria local simple
+    ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
     const fechaHoraActual = ahora.toISOString().slice(0, 16);
     
     setFormData({
@@ -74,25 +80,58 @@ export default function TurnoViajesPage({ turno, onVolver }) {
     setOpenDialog(true);
   };
 
+  const handleEdit = (viaje) => {
+    setIsEditing(true);
+    setEditId(viaje.id);
+
+    let fechaFormateada = '';
+    if (viaje.fecha_hora_salida) {
+      const date = new Date(viaje.fecha_hora_salida);
+      date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+      fechaFormateada = date.toISOString().slice(0, 16);
+    }
+
+    const rutaDelViaje = rutas.find(r => r.id === viaje.ruta_id) || viaje.ruta || {};
+
+    setFormData({
+      ruta_id: viaje.ruta_id,
+      origen: rutaDelViaje.origen || '',
+      destino: rutaDelViaje.destino || '',
+      fecha_hora_salida: fechaFormateada,
+      observaciones: viaje.observaciones || '',
+    });
+
+    setOpenDialog(true);
+  };
+
   const handleCloseDialog = () => {
     setOpenDialog(false);
+    setIsEditing(false);
+    setEditId(null);
   };
 
   const handleSave = async () => {
     try {
-      const viajeData = {
-        asignacion_turno_id: turno.id,
-        ruta_id: formData.ruta_id,
-        fecha_hora_salida: formData.fecha_hora_salida,
-        fecha_hora_llegada: null,
-        estado: 'programado',
-        observaciones: formData.observaciones,
-      };
-      
-      await createViaje(viajeData);
+      if (isEditing) {
+        await updateViaje(editId, {
+            fecha_hora_salida: formData.fecha_hora_salida,
+            observaciones: formData.observaciones,
+        });
+        alert('Viaje actualizado exitosamente');
+      } else {
+        const viajeData = {
+            asignacion_turno_id: turno.id,
+            ruta_id: formData.ruta_id,
+            fecha_hora_salida: formData.fecha_hora_salida,
+            fecha_hora_llegada: null,
+            estado: 'programado',
+            observaciones: formData.observaciones,
+        };
+        await createViaje(viajeData);
+        alert('Viaje programado exitosamente');
+      }
       loadData();
       handleCloseDialog();
-      alert('Viaje programado exitosamente');
     } catch (err) {
       console.error('Error al guardar:', err);
       setError('Error al guardar: ' + err.message);
@@ -115,14 +154,10 @@ export default function TurnoViajesPage({ turno, onVolver }) {
 
   const handleOpenFinalizar = (viaje) => {
     setViajeAFinalizar(viaje);
-    
     const ahora = new Date();
+    ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
     const fechaHoraActual = ahora.toISOString().slice(0, 16);
-    
-    setFormData({
-      fecha_hora_llegada: fechaHoraActual,
-      observaciones: viaje.observaciones || '',
-    });
+    setFormData({ ...formData, fecha_hora_llegada: fechaHoraActual, observaciones: viaje.observaciones || '' });
     setOpenFinalizarDialog(true);
   };
 
@@ -145,7 +180,6 @@ export default function TurnoViajesPage({ turno, onVolver }) {
   const handleCancelar = async (viajeId) => {
     const motivo = prompt('Ingresa el motivo de la cancelación:');
     if (!motivo) return;
-    
     try {
       await cancelarViaje(viajeId, motivo);
       loadData();
@@ -253,49 +287,59 @@ export default function TurnoViajesPage({ turno, onVolver }) {
       label: 'Acciones',
       render: (row) => (
         <div className="flex gap-2">
+           {/* Botón Editar */}
+           {row.estado === 'programado' && (
+             <button
+                onClick={() => handleEdit(row)}
+                className="flex items-center justify-center w-8 h-8 text-gray-700 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 hover:border-gray-300 transition-colors"
+                title="Editar Viaje"
+             >
+                <Pencil size={16} />
+             </button>
+          )}
+
           {row.estado === 'programado' && (
             <button
               onClick={() => handleIniciarViaje(row.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors font-medium"
+              className="flex items-center justify-center w-8 h-8 text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors"
               title="Iniciar Viaje"
             >
-              <Clock size={14} /> Iniciar
+              <Clock size={16} />
             </button>
           )}
           
           {row.estado === 'en_curso' && (
             <button
               onClick={() => handleOpenFinalizar(row)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-50 text-green-700 border border-green-200 rounded-md hover:bg-green-100 hover:border-green-300 transition-colors font-medium"
+              className="flex items-center justify-center w-8 h-8 text-green-700 bg-green-50 border border-green-200 rounded-md hover:bg-green-100 hover:border-green-300 transition-colors"
               title="Finalizar Viaje"
             >
-              <CheckCircle size={14} /> Finalizar
+              <CheckCircle size={16} />
             </button>
           )}
           
           {row.estado !== 'completado' && row.estado !== 'cancelado' && (
             <button
               onClick={() => handleCancelar(row.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100 hover:border-orange-300 transition-colors font-medium"
+              className="flex items-center justify-center w-8 h-8 text-orange-700 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 hover:border-orange-300 transition-colors"
               title="Cancelar Viaje"
             >
-              <XCircle size={14} /> Cancelar
+              <XCircle size={16} />
             </button>
           )}
 
           <button
             onClick={() => handleDelete(row.id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 transition-colors font-medium"
+            className="flex items-center justify-center w-8 h-8 text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 transition-colors"
             title="Eliminar"
           >
-            <Trash2 size={14} />
+            <Trash2 size={16} />
           </button>
         </div>
       ),
     },
   ];
 
-  // Si se ha seleccionado un viaje, mostrar detalle
   if (viajeSeleccionado) {
     return (
       <ViajeDetallePage
@@ -322,7 +366,6 @@ export default function TurnoViajesPage({ turno, onVolver }) {
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       
-      {/* Navegación Breadcrumb */}
       <div className="mb-6">
         <button
           onClick={onVolver}
@@ -333,7 +376,6 @@ export default function TurnoViajesPage({ turno, onVolver }) {
         </button>
       </div>
 
-      {/* HEADER CARD */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -353,7 +395,6 @@ export default function TurnoViajesPage({ turno, onVolver }) {
         <Map className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Error */}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
           <strong>Error:</strong> {error}
@@ -427,35 +468,36 @@ export default function TurnoViajesPage({ turno, onVolver }) {
         </div>
       </div>
 
-      {/* Tabla de Viajes */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-xl font-bold text-gray-900">
             Viajes Registrados ({viajes.length})
           </h2>
         </div>
+        
+        {/* CORRECCIÓN: NO PASAMOS onDelete AQUÍ para evitar duplicar columna */}
         <Table
           columns={columns}
           data={viajes}
           loading={false}
-          onDelete={handleDelete}
         />
       </div>
 
-      {/* Dialog: Agregar Viaje */}
       <FormDialog
         isOpen={openDialog}
-        title="Agregar Viaje al Turno"
+        title={isEditing ? "Editar Viaje" : "Agregar Viaje al Turno"}
         onSubmit={handleSave}
         onCancel={handleCloseDialog}
       >
         <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              <strong>Bus:</strong> {turno.bus?.patente || 'N/A'}<br />
-              <strong>Tripulación:</strong> Heredada del turno automáticamente
-            </p>
-          </div>
+          {!isEditing && (
+             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+               <p className="text-sm text-blue-800">
+                 <strong>Bus:</strong> {turno.bus?.patente || 'N/A'}<br />
+                 <strong>Tripulación:</strong> Heredada del turno automáticamente
+               </p>
+             </div>
+          )}
 
           <Select
             label="Ruta *"
@@ -474,7 +516,12 @@ export default function TurnoViajesPage({ turno, onVolver }) {
               });
             }}
             required
+            disabled={isEditing}
           />
+          
+          {isEditing && (
+             <p className="text-xs text-gray-500 -mt-3 mb-3">La ruta no puede ser modificada una vez creado el viaje.</p>
+          )}
 
           {formData.ruta_id && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -506,15 +553,16 @@ export default function TurnoViajesPage({ turno, onVolver }) {
             />
           </div>
 
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-sm text-yellow-800">
-                 <strong>Importante:</strong> El viaje se creará como "PROGRAMADO". Luego presiona "Iniciar" cuando comience el viaje.
-            </p>
-          </div>
+          {!isEditing && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800">
+                    <strong>Importante:</strong> El viaje se creará como "PROGRAMADO". Luego presiona "Iniciar" cuando comience el viaje.
+                </p>
+            </div>
+          )}
         </div>
       </FormDialog>
 
-      {/* Dialog: Finalizar Viaje */}
       <FormDialog
         isOpen={openFinalizarDialog}
         title="Finalizar Viaje"

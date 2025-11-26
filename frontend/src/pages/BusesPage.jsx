@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Filter, X, Eye, ChevronDown, ChevronUp, Search,
   Edit2, Trash2, Bus, AlertCircle, Fuel, Calendar
@@ -10,7 +10,8 @@ import Select from '../components/common/Select';
 import Button from '../components/common/Button';
 import { fetchBuses, createBus, updateBus, deleteBus } from '../services/api';
 import usePagination from '../hooks/usePagination';
-import { useNotifications } from '../context/NotificationContext'; // IMPORTACIÓN AGREGADA
+import Pagination from '../components/common/Pagination';
+import { useNotifications } from '../context/NotificationContext';
 
 const ESTADOS_BUS = ['operativo', 'mantenimiento', 'desmantelado'];
 const TIPOS_COMBUSTIBLE = ['diesel', 'gasolina', 'gas', 'eléctrico', 'híbrido'];
@@ -19,20 +20,73 @@ const TIPOS_BUS = ['simple', 'doble piso'];
 const CANTIDAD_EJES = ['2', '3', '4'];
 const UBICACION_MOTOR = ['delantero', 'trasero', 'central'];
 
+// --- UTILIDADES DE FECHAS ---
+
+// 1. Formatear fecha para mostrar en tabla (DD/MM/AAAA)
+// Corrige el error de "un día antes" al no usar la zona horaria del navegador para interpretar el string
+const formatDate = (dateString) => {
+  if (!dateString) return '-';
+  // Tomamos solo la parte YYYY-MM-DD
+  const [year, month, day] = dateString.split('T')[0].split('-');
+  return `${day}/${month}/${year}`;
+};
+
+// 2. Semáforo de Vencimientos
+const getExpirationStyle = (dateString) => {
+  if (!dateString) return 'text-gray-600';
+  
+  // Crear fechas comparables sin horas (Medianoche)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Parsear la fecha de vencimiento manualmente para asegurar la fecha local correcta
+  const [year, month, day] = dateString.split('T')[0].split('-').map(Number);
+  const expirationDate = new Date(year, month - 1, day); // Mes es base 0 en JS
+  
+  // Calcular diferencia en días
+  const diffTime = expirationDate - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  // Lógica de colores
+  if (diffDays < 0) return 'text-red-700 font-bold bg-red-100 px-2 py-0.5 rounded border border-red-200'; // Vencido
+  if (diffDays <= 10) return 'text-red-600 font-bold animate-pulse'; // Crítico (<= 10 días)
+  if (diffDays <= 20) return 'text-amber-500 font-bold'; // Advertencia (11-20 días)
+  
+  return 'text-emerald-600 font-medium'; // OK (> 20 días)
+};
+
 export default function BusesPage() {
   // --- ESTADOS ---
   const [buses, setBuses] = useState([]);
   const [filteredBuses, setFilteredBuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // Se eliminó el estado 'success' ya que se usa el contexto de notificaciones
   
   const [openDialog, setOpenDialog] = useState(false);
   const [editingBus, setEditingBus] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  
+  // --- ESTADOS DE FILTROS ---
+  const [searchPatente, setSearchPatente] = useState('');
+  const [filterMarca, setFilterMarca] = useState('');
+  const [filterAnio, setFilterAnio] = useState('');
+  const [filterCombustible, setFilterCombustible] = useState('');
+  const [filterPasajeros, setFilterPasajeros] = useState('');
+  const [filterEstado, setFilterEstado] = useState(''); 
 
-  // --- HOOK DE NOTIFICACIONES ---
+  // --- GENERACIÓN DINÁMICA DE OPCIONES ---
+  const opcionesMarcas = useMemo(() => {
+    return [...new Set(buses.map(b => b.marca).filter(Boolean))].sort();
+  }, [buses]);
+
+  const opcionesAnios = useMemo(() => {
+    return [...new Set(buses.map(b => b.anio).filter(Boolean))].sort((a, b) => b - a);
+  }, [buses]);
+
+  const opcionesPasajeros = useMemo(() => {
+    return [...new Set(buses.map(b => b.capacidad_pasajeros).filter(Boolean))].sort((a, b) => a - b);
+  }, [buses]);
+
   const { addNotification } = useNotifications();
 
   const [formData, setFormData] = useState({
@@ -80,27 +134,37 @@ export default function BusesPage() {
     loadBuses();
   }, []);
 
+  // --- LÓGICA DE FILTRADO ---
   useEffect(() => {
-    if (!searchTerm) {
-      setFilteredBuses(buses);
-    } else {
-      const term = searchTerm.toLowerCase();
-      const filtered = buses.filter(b =>
-        b.patente.toLowerCase().includes(term) ||
-        b.marca.toLowerCase().includes(term) ||
-        b.modelo.toLowerCase().includes(term)
-      );
-      setFilteredBuses(filtered);
+    let data = buses;
+
+    if (searchPatente) {
+      const term = searchPatente.toLowerCase().trim();
+      data = data.filter(b => b.patente.toLowerCase().includes(term));
     }
-  }, [buses, searchTerm]);
+    if (filterMarca) {
+      data = data.filter(b => b.marca === filterMarca);
+    }
+    if (filterAnio) {
+      data = data.filter(b => b.anio.toString() === filterAnio.toString());
+    }
+    if (filterCombustible) {
+      data = data.filter(b => b.tipo_combustible === filterCombustible);
+    }
+    if (filterPasajeros) {
+      data = data.filter(b => b.capacidad_pasajeros.toString() === filterPasajeros.toString());
+    }
+    if (filterEstado) {
+      data = data.filter(b => b.estado === filterEstado);
+    }
+
+    setFilteredBuses(data);
+    setCurrentPage(1); 
+  }, [buses, searchPatente, filterMarca, filterAnio, filterCombustible, filterPasajeros, filterEstado]);
 
   // Configuración de Paginación
   const sortedData = [...filteredBuses].sort((a, b) => b.id - a.id);
   const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(sortedData, 10);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
 
   const loadBuses = async () => {
     try {
@@ -128,16 +192,12 @@ export default function BusesPage() {
     return `${patente.substring(0, 2)}·${patente.substring(2, 4)}·${patente.substring(4, 6)}`;
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('es-CL');
-  };
-
   const handleOpenDialog = (bus = null) => {
     if (bus) {
       setEditingBus(bus);
       setFormData({
         ...bus,
+        // Aseguramos que las fechas para los inputs sean YYYY-MM-DD
         fecha_adquisicion: bus.fecha_adquisicion ? bus.fecha_adquisicion.split('T')[0] : '',
         proxima_revision_tecnica: bus.proxima_revision_tecnica ? bus.proxima_revision_tecnica.split('T')[0] : '',
         ultima_revision_tecnica: bus.ultima_revision_tecnica ? bus.ultima_revision_tecnica.split('T')[0] : '',
@@ -201,8 +261,13 @@ export default function BusesPage() {
     }
   };
 
-  const handleClearSearch = () => {
-    setSearchTerm('');
+  const handleClearAllFilters = () => {
+    setSearchPatente('');
+    setFilterMarca('');
+    setFilterAnio('');
+    setFilterCombustible('');
+    setFilterPasajeros('');
+    setFilterEstado('');
   };
 
   const getEstadoColor = (estado) => {
@@ -238,7 +303,7 @@ export default function BusesPage() {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {paginatedData.length === 0 ? (
-              <tr><td colSpan="8" className="px-6 py-8 text-center text-gray-500">No se encontraron buses</td></tr>
+              <tr><td colSpan="8" className="px-6 py-8 text-center text-gray-500">No se encontraron buses con los filtros seleccionados</td></tr>
             ) : (
               paginatedData.map((bus) => (
                 <React.Fragment key={bus.id}>
@@ -254,7 +319,7 @@ export default function BusesPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bus.modelo}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bus.anio}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 capitalize">{bus.tipo_combustible}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bus.capacidad_pasajeros} pax</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bus.capacidad_pasajeros} pasajeros</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(bus.estado)}`}>
                         {bus.estado}
@@ -322,12 +387,40 @@ export default function BusesPage() {
                             <p><span className="text-gray-500">Prox. Mantención:</span> {formatDate(bus.fecha_proximo_mantenimiento)}</p>
                           </div>
 
-                          {/* 4. Documentación */}
+                          {/* 4. Documentación (CON ALERTAS DE VENCIMIENTO) */}
                           <div className="space-y-2">
                             <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><AlertCircle size={16}/> Documentos</h4>
-                            <p><span className="text-gray-500">Rev. Técnica:</span> {formatDate(bus.proxima_revision_tecnica)}</p>
-                            <p><span className="text-gray-500">SOAP:</span> {formatDate(bus.vencimiento_soap)}</p>
-                            <p><span className="text-gray-500">Seguro:</span> {getCoberturaLabel(bus.tipo_cobertura_adicional)}</p>
+                            
+                            {/* REVISIÓN TÉCNICA */}
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500">Rev. Técnica:</span>
+                                <span className={getExpirationStyle(bus.proxima_revision_tecnica)}>
+                                    {formatDate(bus.proxima_revision_tecnica)}
+                                </span>
+                            </div>
+                            
+                            {/* SOAP */}
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500">SOAP:</span>
+                                <span className={getExpirationStyle(bus.vencimiento_soap)}>
+                                    {formatDate(bus.vencimiento_soap)}
+                                </span>
+                            </div>
+                            
+                            {/* SEGURO */}
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500">Seguro:</span>
+                                {bus.tipo_cobertura_adicional !== 'ninguna' ? (
+                                    <span className={getExpirationStyle(bus.vencimiento_poliza)}>
+                                        {formatDate(bus.vencimiento_poliza)}
+                                    </span>
+                                ) : (
+                                    <span className="text-gray-400">Solo SOAP</span>
+                                )}
+                            </div>
+                            
+                            <p className="text-xs text-gray-400 mt-1 text-right">{getCoberturaLabel(bus.tipo_cobertura_adicional)}</p>
+
                             {bus.observaciones && (
                               <div className="mt-2 p-2 bg-white border border-gray-200 rounded text-xs text-gray-600 italic">
                                 {bus.observaciones}
@@ -351,7 +444,7 @@ export default function BusesPage() {
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       
-      {/* HEADER CARD NUEVO */}
+      {/* HEADER CARD */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -371,7 +464,7 @@ export default function BusesPage() {
         <Bus className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Error - Se mantiene solo para errores persistentes de carga, no para éxito/acciones */}
+      {/* Error */}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex items-center justify-between">
           <span>{error}</span>
@@ -379,25 +472,102 @@ export default function BusesPage() {
         </div>
       )}
 
-      {/* BUSCADOR UNIFICADO */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          <input
-            type="text"
-            placeholder="Buscar por patente, marca, modelo o año..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          />
-          {searchTerm && (
-            <button 
-              onClick={handleClearSearch}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X size={16} />
-            </button>
-          )}
+      {/* BARRA DE FILTROS (TEXTO + SELECTS) */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
+        <div className="flex flex-col space-y-4">
+          
+          {/* Fila 1: Buscador Patente */}
+          <div className="w-full relative">
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Buscar Patente</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="text"
+                placeholder="Ingrese patente..."
+                value={searchPatente}
+                onChange={(e) => setSearchPatente(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono uppercase"
+              />
+            </div>
+          </div>
+
+          {/* Fila 2: Filtros Selectores */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            
+            {/* Marca */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Marca</label>
+              <select
+                value={filterMarca}
+                onChange={(e) => setFilterMarca(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700 cursor-pointer"
+              >
+                <option value="">Todas</option>
+                {opcionesMarcas.map(marca => (
+                  <option key={marca} value={marca}>{marca}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Año */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Año</label>
+              <select
+                value={filterAnio}
+                onChange={(e) => setFilterAnio(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700 cursor-pointer"
+              >
+                <option value="">Todos</option>
+                {opcionesAnios.map(anio => (
+                  <option key={anio} value={anio}>{anio}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Combustible */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Combustible</label>
+              <select
+                value={filterCombustible}
+                onChange={(e) => setFilterCombustible(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700 cursor-pointer capitalize"
+              >
+                <option value="">Todos</option>
+                {TIPOS_COMBUSTIBLE.map(tipo => (
+                  <option key={tipo} value={tipo}>{tipo}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Pasajeros */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Capacidad</label>
+              <select
+                value={filterPasajeros}
+                onChange={(e) => setFilterPasajeros(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700 cursor-pointer"
+              >
+                <option value="">Todas</option>
+                {opcionesPasajeros.map(cap => (
+                  <option key={cap} value={cap}>{cap} pax</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Botón Limpiar */}
+            <div className="flex items-end">
+              {(searchPatente || filterMarca || filterAnio || filterCombustible || filterPasajeros || filterEstado) && (
+                <button 
+                  onClick={handleClearAllFilters}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 border border-gray-200 hover:border-red-200 rounded-lg transition-colors text-sm font-medium h-[38px]"
+                >
+                  <Filter size={16} />
+                  Limpiar
+                </button>
+              )}
+            </div>
+
+          </div>
         </div>
       </div>
 
@@ -409,32 +579,11 @@ export default function BusesPage() {
       )}
 
       {/* Paginación */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center mt-6">
-          <span className="text-sm text-gray-700">
-            Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-            <span className="ml-2 text-gray-500">(Total: {filteredBuses.length} buses)</span>
-          </span>
-          <div className="flex gap-2">
-            <Button 
-              variant="secondary" 
-              onClick={() => setCurrentPage(prev => prev - 1)} 
-              disabled={currentPage === 1}
-              className="flex items-center gap-1.5"
-            >
-              <ChevronDown className="rotate-90" size={16}/> Anterior
-            </Button>
-            <Button 
-              variant="secondary" 
-              onClick={() => setCurrentPage(prev => prev + 1)} 
-              disabled={currentPage === totalPages}
-              className="flex items-center gap-1.5"
-            >
-              Siguiente <ChevronDown className="-rotate-90" size={16}/>
-            </Button>
-          </div>
-        </div>
-      )}
+      <Pagination 
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
 
       {/* Dialog */}
       <FormDialog
@@ -444,301 +593,85 @@ export default function BusesPage() {
         onCancel={handleCloseDialog}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* IDENTIFICACIÓN */}
           <div className="md:col-span-2">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Identificación del Vehículo</h3>
           </div>
 
-          <Input
-            label="Patente *"
-            value={formData.patente}
-            onChange={(e) => handlePatenteChange(e.target.value)}
-            required
-            placeholder="ABCD12"
-            maxLength={6}
-            helpText="4 letras y 2 números"
-          />
-          <Input
-            label="Dígito Verificador"
-            value={formData.patente_verificador}
-            onChange={(e) => setFormData({ ...formData, patente_verificador: e.target.value.toUpperCase() })}
-            maxLength={1}
-            placeholder="Ej: 5"
-          />
-          <Input
-            label="Marca *"
-            value={formData.marca}
-            onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
-            required
-          />
-          <Input
-            label="Modelo *"
-            value={formData.modelo}
-            onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
-            required
-          />
+          <Input label="Patente *" value={formData.patente} onChange={(e) => handlePatenteChange(e.target.value)} required placeholder="ABCD12" maxLength={6} helpText="4 letras y 2 números" />
+          <Input label="Dígito Verificador" value={formData.patente_verificador} onChange={(e) => setFormData({ ...formData, patente_verificador: e.target.value.toUpperCase() })} maxLength={1} placeholder="Ej: 5" />
+          <Input label="Marca *" value={formData.marca} onChange={(e) => setFormData({ ...formData, marca: e.target.value })} required />
+          <Input label="Modelo *" value={formData.modelo} onChange={(e) => setFormData({ ...formData, modelo: e.target.value })} required />
           
-          {/* CARACTERÍSTICAS */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Características</h3>
           </div>
 
-          <Select
-            label="Tipo Combustible *"
-            options={TIPOS_COMBUSTIBLE.map(t => ({ id: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
-            value={formData.tipo_combustible}
-            onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
-            required
-          />
-          <Select
-            label="Tipo Bus *"
-            options={TIPOS_BUS.map(t => ({
-              id: t,
-              label: t === 'simple' ? 'Simple (1 Piso)' : 'Doble Piso' 
-            }))}
-            value={formData.tipo_bus}
-            onChange={(e) => setFormData({ ...formData, tipo_bus: e.target.value })}
-            required
-          />
-          <Select
-            label="Cantidad Ejes *"
-            options={CANTIDAD_EJES.map(e => ({ id: e, label: `${e} ejes` }))}
-            value={formData.cantidad_ejes}
-            onChange={(e) => setFormData({ ...formData, cantidad_ejes: e.target.value })}
-            required
-          />
+          <Select label="Tipo Combustible *" options={TIPOS_COMBUSTIBLE.map(t => ({ id: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} value={formData.tipo_combustible} onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })} required />
+          <Select label="Tipo Bus *" options={TIPOS_BUS.map(t => ({ id: t, label: t === 'simple' ? 'Simple (1 Piso)' : 'Doble Piso' }))} value={formData.tipo_bus} onChange={(e) => setFormData({ ...formData, tipo_bus: e.target.value })} required />
+          <Select label="Cantidad Ejes *" options={CANTIDAD_EJES.map(e => ({ id: e, label: `${e} ejes` }))} value={formData.cantidad_ejes} onChange={(e) => setFormData({ ...formData, cantidad_ejes: e.target.value })} required />
           
-          <Input
-            label="Año Fabricación *"
-            type="number"
-            value={formData.anio}
-            onChange={(e) => setFormData({ ...formData, anio: parseInt(e.target.value) || '' })}
-            required
-            min={1980}
-            max={new Date().getFullYear() + 1}
-          />
-          <Input
-            label="Capacidad Pasajeros *"
-            type="number"
-            value={formData.capacidad_pasajeros}
-            onChange={(e) => setFormData({ ...formData, capacidad_pasajeros: parseInt(e.target.value) || '' })}
-            required
-            min={1}
-            max={100}
-          />
-          <Input
-            label="Número Serie"
-            value={formData.numero_serie}
-            onChange={(e) => setFormData({ ...formData, numero_serie: e.target.value })}
-          />
+          <Input label="Año Fabricación *" type="number" value={formData.anio} onChange={(e) => setFormData({ ...formData, anio: parseInt(e.target.value) || '' })} required min={1980} max={new Date().getFullYear() + 1} />
+          <Input label="Capacidad Pasajeros *" type="number" value={formData.capacidad_pasajeros} onChange={(e) => setFormData({ ...formData, capacidad_pasajeros: parseInt(e.target.value) || '' })} required min={1} max={100} />
+          <Input label="Número Serie" value={formData.numero_serie} onChange={(e) => setFormData({ ...formData, numero_serie: e.target.value })} />
 
-          {/* MOTOR */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Motor</h3>
           </div>
-          <Input
-            label="Marca Motor"
-            value={formData.marca_motor}
-            onChange={(e) => setFormData({ ...formData, marca_motor: e.target.value })}
-            placeholder="Ej: Mercedes-Benz, Cummins"
-          />
-          <Input
-            label="Modelo Motor"
-            value={formData.modelo_motor}
-            onChange={(e) => setFormData({ ...formData, modelo_motor: e.target.value })}
-            placeholder="Ej: OM-457, ISB 6.7"
-          />
-          <Select
-            label="Ubicación Motor"
-            options={UBICACION_MOTOR.map(u => ({
-              id: u,
-              label: u.charAt(0).toUpperCase() + u.slice(1) 
-            }))}
-            value={formData.ubicacion_motor}
-            onChange={(e) => setFormData({ ...formData, ubicacion_motor: e.target.value })}
-          />
-          <Input
-            label="Número Motor"
-            value={formData.numero_motor}
-            onChange={(e) => setFormData({ ...formData, numero_motor: e.target.value })}
-          />
+          <Input label="Marca Motor" value={formData.marca_motor} onChange={(e) => setFormData({ ...formData, marca_motor: e.target.value })} placeholder="Ej: Mercedes-Benz, Cummins" />
+          <Input label="Modelo Motor" value={formData.modelo_motor} onChange={(e) => setFormData({ ...formData, modelo_motor: e.target.value })} placeholder="Ej: OM-457, ISB 6.7" />
+          <Select label="Ubicación Motor" options={UBICACION_MOTOR.map(u => ({ id: u, label: u.charAt(0).toUpperCase() + u.slice(1) }))} value={formData.ubicacion_motor} onChange={(e) => setFormData({ ...formData, ubicacion_motor: e.target.value })} />
+          <Input label="Número Motor" value={formData.numero_motor} onChange={(e) => setFormData({ ...formData, numero_motor: e.target.value })} />
 
-          {/* CHASIS */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Chasis</h3>
           </div>
-          <Input
-            label="Marca Chasis"
-            value={formData.marca_chasis}
-            onChange={(e) => setFormData({ ...formData, marca_chasis: e.target.value })}
-            placeholder="Ej: Mercedes-Benz, Volvo"
-          />
-          <Input
-            label="Modelo Chasis"
-            value={formData.modelo_chasis}
-            onChange={(e) => setFormData({ ...formData, modelo_chasis: e.target.value })}
-            placeholder="Ej: OF-1721, B270F"
-          />
-          <Input
-            label="Número Chasis (VIN)"
-            value={formData.numero_chasis}
-            onChange={(e) => setFormData({ ...formData, numero_chasis: e.target.value })}
-          />
+          <Input label="Marca Chasis" value={formData.marca_chasis} onChange={(e) => setFormData({ ...formData, marca_chasis: e.target.value })} placeholder="Ej: Mercedes-Benz, Volvo" />
+          <Input label="Modelo Chasis" value={formData.modelo_chasis} onChange={(e) => setFormData({ ...formData, modelo_chasis: e.target.value })} placeholder="Ej: OF-1721, B270F" />
+          <Input label="Número Chasis (VIN)" value={formData.numero_chasis} onChange={(e) => setFormData({ ...formData, numero_chasis: e.target.value })} />
           <div></div>
 
-          {/* CARROCERÍA */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Carrocería</h3>
           </div>
-          <Input
-            label="Marca Carrocería"
-            value={formData.marca_carroceria}
-            onChange={(e) => setFormData({ ...formData, marca_carroceria: e.target.value })}
-            placeholder="Ej: Marcopolo, Caio"
-          />
-          <Input
-            label="Modelo Carrocería"
-            value={formData.modelo_carroceria}
-            onChange={(e) => setFormData({ ...formData, modelo_carroceria: e.target.value })}
-            placeholder="Ej: Paradiso, Apache"
-          />
+          <Input label="Marca Carrocería" value={formData.marca_carroceria} onChange={(e) => setFormData({ ...formData, marca_carroceria: e.target.value })} placeholder="Ej: Marcopolo, Caio" />
+          <Input label="Modelo Carrocería" value={formData.modelo_carroceria} onChange={(e) => setFormData({ ...formData, modelo_carroceria: e.target.value })} placeholder="Ej: Paradiso, Apache" />
 
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Estado y Operación</h3>
           </div>
 
-          <Input
-            label="Fecha Adquisición"
-            type="date"
-            value={formData.fecha_adquisicion}
-            onChange={(e) => setFormData({ ...formData, fecha_adquisicion: e.target.value })}
-          />
-          <Select
-            label="Estado *"
-            options={ESTADOS_BUS.map(e => ({ id: e, label: e.charAt(0).toUpperCase() + e.slice(1) }))}
-            value={formData.estado}
-            onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-            required
-          />
-          
-          <Input
-            label="Km Original"
-            type="number"
-            value={formData.kilometraje_original}
-            onChange={(e) => setFormData({ ...formData, kilometraje_original: parseInt(e.target.value) || 0 })}
-            min={0}
-          />
+          <Input label="Fecha Adquisición" type="date" value={formData.fecha_adquisicion} onChange={(e) => setFormData({ ...formData, fecha_adquisicion: e.target.value })} />
+          <Select label="Estado *" options={ESTADOS_BUS.map(e => ({ id: e, label: e.charAt(0).toUpperCase() + e.slice(1) }))} value={formData.estado} onChange={(e) => setFormData({ ...formData, estado: e.target.value })} required />
+          <Input label="Km Original" type="number" value={formData.kilometraje_original} onChange={(e) => setFormData({ ...formData, kilometraje_original: parseInt(e.target.value) || 0 })} min={0} />
 
-          {/* MANTENIMIENTO */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Mantenimiento</h3>
           </div>
-          <Input
-            label="Mantenimiento cada (km)"
-            type="number"
-            value={formData.proximo_mantenimiento_km}
-            onChange={(e) => setFormData({ ...formData, proximo_mantenimiento_km: parseInt(e.target.value) || '' })}
-            placeholder="Ej: 10000"
-            helpText="Cada cuántos km requiere mantenimiento"
-            min={0}
-          />
-          <Input
-            label="Último Mantenimiento"
-            type="date"
-            value={formData.fecha_ultimo_mantenimiento}
-            onChange={(e) => setFormData({ ...formData, fecha_ultimo_mantenimiento: e.target.value })}
-          />
-          <Input
-            label="Próximo Mantenimiento"
-            type="date"
-            value={formData.fecha_proximo_mantenimiento}
-            onChange={(e) => setFormData({ ...formData, fecha_proximo_mantenimiento: e.target.value })}
-            helpText="Para alertas en dashboard"
-          />
+          <Input label="Mantenimiento cada (km)" type="number" value={formData.proximo_mantenimiento_km} onChange={(e) => setFormData({ ...formData, proximo_mantenimiento_km: parseInt(e.target.value) || '' })} placeholder="Ej: 10000" helpText="Cada cuántos km requiere mantenimiento" min={0} />
+          <Input label="Último Mantenimiento" type="date" value={formData.fecha_ultimo_mantenimiento} onChange={(e) => setFormData({ ...formData, fecha_ultimo_mantenimiento: e.target.value })} />
+          <Input label="Próximo Mantenimiento" type="date" value={formData.fecha_proximo_mantenimiento} onChange={(e) => setFormData({ ...formData, fecha_proximo_mantenimiento: e.target.value })} helpText="Para alertas en dashboard" />
           <div></div>
           
-          {/* REVISIÓN TÉCNICA */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Revisión Técnica</h3>
           </div>
-
-          <Input
-            label="Última Revisión Técnica"
-            type="date"
-            value={formData.ultima_revision_tecnica}
-            onChange={(e) => setFormData({ ...formData, ultima_revision_tecnica: e.target.value })}
-          />
-          <Input
-            label="Próxima Revisión Técnica"
-            type="date"
-            value={formData.proxima_revision_tecnica}
-            onChange={(e) => setFormData({ ...formData, proxima_revision_tecnica: e.target.value })}
-          />
+          <Input label="Última Revisión Técnica" type="date" value={formData.ultima_revision_tecnica} onChange={(e) => setFormData({ ...formData, ultima_revision_tecnica: e.target.value })} />
+          <Input label="Próxima Revisión Técnica" type="date" value={formData.proxima_revision_tecnica} onChange={(e) => setFormData({ ...formData, proxima_revision_tecnica: e.target.value })} />
           
-          {/* SOAP */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">SOAP (Seguro Obligatorio)</h3>
           </div>
+          <Input label="Número SOAP *" value={formData.numero_soap} onChange={(e) => setFormData({ ...formData, numero_soap: e.target.value })} required placeholder="Número del SOAP" />
+          <Input label="Vencimiento SOAP *" type="date" value={formData.vencimiento_soap} onChange={(e) => setFormData({ ...formData, vencimiento_soap: e.target.value })} required />
           
-          <Input
-            label="Número SOAP *"
-            value={formData.numero_soap}
-            onChange={(e) => setFormData({ ...formData, numero_soap: e.target.value })}
-            required
-            placeholder="Número del SOAP"
-          />
-          <Input
-            label="Vencimiento SOAP *"
-            type="date"
-            value={formData.vencimiento_soap}
-            onChange={(e) => setFormData({ ...formData, vencimiento_soap: e.target.value })}
-            required
-          />
-          
-          {/* COBERTURA ADICIONAL */}
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Cobertura Adicional (Opcional)</h3>
           </div>
-          
-          <Select
-            label="Tipo Cobertura"
-            options={TIPOS_COBERTURA.map(t => ({ 
-              id: t, 
-              label: t === 'ninguna' ? 'Ninguna / Solo SOAP' : 
-                     t === 'terceros' ? 'Responsabilidad Civil a Terceros' : 
-                     'Cobertura Full / Todo Riesgo'
-            }))}
-            value={formData.tipo_cobertura_adicional}
-            onChange={(e) => setFormData({ ...formData, tipo_cobertura_adicional: e.target.value })}
-          />
-          
-          <Input
-            label="Compañía Seguro"
-            value={formData.compania_seguro}
-            onChange={(e) => setFormData({ ...formData, compania_seguro: e.target.value })}
-            placeholder="Ej: Mapfre, HDI, Sura"
-          />
-          
-          <Input
-            label="Número Póliza"
-            value={formData.numero_poliza}
-            onChange={(e) => setFormData({ ...formData, numero_poliza: e.target.value })}
-            placeholder="Número de póliza"
-          />
-          
-          <Input
-            label="Vencimiento Póliza"
-            type="date"
-            value={formData.vencimiento_poliza}
-            onChange={(e) => setFormData({ ...formData, vencimiento_poliza: e.target.value })}
-          />
-          
-          {/* OTROS */}
-          <Input
-            label="Permiso Circulación"
-            value={formData.numero_permiso_circulacion}
-            onChange={(e) => setFormData({ ...formData, numero_permiso_circulacion: e.target.value })}
-          />
+          <Select label="Tipo Cobertura" options={TIPOS_COBERTURA.map(t => ({ id: t, label: t === 'ninguna' ? 'Ninguna / Solo SOAP' : t === 'terceros' ? 'Responsabilidad Civil a Terceros' : 'Cobertura Full / Todo Riesgo' }))} value={formData.tipo_cobertura_adicional} onChange={(e) => setFormData({ ...formData, tipo_cobertura_adicional: e.target.value })} />
+          <Input label="Compañía Seguro" value={formData.compania_seguro} onChange={(e) => setFormData({ ...formData, compania_seguro: e.target.value })} placeholder="Ej: Mapfre, HDI, Sura" />
+          <Input label="Número Póliza" value={formData.numero_poliza} onChange={(e) => setFormData({ ...formData, numero_poliza: e.target.value })} placeholder="Número de póliza" />
+          <Input label="Vencimiento Póliza" type="date" value={formData.vencimiento_poliza} onChange={(e) => setFormData({ ...formData, vencimiento_poliza: e.target.value })} />
+          <Input label="Permiso Circulación" value={formData.numero_permiso_circulacion} onChange={(e) => setFormData({ ...formData, numero_permiso_circulacion: e.target.value })} />
         </div>
 
         <div className="mt-4">

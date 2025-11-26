@@ -9,21 +9,21 @@ import Select from '../components/common/Select';
 import Button from '../components/common/Button';
 import { fetchConductores, fetchEmpleados, createConductor, updateConductor, deleteConductor } from '../services/api';
 import usePagination from '../hooks/usePagination';
-import { useNotifications } from '../context/NotificationContext'; // IMPORTACIÓN AGREGADA
+import Pagination from '../components/common/Pagination'; // Asegúrate de importar el componente de paginación
+import { useNotifications } from '../context/NotificationContext';
 
 const CLASES_LICENCIA = ['A', 'A2', 'A3', 'B', 'C', 'D', 'E'];
 const ESTADOS = ['activo', 'licencia_medica', 'suspendido', 'inactivo'];
 
 // ==========================================
-// UTILIDADES
+// UTILIDADES DE FECHAS Y SEMÁFORO
 // ==========================================
-const formatDate = (date) => {
-  if (!date) return '-';
-  return new Date(date).toLocaleDateString('es-CL', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
+
+// 1. Formatear fecha (Corrige error de zona horaria)
+const formatDate = (dateString) => {
+  if (!dateString) return '-';
+  const [year, month, day] = dateString.split('T')[0].split('-');
+  return `${day}/${month}/${year}`;
 };
 
 const formatRUT = (rut, verificador) => {
@@ -31,11 +31,32 @@ const formatRUT = (rut, verificador) => {
   return `${new Intl.NumberFormat('es-CL').format(rut)}-${verificador}`;
 };
 
+// 2. Semáforo de Vencimientos
+const getExpirationStyle = (dateString) => {
+  if (!dateString) return 'text-gray-600';
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Parseo manual YYYY-MM-DD para evitar UTC
+  const [year, month, day] = dateString.split('T')[0].split('-').map(Number);
+  const targetDate = new Date(year, month - 1, day);
+  
+  const diffTime = targetDate - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return 'text-red-700 font-bold bg-red-100 px-2 py-0.5 rounded border border-red-200'; // Vencido
+  if (diffDays <= 10) return 'text-red-600 font-bold animate-pulse'; // Crítico (<= 10 días)
+  if (diffDays <= 20) return 'text-amber-500 font-bold'; // Advertencia (11-20 días)
+  
+  return 'text-emerald-600 font-medium'; // OK (> 20 días)
+};
+
 export default function ConductoresPage() {
   // --- ESTADOS DE DATOS ---
   const [conductores, setConductores] = useState([]);
   const [empleados, setEmpleados] = useState([]);
-  
+   
   // --- ESTADOS DE UI ---
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -96,21 +117,6 @@ export default function ConductoresPage() {
     return colors[estado] || 'bg-gray-100 text-gray-800';
   };
 
-  const isLicenseExpiring = (date) => {
-    if (!date) return false;
-    const today = new Date();
-    const expiryDate = new Date(date);
-    const daysLeft = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
-    return daysLeft < 60 && daysLeft > 0;
-  };
-
-  const isLicenseExpired = (date) => {
-    if (!date) return false;
-    const today = new Date();
-    const expiryDate = new Date(date);
-    return expiryDate < today;
-  };
-
   const getEmpleadosDisponibles = () => {
     return empleados.filter(empleado => {
       if (empleado.estado !== 'activo') return false;
@@ -151,7 +157,6 @@ export default function ConductoresPage() {
 
   // --- LÓGICA DE FILTRADO Y PAGINACIÓN ---
   const getFilteredData = () => {
-    // 1. Ordenar por ID descendente
     const sortedData = [...conductores].sort((a, b) => b.id - a.id);
 
     if (!searchTerm.trim()) return sortedData;
@@ -173,6 +178,7 @@ export default function ConductoresPage() {
   };
 
   const filteredConductores = getFilteredData();
+  // Aquí aplicamos la paginación de 10 ítems
   const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(filteredConductores, 10);
 
   useEffect(() => {
@@ -186,7 +192,7 @@ export default function ConductoresPage() {
       setFormData({
         ...conductor,
         empleado_id: conductor.empleado_id || '',
-        // Asegurar formatos de fecha para inputs
+        // Asegurar formatos de fecha para inputs (YYYY-MM-DD)
         fecha_vencimiento_licencia: conductor.fecha_vencimiento_licencia ? conductor.fecha_vencimiento_licencia.split('T')[0] : '',
         fecha_primera_licencia: conductor.fecha_primera_licencia ? conductor.fecha_primera_licencia.split('T')[0] : '',
         fecha_examen_ocupacional: conductor.fecha_examen_ocupacional ? conductor.fecha_examen_ocupacional.split('T')[0] : '',
@@ -307,19 +313,15 @@ export default function ConductoresPage() {
                     <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap font-bold">
                       {conductor.clase_licencia}
                     </td>
+                    
+                    {/* COLUMNA DE VENCIMIENTO CON SEMÁFORO */}
                     <td className="px-6 py-4 text-sm whitespace-nowrap">
-                      <div className={
-                        isLicenseExpired(conductor.fecha_vencimiento_licencia) 
-                          ? 'text-red-600 font-bold flex items-center gap-1' 
-                          : isLicenseExpiring(conductor.fecha_vencimiento_licencia) 
-                          ? 'text-orange-600 font-bold flex items-center gap-1' 
-                          : 'text-gray-600'
-                      }>
+                      <div className={`flex items-center gap-1 ${getExpirationStyle(conductor.fecha_vencimiento_licencia)}`}>
                         {formatDate(conductor.fecha_vencimiento_licencia)}
-                        {isLicenseExpired(conductor.fecha_vencimiento_licencia) && <AlertCircle size={14}/>}
-                        {isLicenseExpiring(conductor.fecha_vencimiento_licencia) && !isLicenseExpired(conductor.fecha_vencimiento_licencia) && <AlertCircle size={14}/>}
+                        {(getExpirationStyle(conductor.fecha_vencimiento_licencia).includes('red') || getExpirationStyle(conductor.fecha_vencimiento_licencia).includes('amber')) && <AlertCircle size={16}/>}
                       </div>
                     </td>
+
                     <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
                       {conductor.anios_experiencia} años
                     </td>
@@ -365,7 +367,12 @@ export default function ConductoresPage() {
                             <p><span className="text-gray-500">N° Licencia:</span> {conductor.numero_licencia}</p>
                             <p><span className="text-gray-500">Clase:</span> {conductor.clase_licencia}</p>
                             <p><span className="text-gray-500">Emisión:</span> {formatDate(conductor.fecha_primera_licencia)}</p>
-                            <p><span className="text-gray-500">Vencimiento:</span> {formatDate(conductor.fecha_vencimiento_licencia)}</p>
+                            <p className="flex justify-between">
+                                <span className="text-gray-500">Vencimiento:</span> 
+                                <span className={getExpirationStyle(conductor.fecha_vencimiento_licencia)}>
+                                    {formatDate(conductor.fecha_vencimiento_licencia)}
+                                </span>
+                            </p>
                             <p className="text-xs text-gray-400 italic mt-1">Obs: {conductor.observaciones_licencia || 'Sin observaciones'}</p>
                           </div>
 
@@ -380,9 +387,9 @@ export default function ConductoresPage() {
                           <div className="space-y-3">
                             <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><User size={16}/> Salud & Certs</h4>
                             <p><span className="text-gray-500">Examen Ocupacional:</span> {formatDate(conductor.fecha_examen_ocupacional)}</p>
-                            <p><span className="text-gray-500">Apto Conducir:</span> {conductor.apto_conducir ? '✅ SÍ' : '❌ NO'}</p>
-                            <p><span className="text-gray-500">RCP:</span> {conductor.certificado_rcp ? '✅ Vigente' : '❌ Pendiente'}</p>
-                            <p><span className="text-gray-500">Manejo Defensivo:</span> {conductor.certificado_defensa ? '✅ Vigente' : '❌ Pendiente'}</p>
+                            <p><span className="text-gray-500">Apto Conducir:</span> {conductor.apto_conducir ? ' SÍ' : ' NO'}</p>
+                            <p><span className="text-gray-500">RCP:</span> {conductor.certificado_rcp ? ' Vigente' : ' Pendiente'}</p>
+                            <p><span className="text-gray-500">Manejo Defensivo:</span> {conductor.certificado_defensa ? ' Vigente' : ' Pendiente'}</p>
                           </div>
 
                         </div>
@@ -460,33 +467,12 @@ export default function ConductoresPage() {
         renderConductoresTable()
       )}
 
-      {/* Paginación */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center mt-6">
-          <span className="text-sm text-gray-700">
-            Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-            <span className="ml-2 text-gray-500">(Total: {filteredConductores.length} conductores)</span>
-          </span>
-          <div className="flex gap-2">
-            <Button 
-              variant="secondary" 
-              onClick={() => setCurrentPage(prev => prev - 1)} 
-              disabled={currentPage === 1}
-              className="flex items-center gap-1.5"
-            >
-              <ChevronDown className="rotate-90" size={16}/> Anterior
-            </Button>
-            <Button 
-              variant="secondary" 
-              onClick={() => setCurrentPage(prev => prev + 1)} 
-              disabled={currentPage === totalPages}
-              className="flex items-center gap-1.5"
-            >
-              Siguiente <ChevronDown className="-rotate-90" size={16}/>
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* PAGINACIÓN COMPONENTE */}
+      <Pagination 
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
 
       {/* Dialog */}
       <FormDialog

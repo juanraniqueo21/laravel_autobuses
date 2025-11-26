@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Mail, Search, X, Users } from 'lucide-react'; // Agregado Users
+import { Plus, Mail, Search, X, Users } from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import Button from '../components/common/Button';
 import { fetchUsers, fetchRoles, createUser, updateUser, deleteUser } from '../services/api';
-import { useNotifications } from '../context/NotificationContext'; 
+import { useNotifications } from '../context/NotificationContext';
+import usePagination from '../hooks/usePagination'; // IMPORTAR HOOK
+import Pagination from '../components/common/Pagination'; // IMPORTAR COMPONENTE
 
 const ESTADOS = ['activo', 'inactivo', 'suspendido'];
 
@@ -14,9 +16,6 @@ const ESTADOS = ['activo', 'inactivo', 'suspendido'];
 // UTILIDADES
 // ============================================
 
-/**
- * Formatear RUT chileno mientras se escribe
- */
 const formatRutChile = (rut) => {
   let cleaned = rut.replace(/[^0-9kK]/g, '').toUpperCase();
   if (cleaned.length === 0) return '';
@@ -26,9 +25,6 @@ const formatRutChile = (rut) => {
   return `${numero}-${dv}`;
 };
 
-/**
- * Validar formato básico de RUT
- */
 const isValidRutFormat = (rut) => {
   const cleaned = rut.replace(/[^0-9kK]/g, '').toUpperCase();
   if (cleaned.length < 2) return false;
@@ -39,9 +35,6 @@ const isValidRutFormat = (rut) => {
   return true;
 };
 
-/**
- * Calcular dígito verificador de RUT (Módulo 11)
- */
 const calcularDVRut = (rut) => {
   const numero = rut.replace(/[^0-9]/g, '');
   let suma = 0;
@@ -57,9 +50,6 @@ const calcularDVRut = (rut) => {
   return dv.toString();
 };
 
-/**
- * Validar RUT completo
- */
 const isValidRutComplete = (rut) => {
   if (!isValidRutFormat(rut)) return false;
   const cleaned = rut.replace(/[^0-9kK]/g, '').toUpperCase();
@@ -80,7 +70,6 @@ export default function UsersPage() {
   const [rutError, setRutError] = useState('');
   const [searchTerm, setSearchTerm] = useState(''); 
 
-  // --- HOOK DE NOTIFICACIONES ---
   const { addNotification } = useNotifications();
 
   const [formData, setFormData] = useState({
@@ -115,6 +104,14 @@ export default function UsersPage() {
       setFilteredUsers(filtered);
     }
   }, [users, searchTerm]);
+
+  // IMPLEMENTACIÓN DE PAGINACIÓN (Límite 10)
+  // Usamos filteredUsers como fuente de datos
+  const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(filteredUsers, 10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const loadData = async () => {
     try {
@@ -272,7 +269,7 @@ export default function UsersPage() {
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       
-      {/* HEADER CARD NUEVO */}
+      {/* HEADER CARD */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -324,10 +321,17 @@ export default function UsersPage() {
       {/* Tabla */}
       <Table
         columns={columns}
-        data={filteredUsers} // Usamos la lista filtrada
+        data={paginatedData} // CORRECCIÓN: Usar datos paginados
         loading={loading}
         onEdit={handleOpenDialog}
         onDelete={handleDelete}
+      />
+
+      {/* PAGINACIÓN COMPONENTE */}
+      <Pagination 
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
       />
 
       {/* Dialog */}

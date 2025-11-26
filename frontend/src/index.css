@@ -4,12 +4,28 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ocultar barra de scroll pero mantener funcionalidad */
+/* === MEJORA: Scrollbar Estilizado (Reemplaza al oculto) === */
+
+/* Configuración para Firefox */
 .custom-scrollbar {
-  -ms-overflow-style: none;  /* Internet Explorer 10+ */
-  scrollbar-width: none;  /* Firefox */
+  scrollbar-width: thin;               /* Hace la barra más delgada */
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent; /* Color del "dedo" y del fondo */
 }
 
+/* Configuración para Chrome, Edge y Safari */
 .custom-scrollbar::-webkit-scrollbar { 
-  display: none;  /* Safari and Chrome */
+  width: 6px;                          /* Ancho delgado (elegante) */
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;             /* El fondo de la carrilera es transparente */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2); /* Color gris/blanco translúcido */
+  border-radius: 10px;                 /* Bordes muy redondeados */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.4); /* Se ilumina un poco al pasar el mouse */
 }

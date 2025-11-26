@@ -9,7 +9,8 @@ import Select from '../components/common/Select';
 import Button from '../components/common/Button';
 import { fetchAsistentes, fetchEmpleados, createAsistente, updateAsistente, deleteAsistente } from '../services/api';
 import usePagination from '../hooks/usePagination';
-import { useNotifications } from '../context/NotificationContext'; // IMPORTACIÓN AGREGADA
+import Pagination from '../components/common/Pagination'; // IMPORTAR COMPONENTE
+import { useNotifications } from '../context/NotificationContext'; 
 
 const ESTADOS_ASISTENTE = ['activo', 'inactivo', 'licencia_medica', 'suspendido'];
 
@@ -433,33 +434,12 @@ export default function AsistentesPage() {
         renderAsistentesTable()
       )}
 
-      {/* Paginación */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center mt-6">
-          <span className="text-sm text-gray-700">
-            Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-            <span className="ml-2 text-gray-500">(Total: {filteredAsistentes.length} asistentes)</span>
-          </span>
-          <div className="flex gap-2">
-            <Button 
-              variant="secondary" 
-              onClick={() => setCurrentPage(prev => prev - 1)} 
-              disabled={currentPage === 1}
-              className="flex items-center gap-1.5"
-            >
-              <ChevronDown className="rotate-90" size={16}/> Anterior
-            </Button>
-            <Button 
-              variant="secondary" 
-              onClick={() => setCurrentPage(prev => prev + 1)} 
-              disabled={currentPage === totalPages}
-              className="flex items-center gap-1.5"
-            >
-              Siguiente <ChevronDown className="-rotate-90" size={16}/>
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* PAGINACIÓN COMPONENTE */}
+      <Pagination 
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
 
       {/* Dialog */}
       <FormDialog

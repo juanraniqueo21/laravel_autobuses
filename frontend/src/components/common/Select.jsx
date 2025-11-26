@@ -1,3 +1,5 @@
+import React from 'react';
+
 export default function Select({ 
   label, 
   options = [], 
@@ -21,7 +23,7 @@ export default function Select({
         className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer ${error ? 'border-red-500' : ''}`}
         {...props}
       >
-        <option value="">Seleccionar...</option>
+        {/* Opción "Seleccionar..." eliminada para que muestre el primer elemento o quede vacío */}
         {options.map(opt => (
           <option key={opt.id} value={opt.id}>
             {opt.label}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, MapPin, Search, ArrowRight, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { Plus, MapPin, Search, ArrowRight, Clock } from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
@@ -7,6 +7,8 @@ import Select from '../components/common/Select';
 import Button from '../components/common/Button';
 import RutaDetallePage from './RutaDetallePage'; 
 import { fetchRutas, createRuta, updateRuta, deleteRuta } from '../services/api';
+import usePagination from '../hooks/usePagination'; // IMPORTAR HOOK
+import Pagination from '../components/common/Pagination'; // IMPORTAR COMPONENTE
 
 const ESTADOS_RUTA = ['activa', 'inactiva', 'en_revision'];
 
@@ -18,9 +20,10 @@ export default function RutasPage() {
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedRutaId, setSelectedRutaId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
   
+  // IMPLEMENTACIÓN DE PAGINACIÓN (Límite 10)
+  const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(filteredRutas, 10);
+
   const [formData, setFormData] = useState({
     nombre_ruta: '', codigo_ruta: '', origen: '', destino: '', descripcion: '', estado: 'activa',
   });
@@ -52,12 +55,6 @@ export default function RutasPage() {
       setLoading(false);
     }
   };
-
-  // Paginación
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const paginatedData = filteredRutas.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredRutas.length / itemsPerPage);
 
   const handleOpenDialog = () => { setFormData({ nombre_ruta: '', codigo_ruta: '', origen: '', destino: '', descripcion: '', estado: 'activa' }); setOpenDialog(true); };
   const handleCloseDialog = () => setOpenDialog(false);
@@ -120,19 +117,21 @@ export default function RutasPage() {
 
       {/* Tabla */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <Table columns={columns} data={paginatedData} loading={loading} onEdit={(r) => setSelectedRutaId(r.id)} onDelete={handleDelete} />
-        
-        {/* Controles Paginación */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50">
-            <span className="text-sm text-gray-600">Página {currentPage} de {totalPages}</span>
-            <div className="flex gap-2">
-              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 hover:bg-gray-200 rounded disabled:opacity-50"><ChevronLeft size={20}/></button>
-              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 hover:bg-gray-200 rounded disabled:opacity-50"><ChevronRight size={20}/></button>
-            </div>
-          </div>
-        )}
+        <Table 
+          columns={columns} 
+          data={paginatedData} 
+          loading={loading} 
+          onEdit={(r) => setSelectedRutaId(r.id)} 
+          onDelete={handleDelete} 
+        />
       </div>
+
+      {/* PAGINACIÓN COMPONENTE */}
+      <Pagination 
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
 
       <FormDialog isOpen={openDialog} title="Nueva Ruta" onSubmit={handleSave} onCancel={handleCloseDialog}>
          <div className="space-y-4">
