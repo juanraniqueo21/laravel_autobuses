@@ -355,25 +355,39 @@ return new class extends Migration
         });
 
         // ============================================
-        // 15. TABLA: PERMISOS_VACACIONES
+        // 15. TABLA: PERMISOS_LICENCIAS
         // ============================================
-        Schema::create('permisos_vacaciones', function (Blueprint $table) {
+        Schema::create('permisos_licencias', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('empleado_id');
-            $table->enum('tipo', ['permiso', 'vacaciones', 'licencia_medica', 'licencia_maternidad']);
+            $table->enum('tipo', ['permiso', 'vacaciones', 'licencia_medica', 'licencia_maternidad', 'licencia_paternidad']);
             $table->date('fecha_inicio');
             $table->date('fecha_termino');
             $table->integer('dias_totales');
             $table->enum('estado', ['solicitado', 'aprobado', 'rechazado', 'completado'])->default('solicitado');
             $table->text('motivo')->nullable();
+
+            // Campos para manejo de archivos adjuntos (PDF)
+            $table->string('ruta_archivo', 500)->nullable(); // Ruta del PDF de respaldo
+            $table->string('nombre_archivo', 255)->nullable(); // Nombre original del archivo
+
+            // Campos de aprobación/rechazo
             $table->unsignedBigInteger('aprobado_por')->nullable();
             $table->timestamp('fecha_respuesta')->nullable();
+            $table->unsignedBigInteger('rechazado_por')->nullable();
+            $table->text('motivo_rechazo')->nullable();
             $table->text('observaciones')->nullable();
             $table->timestamps();
-            
+
             // Relaciones
-            $table->foreign('empleado_id')->references('id')->on('empleados');
+            $table->foreign('empleado_id')->references('id')->on('empleados')->onDelete('cascade');
             $table->foreign('aprobado_por')->references('id')->on('users');
+            $table->foreign('rechazado_por')->references('id')->on('users');
+
+            // Índices
+            $table->index('empleado_id');
+            $table->index('estado');
+            $table->index(['fecha_inicio', 'fecha_termino']);
         });
 
         // ============================================
@@ -406,7 +420,7 @@ return new class extends Migration
     {
         // Eliminar en orden inverso por las relaciones
         Schema::dropIfExists('auditoria');
-        Schema::dropIfExists('permisos_vacaciones');
+        Schema::dropIfExists('permisos_licencias');
         Schema::dropIfExists('asistencias');
         Schema::dropIfExists('liquidaciones');
         Schema::dropIfExists('reportes_operatividad');
