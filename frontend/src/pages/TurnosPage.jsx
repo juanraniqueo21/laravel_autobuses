@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, X, Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
-  Edit2, Trash2, Clock, MapPin, Users, Bus 
+  Edit2, Trash2, Clock, MapPin, Users, Bus, AlertCircle 
 } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
@@ -9,7 +9,7 @@ import Select from '../components/common/Select';
 import FormDialog from '../components/forms/FormDialog';
 import { 
   fetchTurnos, createTurno, updateTurno, deleteTurno,
-  fetchBuses, fetchConductores, fetchAsistentes 
+  fetchBuses, fetchConductores, fetchAsistentes, fetchLicencias 
 } from '../services/api';
 
 const TIPOS_TURNO = ['mañana', 'tarde', 'noche', 'completo'];
@@ -23,13 +23,14 @@ export default function TurnosPage() {
   const [buses, setBuses] = useState([]);
   const [conductores, setConductores] = useState([]);
   const [asistentes, setAsistentes] = useState([]);
+  const [licencias, setLicencias] = useState([]);
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date()); // Seleccionar hoy por defecto
+  const [selectedDate, setSelectedDate] = useState(new Date());
   
   const [openDialog, setOpenDialog] = useState(false);
   const [editingTurno, setEditingTurno] = useState(null);
@@ -52,12 +53,32 @@ export default function TurnosPage() {
   const loadInitialData = async () => {
     try {
       setLoading(true);
+      
+      // Cargar datos básicos
       const [busesData, conductoresData, asistentesData] = await Promise.all([
-        fetchBuses(), fetchConductores(), fetchAsistentes()
+        fetchBuses(), 
+        fetchConductores(), 
+        fetchAsistentes()
       ]);
+      
       setBuses(Array.isArray(busesData) ? busesData : []);
       setConductores(Array.isArray(conductoresData) ? conductoresData : []);
       setAsistentes(Array.isArray(asistentesData) ? asistentesData : []);
+      
+      // Solo cargar licencias si el usuario tiene permisos (Admin, Manager, RRHH)
+      const user = JSON.parse(localStorage.getItem('user'));
+      if (user && [1, 2, 6].includes(user.rol_id)) {
+        try {
+          const licenciasData = await fetchLicencias();
+          setLicencias(Array.isArray(licenciasData) ? licenciasData.filter(l => l.estado === 'aprobado') : []);
+        } catch (err) {
+          console.warn('No se pudieron cargar licencias:', err);
+          setLicencias([]);
+        }
+      } else {
+        setLicencias([]);
+      }
+      
       await loadTurnos();
     } catch (err) {
       setError('Error al cargar datos iniciales: ' + err.message);
@@ -79,6 +100,148 @@ export default function TurnosPage() {
     } catch (err) {
       setTurnos([]);
     }
+  };
+
+  // --- VALIDACIÓN DE LICENCIAS ---
+  const empleadoTieneLicenciaEnFecha = (empleadoId, fechaTurno) => {
+    if (!empleadoId || !fechaTurno) return null;
+    
+    return licencias.find(licencia => {
+      if (licencia.empleado_id !== empleadoId) return false;
+      if (licencia.estado !== 'aprobado') return false;
+      
+      const fechaInicio = new Date(licencia.fecha_inicio);
+      const fechaTermino = new Date(licencia.fecha_termino);
+      const fechaCheck = new Date(fechaTurno);
+      
+      return fechaCheck >= fechaInicio && fechaCheck <= fechaTermino;
+    });
+  };
+
+  const getConductoresDisponibles = () => {
+    // Obtener conductores ya asignados en este turno (si estamos editando)
+    const conductoresAsignadosEnEsteTurno = editingTurno 
+      ? editingTurno.conductores?.map(c => c.id) || []
+      : [];
+    
+    // Obtener IDs de conductores ya seleccionados en el formulario actual
+    const conductoresSeleccionados = formConductores
+      .map(c => parseInt(c.conductor_id))
+      .filter(id => !isNaN(id));
+
+    return conductores
+      .filter(c => c.estado === 'activo')
+      .map(conductor => {
+        // Verificar si tiene licencia
+        const licencia = empleadoTieneLicenciaEnFecha(conductor.empleado_id, formData.fecha_turno);
+        
+        // Verificar si ya tiene turno ese día (excepto el turno actual si estamos editando)
+        let yaTieneTurnoEseDia = false;
+        if (formData.fecha_turno) {
+          const fechaTurno = formData.fecha_turno;
+          
+          yaTieneTurnoEseDia = turnos.some(turno => {
+            // Si estamos editando, excluir el turno actual
+            if (editingTurno && turno.id === editingTurno.id) {
+              return false;
+            }
+            
+            // Verificar si es la misma fecha
+            const turnoFecha = turno.fecha_turno.split('T')[0];
+            if (turnoFecha !== fechaTurno) {
+              return false;
+            }
+            
+            // Verificar si este conductor está asignado a ese turno
+            return turno.conductores?.some(c => c.id === conductor.id);
+          });
+        }
+        
+        // Verificar si ya fue seleccionado en otro campo del formulario
+        const yaSeleccionadoEnOtroCampo = conductoresSeleccionados.includes(conductor.id) && 
+                                          !conductoresAsignadosEnEsteTurno.includes(conductor.id);
+        
+        return {
+          ...conductor,
+          tieneLicencia: !!licencia,
+          licenciaInfo: licencia,
+          yaTieneTurno: yaTieneTurnoEseDia,
+          yaSeleccionado: yaSeleccionadoEnOtroCampo
+        };
+      })
+      // FILTRAR: Solo mostrar los que NO tienen licencia, NO tienen turno y NO están ya seleccionados
+      // EXCEPCIÓN: Si están en el turno actual que estamos editando, sí mostrarlos
+      .filter(conductor => {
+        // Si está asignado al turno que estamos editando, siempre mostrarlo
+        if (editingTurno && conductoresAsignadosEnEsteTurno.includes(conductor.id)) {
+          return true;
+        }
+        // Si no, solo mostrar si está disponible
+        return !conductor.tieneLicencia && !conductor.yaTieneTurno;
+      });
+  };
+
+  const getAsistentesDisponibles = () => {
+    // Obtener asistentes ya asignados en este turno (si estamos editando)
+    const asistentesAsignadosEnEsteTurno = editingTurno 
+      ? editingTurno.asistentes?.map(a => a.id) || []
+      : [];
+    
+    // Obtener IDs de asistentes ya seleccionados en el formulario actual
+    const asistentesSeleccionados = formAsistentes
+      .map(a => parseInt(a.asistente_id))
+      .filter(id => !isNaN(id));
+
+    return asistentes
+      .filter(a => a.estado === 'activo')
+      .map(asistente => {
+        // Verificar si tiene licencia
+        const licencia = empleadoTieneLicenciaEnFecha(asistente.empleado_id, formData.fecha_turno);
+        
+        // Verificar si ya tiene turno ese día (excepto el turno actual si estamos editando)
+        let yaTieneTurnoEseDia = false;
+        if (formData.fecha_turno) {
+          const fechaTurno = formData.fecha_turno;
+          
+          yaTieneTurnoEseDia = turnos.some(turno => {
+            // Si estamos editando, excluir el turno actual
+            if (editingTurno && turno.id === editingTurno.id) {
+              return false;
+            }
+            
+            // Verificar si es la misma fecha
+            const turnoFecha = turno.fecha_turno.split('T')[0];
+            if (turnoFecha !== fechaTurno) {
+              return false;
+            }
+            
+            // Verificar si este asistente está asignado a ese turno
+            return turno.asistentes?.some(a => a.id === asistente.id);
+          });
+        }
+        
+        // Verificar si ya fue seleccionado en otro campo del formulario
+        const yaSeleccionadoEnOtroCampo = asistentesSeleccionados.includes(asistente.id) && 
+                                          !asistentesAsignadosEnEsteTurno.includes(asistente.id);
+        
+        return {
+          ...asistente,
+          tieneLicencia: !!licencia,
+          licenciaInfo: licencia,
+          yaTieneTurno: yaTieneTurnoEseDia,
+          yaSeleccionado: yaSeleccionadoEnOtroCampo
+        };
+      })
+      // FILTRAR: Solo mostrar los que NO tienen licencia, NO tienen turno y NO están ya seleccionados
+      // EXCEPCIÓN: Si están en el turno actual que estamos editando, sí mostrarlos
+      .filter(asistente => {
+        // Si está asignado al turno que estamos editando, siempre mostrarlo
+        if (editingTurno && asistentesAsignadosEnEsteTurno.includes(asistente.id)) {
+          return true;
+        }
+        // Si no, solo mostrar si está disponible
+        return !asistente.tieneLicencia && !asistente.yaTieneTurno;
+      });
   };
 
   // --- LOGICA CALENDARIO ---
@@ -136,7 +299,33 @@ export default function TurnosPage() {
   const handleSave = async () => {
     try {
       const conductoresValidos = formConductores.filter(c => c.conductor_id);
-      if (conductoresValidos.length === 0) { setError('Debe asignar al menos un conductor'); return; }
+      if (conductoresValidos.length === 0) { 
+        setError('Debe asignar al menos un conductor'); 
+        return; 
+      }
+
+      // Validar licencias del lado del cliente (el backend también valida)
+      for (const c of conductoresValidos) {
+        const conductor = conductores.find(x => x.id === parseInt(c.conductor_id));
+        if (conductor) {
+          const licencia = empleadoTieneLicenciaEnFecha(conductor.empleado_id, formData.fecha_turno);
+          if (licencia) {
+            setError(`El conductor ${conductor.empleado?.user?.nombre} ${conductor.empleado?.user?.apellido} tiene licencia médica hasta el ${licencia.fecha_termino}`);
+            return;
+          }
+        }
+      }
+
+      for (const a of formAsistentes.filter(x => x.asistente_id)) {
+        const asistente = asistentes.find(x => x.id === parseInt(a.asistente_id));
+        if (asistente) {
+          const licencia = empleadoTieneLicenciaEnFecha(asistente.empleado_id, formData.fecha_turno);
+          if (licencia) {
+            setError(`El asistente ${asistente.empleado?.user?.nombre} ${asistente.empleado?.user?.apellido} tiene licencia médica hasta el ${licencia.fecha_termino}`);
+            return;
+          }
+        }
+      }
       
       const payload = {
         ...formData,
@@ -182,12 +371,20 @@ export default function TurnosPage() {
   const monthName = currentDate.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
   const turnosSelected = selectedDate ? getTurnosForDate(selectedDate) : [];
 
+  const conductoresDisponibles = getConductoresDisponibles();
+  const asistentesDisponibles = getAsistentesDisponibles();
+
   // Gestión dinámica de conductores/asistentes en formulario
   const handleConductorChange = (idx, field, val) => {
-    const newC = [...formConductores]; newC[idx][field] = val; setFormConductores(newC);
+    const newC = [...formConductores]; 
+    newC[idx][field] = val; 
+    setFormConductores(newC);
   };
+  
   const handleAsistenteChange = (idx, field, val) => {
-    const newA = [...formAsistentes]; newA[idx][field] = val; setFormAsistentes(newA);
+    const newA = [...formAsistentes]; 
+    newA[idx][field] = val; 
+    setFormAsistentes(newA);
   };
 
   return (
@@ -368,68 +565,177 @@ export default function TurnosPage() {
         <div className="space-y-6">
           {/* Info Básica */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input label="Fecha *" type="date" value={formData.fecha_turno} onChange={(e) => setFormData({...formData, fecha_turno: e.target.value})} required />
+            <Input 
+              label="Fecha *" 
+              type="date" 
+              value={formData.fecha_turno} 
+              onChange={(e) => setFormData({...formData, fecha_turno: e.target.value})} 
+              required 
+            />
             <Select label="Tipo *" options={TIPOS_TURNO.map(t => ({id:t, label:t}))} value={formData.tipo_turno} onChange={(e) => setFormData({...formData, tipo_turno: e.target.value})} required />
             <Input label="Inicio *" type="time" value={formData.hora_inicio} onChange={(e) => setFormData({...formData, hora_inicio: e.target.value})} required />
             <Input label="Término *" type="time" value={formData.hora_termino} onChange={(e) => setFormData({...formData, hora_termino: e.target.value})} required />
           </div>
 
           {/* Bus */}
-          <div className="border-t pt-4">
-            <h4 className="text-sm font-bold text-slate-700 mb-3">Asignación de Bus</h4>
-            <Select 
-              label="Bus *" 
-              options={[{id:'', label:'Seleccione...'}, ...buses.filter(b=>b.estado==='operativo').map(b=>({id:b.id, label:`${b.patente} - ${b.modelo} (${b.tipo_bus})`}))]} 
-              value={formData.bus_id} 
-              onChange={(e) => setFormData({...formData, bus_id: e.target.value})} 
-              required 
-            />
-          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Bus *</label>
+
 
           {/* Personal */}
           <div className="border-t pt-4">
             <h4 className="text-sm font-bold text-slate-700 mb-3">Tripulación</h4>
-            
+            <select
+              value={formData.bus_id}
+              onChange={(e) => setFormData({...formData, bus_id: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              required
+            >
+              <option value="">Seleccione un bus...</option>
+              {buses
+                .filter(b => b.estado === 'operativo')
+                .map(bus => (
+                  <option key={bus.id} value={bus.id}>
+                    {bus.patente} - {bus.modelo} ({bus.tipo_bus})
+                  </option>
+                ))}
+            </select>
+            {/*mensaje si no hay disponibles*/}
+            {buses.filter(b => b.estado === 'operativo').length === 0 && (
+              <p className="text-xs text-amber-700 mt-1 flex items-center gap-1">
+                <AlertCircle size={12} />
+                No hay buses operativos disponibles. Algunos pueden estar en mantenimiento.
+              </p>
+            )}
+
+          </div>
+              
             {/* Conductores */}
             <div className="space-y-2 mb-4">
               <label className="text-xs font-semibold text-slate-500 uppercase">Conductores</label>
-              {formConductores.map((c, i) => (
-                <div key={i} className="flex gap-2">
-                  <div className="flex-1">
-                    <Select 
-                      options={[{id:'', label:'Seleccione...'}, ...conductores.filter(x=>x.estado==='activo').map(x=>({id:x.id, label:`${x.empleado?.user?.nombre} ${x.empleado?.user?.apellido}`}))]}
-                      value={c.conductor_id}
-                      onChange={(e) => handleConductorChange(i, 'conductor_id', e.target.value)}
-                    />
+              {formConductores.map((c, i) => {
+                const conductor = conductoresDisponibles.find(x => x.id === parseInt(c.conductor_id));
+                const tieneLicencia = conductor?.tieneLicencia;
+                
+                return (
+                  <div key={i} className="space-y-2">
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <select
+                          value={c.conductor_id}
+                          onChange={(e) => handleConductorChange(i, 'conductor_id', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                          <option value="">Seleccione...</option>
+                          {conductoresDisponibles.map(conductor => (
+                            <option 
+                              key={conductor.id} 
+                              value={conductor.id}
+                            >
+                              {conductor.empleado?.user?.nombre} {conductor.empleado?.user?.apellido}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="w-32">
+                        <Select options={ROLES_CONDUCTOR.map(r=>({id:r, label:r}))} value={c.rol} onChange={(e)=>handleConductorChange(i,'rol',e.target.value)} />
+                      </div>
+                      {formConductores.length > 1 && (
+                        <button 
+                          type="button" 
+                          onClick={() => {const n=[...formConductores]; n.splice(i,1); setFormConductores(n)}} 
+                          className="text-red-500 p-2"
+                        >
+                          <X size={16}/>
+                        </button>
+                      )}
+                    </div>
+                    
+                    {/* Advertencia de Licencia */}
+                    {tieneLicencia && conductor.licenciaInfo && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
+                        <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-xs text-amber-800">
+                          <p className="font-semibold">Empleado con licencia médica</p>
+                          <p>Del {conductor.licenciaInfo.fecha_inicio} al {conductor.licenciaInfo.fecha_termino}</p>
+                          <p className="text-amber-700 mt-1">No puede ser asignado a turnos en estas fechas</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="w-32">
-                    <Select options={ROLES_CONDUCTOR.map(r=>({id:r, label:r}))} value={c.rol} onChange={(e)=>handleConductorChange(i,'rol',e.target.value)} />
-                  </div>
-                  {formConductores.length > 1 && <button type="button" onClick={() => {const n=[...formConductores]; n.splice(i,1); setFormConductores(n)}} className="text-red-500 p-2"><X size={16}/></button>}
-                </div>
-              ))}
-              <Button variant="outline" size="sm" onClick={() => setFormConductores([...formConductores, {conductor_id:'', rol:'apoyo'}])} className="w-full border-dashed text-slate-500 hover:text-blue-600 hover:border-blue-300 text-xs py-1">+ Añadir Conductor</Button>
+                );
+              })}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setFormConductores([...formConductores, {conductor_id:'', rol:'apoyo'}])} 
+                className="w-full border-dashed text-slate-500 hover:text-blue-600 hover:border-blue-300 text-xs py-1"
+              >
+                + Añadir Conductor
+              </Button>
             </div>
 
             {/* Asistentes */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-500 uppercase">Asistentes</label>
-              {formAsistentes.map((a, i) => (
-                <div key={i} className="flex gap-2">
-                  <div className="flex-1">
-                    <Select 
-                      options={[{id:'', label:'Seleccione...'}, ...asistentes.filter(x=>x.estado==='activo').map(x=>({id:x.id, label:`${x.empleado?.user?.nombre} ${x.empleado?.user?.apellido}`}))]}
-                      value={a.asistente_id}
-                      onChange={(e) => handleAsistenteChange(i, 'asistente_id', e.target.value)}
-                    />
+              {formAsistentes.map((a, i) => {
+                const asistente = asistentesDisponibles.find(x => x.id === parseInt(a.asistente_id));
+                const tieneLicencia = asistente?.tieneLicencia;
+                
+                return (
+                  <div key={i} className="space-y-2">
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <select
+                          value={a.asistente_id}
+                          onChange={(e) => handleAsistenteChange(i, 'asistente_id', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                          <option value="">Seleccione...</option>
+                          {asistentesDisponibles.map(asistente => (
+                            <option 
+                              key={asistente.id} 
+                              value={asistente.id}
+                            >
+                              {asistente.empleado?.user?.nombre} {asistente.empleado?.user?.apellido}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="w-32">
+                        <Select options={POSICIONES_ASISTENTE.map(p=>({id:p, label:p.replace('_',' ')}))} value={a.posicion} onChange={(e)=>handleAsistenteChange(i,'posicion',e.target.value)} />
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => {const n=[...formAsistentes]; n.splice(i,1); setFormAsistentes(n)}} 
+                        className="text-red-500 p-2"
+                      >
+                        <X size={16}/>
+                      </button>
+                    </div>
+                    
+                    {/* Advertencia de Licencia */}
+                    {tieneLicencia && asistente.licenciaInfo && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
+                        <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-xs text-amber-800">
+                          <p className="font-semibold">Empleado con licencia médica</p>
+                          <p>Del {asistente.licenciaInfo.fecha_inicio} al {asistente.licenciaInfo.fecha_termino}</p>
+                          <p className="text-amber-700 mt-1">No puede ser asignado a turnos en estas fechas</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="w-32">
-                    <Select options={POSICIONES_ASISTENTE.map(p=>({id:p, label:p.replace('_',' ')}))} value={a.posicion} onChange={(e)=>handleAsistenteChange(i,'posicion',e.target.value)} />
-                  </div>
-                  <button type="button" onClick={() => {const n=[...formAsistentes]; n.splice(i,1); setFormAsistentes(n)}} className="text-red-500 p-2"><X size={16}/></button>
-                </div>
-              ))}
-              <Button variant="outline" size="sm" onClick={() => setFormAsistentes([...formAsistentes, {asistente_id:'', posicion:'general'}])} className="w-full border-dashed text-slate-500 hover:text-blue-600 hover:border-blue-300 text-xs py-1">+ Añadir Asistente</Button>
+                );
+              })}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setFormAsistentes([...formAsistentes, {asistente_id:'', posicion:'general'}])} 
+                className="w-full border-dashed text-slate-500 hover:text-blue-600 hover:border-blue-300 text-xs py-1"
+              >
+                + Añadir Asistente
+              </Button>
             </div>
           </div>
 

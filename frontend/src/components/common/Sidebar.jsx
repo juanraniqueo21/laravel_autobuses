@@ -2,7 +2,8 @@ import React from 'react';
 import { 
   LayoutDashboard, Users, UserCog, Wrench, Bus, Map, 
   CalendarClock, ClipboardList, BarChart2, Shield, User,
-  Briefcase, Navigation, HardHat, X, TrendingUp, Zap, MapPin
+  Briefcase, Navigation, HardHat, X, TrendingUp, Zap, MapPin,
+  FileText
 } from 'lucide-react';
 
 // ==========================================
@@ -14,6 +15,7 @@ const menuConductor = [
   { id: 'conductor-dashboard', label: 'Mi Dashboard', icon: BarChart2 },
   { id: 'conductor-turnos', label: 'Mis Turnos', icon: CalendarClock },
   { id: 'conductor-viajes', label: 'Mis Viajes', icon: Navigation },
+  { id: 'licencias', label: 'Mis Licencias', icon: FileText },
 ];
 
 // Menú para Mecánico (rol_id = 4)
@@ -27,6 +29,7 @@ const menuAsistente = [
   { id: 'asistente-dashboard', label: 'Mi Dashboard', icon: BarChart2 },
   { id: 'asistente-turnos', label: 'Mis Turnos', icon: CalendarClock },
   { id: 'asistente-viajes', label: 'Mis Viajes', icon: Navigation },
+  { id: 'licencias', label: 'Mis Licencias', icon: FileText },
 ];
 
 // Menú para RRHH (rol_id = 6)
@@ -36,6 +39,7 @@ const menuRRHH = [
   { id: 'conductores', label: 'Conductores', icon: Bus },
   { id: 'asistentes', label: 'Asistentes', icon: Briefcase },
   { id: 'mecanicos', label: 'Mecánicos', icon: Wrench },
+  { id: 'licencias', label: 'Licencias', icon: FileText },
 ];
 
 export default function Sidebar({ current, onSelect, isOpen, onClose, user }) {
@@ -115,6 +119,10 @@ export default function Sidebar({ current, onSelect, isOpen, onClose, user }) {
           <button onClick={() => handleSelect('empleados')} className={getButtonClasses('empleados')}>
             <Briefcase size={20} className={getIconClasses('empleados')} />
             <span className="font-medium truncate">Empleados (Todos)</span>
+          </button>
+          <button onClick={() => handleSelect('licencias')} className={getButtonClasses('licencias')}>
+            <FileText size={20} className={getIconClasses('licencias')} />
+            <span className="font-medium truncate">Licencias</span>
           </button>
 
           {/* Sub-categorías visuales (indentadas) */}

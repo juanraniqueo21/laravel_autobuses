@@ -712,3 +712,184 @@ export const fetchMiViajeAsistente = async (id) => {
   const data = await response.json();
   return data.success ? data.data : data;
 };
+
+// ============================================
+// LICENCIAS MÉDICAS Y PERMISOS
+// ============================================
+
+/**
+ * Obtener todas las licencias (Admin, Manager, RRHH)
+ */
+export const fetchLicencias = async (filtros = {}) => {
+  const queryParams = new URLSearchParams();
+  Object.keys(filtros).forEach(key => {
+    if (filtros[key] !== undefined && filtros[key] !== null && filtros[key] !== '') {
+      queryParams.append(key, filtros[key]);
+    }
+  });
+
+  const url = `${API_URL}/licencias${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions('GET'));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
+/**
+ * Obtener mis licencias (Conductor)
+ */
+export const fetchMisLicencias = async () => {
+  const response = await fetch(`${API_URL}/licencias/mis-licencias`, fetchOptions('GET'));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
+/**
+ * Obtener una licencia específica
+ */
+export const fetchLicencia = async (id) => {
+  const response = await fetch(`${API_URL}/licencias/${id}`, fetchOptions('GET'));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
+/**
+ * Crear nueva licencia (con soporte para FormData)
+ */
+export const crearLicencia = async (formData) => {
+  const token = getAuthToken();
+  const options = {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      // NO incluir Content-Type para FormData, el navegador lo configura automáticamente
+    },
+    body: formData, // FormData directamente
+  };
+
+  const response = await fetch(`${API_URL}/licencias`, options);
+  const data = await response.json();
+  
+  if (!response.ok) {
+    if (data.errors) {
+      throw new Error(Object.values(data.errors).flat().join(', '));
+    }
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Actualizar licencia (con soporte para FormData)
+ */
+export const actualizarLicencia = async (id, formData) => {
+  const token = getAuthToken();
+  
+  // Para PUT con FormData, necesitamos usar _method
+  formData.append('_method', 'PUT');
+  
+  const options = {
+    method: 'POST', // Laravel acepta POST con _method=PUT
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  };
+
+  const response = await fetch(`${API_URL}/licencias/${id}`, options);
+  const data = await response.json();
+  
+  if (!response.ok) {
+    if (data.errors) {
+      throw new Error(Object.values(data.errors).flat().join(', '));
+    }
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Aprobar licencia
+ */
+export const aprobarLicencia = async (id) => {
+  const response = await fetch(`${API_URL}/licencias/${id}/aprobar`, fetchOptions('POST'));
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Rechazar licencia
+ */
+export const rechazarLicencia = async (id, motivoRechazo) => {
+  const response = await fetch(
+    `${API_URL}/licencias/${id}/rechazar`, 
+    fetchOptions('POST', { motivo_rechazo: motivoRechazo })
+  );
+  const data = await response.json();
+  
+  if (!response.ok) {
+    if (data.errors) {
+      throw new Error(Object.values(data.errors).flat().join(', '));
+    }
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Eliminar licencia
+ */
+export const eliminarLicencia = async (id) => {
+  const response = await fetch(`${API_URL}/licencias/${id}`, fetchOptions('DELETE'));
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Descargar PDF de licencia
+ */
+export const descargarPdfLicencia = async (id) => {
+  const token = getAuthToken();
+  const response = await fetch(`${API_URL}/licencias/${id}/descargar-pdf`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  // Descargar el archivo
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `licencia_${id}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+};

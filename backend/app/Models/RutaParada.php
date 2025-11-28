@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class RutaParada extends Model
 {
     protected $table = 'rutas_paradas';
-    
+
     protected $fillable = [
         'ruta_id',
         'orden',
@@ -17,6 +17,10 @@ class RutaParada extends Model
         'es_destino',
         'distancia_desde_anterior_km',
         'tiempo_desde_anterior_min',
+        // --- AGREGA ESTAS DOS LÍNEAS PARA QUE GUARDEN LAS HORAS ---
+        'hora_llegada',
+        'hora_salida',
+        // ----------------------------------------------------------
         'tarifa_adulto',
         'tarifa_estudiante',
         'tarifa_tercera_edad',
@@ -35,9 +39,6 @@ class RutaParada extends Model
         'tarifa_tercera_edad' => 'integer',
     ];
 
-    /**
-     * Ruta a la que pertenece esta parada
-     */
     public function ruta(): BelongsTo
     {
         return $this->belongsTo(Ruta::class);

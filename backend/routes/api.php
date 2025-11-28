@@ -15,6 +15,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AsignacionTurnoController;
 use App\Http\Controllers\ConductorPanelController;
 use App\Http\Controllers\AsistentePanelController;
+use App\Http\Controllers\PermisoLicenciaController;
 
 // ============================================
 // RUTAS PÚBLICAS (sin autenticación)
@@ -132,6 +133,40 @@ Route::middleware('jwt.auth')->group(function () {
 
     // MANTENIMIENTOS
     Route::apiResource('mantenimientos', MantenimientoController::class);
+    
+    // ============================================
+    // LICENCIAS MÉDICAS Y PERMISOS
+    // ============================================
+    Route::prefix('licencias')->group(function () {
+        // Listar todas las licencias (Admin, Manager, RRHH)
+        Route::get('/', [PermisoLicenciaController::class, 'index']);
+        
+        // Mis licencias (Conductor ve solo las suyas)
+        Route::get('/mis-licencias', [PermisoLicenciaController::class, 'misLicencias']);
+        
+        // Ver una licencia específica
+        Route::get('/{id}', [PermisoLicenciaController::class, 'show']);
+        
+        // Crear nueva licencia
+        Route::post('/', [PermisoLicenciaController::class, 'store']);
+        
+        // Actualizar licencia (solo si está en estado "solicitado")
+        Route::put('/{id}', [PermisoLicenciaController::class, 'update']);
+        
+        // Aprobar licencia (Admin, Manager, RRHH)
+        Route::post('/{id}/aprobar', [PermisoLicenciaController::class, 'aprobar']);
+        
+        // Rechazar licencia (Admin, Manager, RRHH)
+        Route::post('/{id}/rechazar', [PermisoLicenciaController::class, 'rechazar']);
+        
+        // Eliminar licencia
+        Route::delete('/{id}', [PermisoLicenciaController::class, 'destroy']);
+        
+        // Descargar PDF de respaldo
+        Route::get('/{id}/descargar-pdf', [PermisoLicenciaController::class, 'descargarPdf']);
+    });
+    
+  
     
      // ============================================
     // PANEL CONDUCTOR - Rutas específicas para el rol conductor

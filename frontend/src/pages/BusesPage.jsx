@@ -16,17 +16,16 @@ import { useNotifications } from '../context/NotificationContext';
 const ESTADOS_BUS = ['operativo', 'mantenimiento', 'desmantelado'];
 const TIPOS_COMBUSTIBLE = ['diesel', 'gasolina', 'gas', 'eléctrico', 'híbrido'];
 const TIPOS_COBERTURA = ['ninguna', 'terceros', 'full'];
-const TIPOS_BUS = ['simple', 'doble piso'];
+// corregido: valor que viaja al backend debe ser 'doble_piso'
+const TIPOS_BUS = ['simple', 'doble_piso'];
 const CANTIDAD_EJES = ['2', '3', '4'];
 const UBICACION_MOTOR = ['delantero', 'trasero', 'central'];
 
 // --- UTILIDADES DE FECHAS ---
 
 // 1. Formatear fecha para mostrar en tabla (DD/MM/AAAA)
-// Corrige el error de "un día antes" al no usar la zona horaria del navegador para interpretar el string
 const formatDate = (dateString) => {
   if (!dateString) return '-';
-  // Tomamos solo la parte YYYY-MM-DD
   const [year, month, day] = dateString.split('T')[0].split('-');
   return `${day}/${month}/${year}`;
 };
@@ -35,28 +34,23 @@ const formatDate = (dateString) => {
 const getExpirationStyle = (dateString) => {
   if (!dateString) return 'text-gray-600';
   
-  // Crear fechas comparables sin horas (Medianoche)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
-  // Parsear la fecha de vencimiento manualmente para asegurar la fecha local correcta
   const [year, month, day] = dateString.split('T')[0].split('-').map(Number);
-  const expirationDate = new Date(year, month - 1, day); // Mes es base 0 en JS
+  const expirationDate = new Date(year, month - 1, day);
   
-  // Calcular diferencia en días
   const diffTime = expirationDate - today;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-  // Lógica de colores
-  if (diffDays < 0) return 'text-red-700 font-bold bg-red-100 px-2 py-0.5 rounded border border-red-200'; // Vencido
-  if (diffDays <= 10) return 'text-red-600 font-bold animate-pulse'; // Crítico (<= 10 días)
-  if (diffDays <= 20) return 'text-amber-500 font-bold'; // Advertencia (11-20 días)
+  if (diffDays < 0) return 'text-red-700 font-bold bg-red-100 px-2 py-0.5 rounded border border-red-200';
+  if (diffDays <= 10) return 'text-red-600 font-bold animate-pulse';
+  if (diffDays <= 20) return 'text-amber-500 font-bold';
   
-  return 'text-emerald-600 font-medium'; // OK (> 20 días)
+  return 'text-emerald-600 font-medium';
 };
 
 export default function BusesPage() {
-  // --- ESTADOS ---
   const [buses, setBuses] = useState([]);
   const [filteredBuses, setFilteredBuses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +60,6 @@ export default function BusesPage() {
   const [editingBus, setEditingBus] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
   
-  // --- ESTADOS DE FILTROS ---
   const [searchPatente, setSearchPatente] = useState('');
   const [filterMarca, setFilterMarca] = useState('');
   const [filterAnio, setFilterAnio] = useState('');
@@ -74,7 +67,6 @@ export default function BusesPage() {
   const [filterPasajeros, setFilterPasajeros] = useState('');
   const [filterEstado, setFilterEstado] = useState(''); 
 
-  // --- GENERACIÓN DINÁMICA DE OPCIONES ---
   const opcionesMarcas = useMemo(() => {
     return [...new Set(buses.map(b => b.marca).filter(Boolean))].sort();
   }, [buses]);
@@ -129,12 +121,10 @@ export default function BusesPage() {
     kilometraje_original: '',
   });
 
-  // --- EFECTOS ---
   useEffect(() => {
     loadBuses();
   }, []);
 
-  // --- LÓGICA DE FILTRADO ---
   useEffect(() => {
     let data = buses;
 
@@ -162,7 +152,6 @@ export default function BusesPage() {
     setCurrentPage(1); 
   }, [buses, searchPatente, filterMarca, filterAnio, filterCombustible, filterPasajeros, filterEstado]);
 
-  // Configuración de Paginación
   const sortedData = [...filteredBuses].sort((a, b) => b.id - a.id);
   const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(sortedData, 10);
 
@@ -181,7 +170,6 @@ export default function BusesPage() {
     }
   };
 
-  // --- HANDLERS ---
   const handlePatenteChange = (value) => {
     let clean = value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 6);
     setFormData({ ...formData, patente: clean });
@@ -197,7 +185,6 @@ export default function BusesPage() {
       setEditingBus(bus);
       setFormData({
         ...bus,
-        // Aseguramos que las fechas para los inputs sean YYYY-MM-DD
         fecha_adquisicion: bus.fecha_adquisicion ? bus.fecha_adquisicion.split('T')[0] : '',
         proxima_revision_tecnica: bus.proxima_revision_tecnica ? bus.proxima_revision_tecnica.split('T')[0] : '',
         ultima_revision_tecnica: bus.ultima_revision_tecnica ? bus.ultima_revision_tecnica.split('T')[0] : '',
@@ -284,7 +271,6 @@ export default function BusesPage() {
     return labels[tipo] || tipo;
   };
 
-  // --- RENDERIZADO DE TABLA ---
   const renderBusesTable = () => {
     return (
       <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
@@ -307,7 +293,6 @@ export default function BusesPage() {
             ) : (
               paginatedData.map((bus) => (
                 <React.Fragment key={bus.id}>
-                  {/* Fila Principal */}
                   <tr 
                     className="hover:bg-gray-100 transition-colors even:bg-gray-50 cursor-pointer"
                     onClick={() => setExpandedRow(expandedRow === bus.id ? null : bus.id)}
@@ -326,7 +311,6 @@ export default function BusesPage() {
                       </span>
                     </td>
                     
-                    {/* Botones de Acción */}
                     <td className="px-6 py-4 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-center gap-2">
                         <button
@@ -354,13 +338,11 @@ export default function BusesPage() {
                     </td>
                   </tr>
 
-                  {/* Fila Expandida (Detalle) */}
                   {expandedRow === bus.id && (
                     <tr className="bg-gray-50 border-b border-gray-200">
                       <td colSpan="8" className="px-6 py-6 cursor-default">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm">
                           
-                          {/* 1. Identificación */}
                           <div className="space-y-2">
                             <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><Bus size={16}/> Identificación</h4>
                             <p><span className="text-gray-500">Verificador:</span> {bus.patente_verificador || '-'}</p>
@@ -369,7 +351,6 @@ export default function BusesPage() {
                             <p><span className="text-gray-500">N° Serie:</span> {bus.numero_serie}</p>
                           </div>
 
-                          {/* 2. Componentes Técnicos */}
                           <div className="space-y-2">
                             <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><Fuel size={16}/> Ficha Técnica</h4>
                             <p><span className="text-gray-500">Motor:</span> {bus.marca_motor} {bus.modelo_motor}</p>
@@ -378,20 +359,17 @@ export default function BusesPage() {
                             <p><span className="text-gray-500">Ubicación Motor:</span> {bus.ubicacion_motor}</p>
                           </div>
 
-                          {/* 3. Operación */}
                           <div className="space-y-2">
                             <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><Calendar size={16}/> Operación</h4>
                             <p><span className="text-gray-500">Adquisición:</span> {formatDate(bus.fecha_adquisicion)}</p>
-                            <p><span className="text-gray-500">Km Actual:</span> {((bus.kilometraje_actual || 0)).toLocaleString()} km</p>
+                            <p><span className="text-gray-500">Km Original:</span> {((bus.kilometraje_original || 0)).toLocaleString()} km</p>
                             <p><span className="text-gray-500">Mantención:</span> Cada {bus.proximo_mantenimiento_km?.toLocaleString()} km</p>
                             <p><span className="text-gray-500">Prox. Mantención:</span> {formatDate(bus.fecha_proximo_mantenimiento)}</p>
                           </div>
 
-                          {/* 4. Documentación (CON ALERTAS DE VENCIMIENTO) */}
                           <div className="space-y-2">
                             <h4 className="font-semibold text-gray-900 border-b border-gray-300 pb-1 flex items-center gap-2"><AlertCircle size={16}/> Documentos</h4>
                             
-                            {/* REVISIÓN TÉCNICA */}
                             <div className="flex justify-between items-center">
                                 <span className="text-gray-500">Rev. Técnica:</span>
                                 <span className={getExpirationStyle(bus.proxima_revision_tecnica)}>
@@ -399,7 +377,6 @@ export default function BusesPage() {
                                 </span>
                             </div>
                             
-                            {/* SOAP */}
                             <div className="flex justify-between items-center">
                                 <span className="text-gray-500">SOAP:</span>
                                 <span className={getExpirationStyle(bus.vencimiento_soap)}>
@@ -407,7 +384,6 @@ export default function BusesPage() {
                                 </span>
                             </div>
                             
-                            {/* SEGURO */}
                             <div className="flex justify-between items-center">
                                 <span className="text-gray-500">Seguro:</span>
                                 {bus.tipo_cobertura_adicional !== 'ninguna' ? (
@@ -444,7 +420,6 @@ export default function BusesPage() {
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       
-      {/* HEADER CARD */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -464,7 +439,6 @@ export default function BusesPage() {
         <Bus className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Error */}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex items-center justify-between">
           <span>{error}</span>
@@ -472,11 +446,9 @@ export default function BusesPage() {
         </div>
       )}
 
-      {/* BARRA DE FILTROS (TEXTO + SELECTS) */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
         <div className="flex flex-col space-y-4">
           
-          {/* Fila 1: Buscador Patente */}
           <div className="w-full relative">
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Buscar Patente</label>
             <div className="relative">
@@ -491,10 +463,8 @@ export default function BusesPage() {
             </div>
           </div>
 
-          {/* Fila 2: Filtros Selectores */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             
-            {/* Marca */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Marca</label>
               <select
@@ -509,7 +479,6 @@ export default function BusesPage() {
               </select>
             </div>
 
-            {/* Año */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Año</label>
               <select
@@ -524,7 +493,6 @@ export default function BusesPage() {
               </select>
             </div>
 
-            {/* Combustible */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Combustible</label>
               <select
@@ -539,7 +507,6 @@ export default function BusesPage() {
               </select>
             </div>
 
-            {/* Pasajeros */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Capacidad</label>
               <select
@@ -554,7 +521,6 @@ export default function BusesPage() {
               </select>
             </div>
 
-            {/* Botón Limpiar */}
             <div className="flex items-end">
               {(searchPatente || filterMarca || filterAnio || filterCombustible || filterPasajeros || filterEstado) && (
                 <button 
@@ -571,21 +537,18 @@ export default function BusesPage() {
         </div>
       </div>
 
-      {/* Tabla */}
       {loading ? (
         <div className="text-center py-8 text-gray-500">Cargando...</div>
       ) : (
         renderBusesTable()
       )}
 
-      {/* Paginación */}
       <Pagination 
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setCurrentPage}
       />
 
-      {/* Dialog */}
       <FormDialog
         isOpen={openDialog}
         title={editingBus ? 'Editar Bus' : 'Nuevo Bus'}
@@ -606,9 +569,30 @@ export default function BusesPage() {
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Características</h3>
           </div>
 
-          <Select label="Tipo Combustible *" options={TIPOS_COMBUSTIBLE.map(t => ({ id: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} value={formData.tipo_combustible} onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })} required />
-          <Select label="Tipo Bus *" options={TIPOS_BUS.map(t => ({ id: t, label: t === 'simple' ? 'Simple (1 Piso)' : 'Doble Piso' }))} value={formData.tipo_bus} onChange={(e) => setFormData({ ...formData, tipo_bus: e.target.value })} required />
-          <Select label="Cantidad Ejes *" options={CANTIDAD_EJES.map(e => ({ id: e, label: `${e} ejes` }))} value={formData.cantidad_ejes} onChange={(e) => setFormData({ ...formData, cantidad_ejes: e.target.value })} required />
+          <Select
+            label="Tipo Combustible *"
+            options={TIPOS_COMBUSTIBLE.map(t => ({ id: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
+            value={formData.tipo_combustible}
+            onChange={(e) => setFormData({ ...formData, tipo_combustible: e.target.value })}
+            required
+          />
+          <Select
+            label="Tipo Bus *"
+            options={TIPOS_BUS.map(t => ({
+              id: t,
+              label: t === 'simple' ? 'Simple (1 Piso)' : 'Doble Piso',
+            }))}
+            value={formData.tipo_bus}
+            onChange={(e) => setFormData({ ...formData, tipo_bus: e.target.value })}
+            required
+          />
+          <Select
+            label="Cantidad Ejes *"
+            options={CANTIDAD_EJES.map(e => ({ id: e, label: `${e} ejes` }))}
+            value={formData.cantidad_ejes}
+            onChange={(e) => setFormData({ ...formData, cantidad_ejes: e.target.value })}
+            required
+          />
           
           <Input label="Año Fabricación *" type="number" value={formData.anio} onChange={(e) => setFormData({ ...formData, anio: parseInt(e.target.value) || '' })} required min={1980} max={new Date().getFullYear() + 1} />
           <Input label="Capacidad Pasajeros *" type="number" value={formData.capacidad_pasajeros} onChange={(e) => setFormData({ ...formData, capacidad_pasajeros: parseInt(e.target.value) || '' })} required min={1} max={100} />
@@ -619,7 +603,12 @@ export default function BusesPage() {
           </div>
           <Input label="Marca Motor" value={formData.marca_motor} onChange={(e) => setFormData({ ...formData, marca_motor: e.target.value })} placeholder="Ej: Mercedes-Benz, Cummins" />
           <Input label="Modelo Motor" value={formData.modelo_motor} onChange={(e) => setFormData({ ...formData, modelo_motor: e.target.value })} placeholder="Ej: OM-457, ISB 6.7" />
-          <Select label="Ubicación Motor" options={UBICACION_MOTOR.map(u => ({ id: u, label: u.charAt(0).toUpperCase() + u.slice(1) }))} value={formData.ubicacion_motor} onChange={(e) => setFormData({ ...formData, ubicacion_motor: e.target.value })} />
+          <Select
+            label="Ubicación Motor"
+            options={UBICACION_MOTOR.map(u => ({ id: u, label: u.charAt(0).toUpperCase() + u.slice(1) }))}
+            value={formData.ubicacion_motor}
+            onChange={(e) => setFormData({ ...formData, ubicacion_motor: e.target.value })}
+          />
           <Input label="Número Motor" value={formData.numero_motor} onChange={(e) => setFormData({ ...formData, numero_motor: e.target.value })} />
 
           <div className="md:col-span-2 mt-4">
@@ -641,7 +630,13 @@ export default function BusesPage() {
           </div>
 
           <Input label="Fecha Adquisición" type="date" value={formData.fecha_adquisicion} onChange={(e) => setFormData({ ...formData, fecha_adquisicion: e.target.value })} />
-          <Select label="Estado *" options={ESTADOS_BUS.map(e => ({ id: e, label: e.charAt(0).toUpperCase() + e.slice(1) }))} value={formData.estado} onChange={(e) => setFormData({ ...formData, estado: e.target.value })} required />
+          <Select
+            label="Estado *"
+            options={ESTADOS_BUS.map(e => ({ id: e, label: e.charAt(0).toUpperCase() + e.slice(1) }))}
+            value={formData.estado}
+            onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
+            required
+          />
           <Input label="Km Original" type="number" value={formData.kilometraje_original} onChange={(e) => setFormData({ ...formData, kilometraje_original: parseInt(e.target.value) || 0 })} min={0} />
 
           <div className="md:col-span-2 mt-4">
@@ -667,7 +662,20 @@ export default function BusesPage() {
           <div className="md:col-span-2 mt-4">
             <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Cobertura Adicional (Opcional)</h3>
           </div>
-          <Select label="Tipo Cobertura" options={TIPOS_COBERTURA.map(t => ({ id: t, label: t === 'ninguna' ? 'Ninguna / Solo SOAP' : t === 'terceros' ? 'Responsabilidad Civil a Terceros' : 'Cobertura Full / Todo Riesgo' }))} value={formData.tipo_cobertura_adicional} onChange={(e) => setFormData({ ...formData, tipo_cobertura_adicional: e.target.value })} />
+          <Select
+            label="Tipo Cobertura"
+            options={TIPOS_COBERTURA.map(t => ({
+              id: t,
+              label:
+                t === 'ninguna'
+                  ? 'Ninguna / Solo SOAP'
+                  : t === 'terceros'
+                  ? 'Responsabilidad Civil a Terceros'
+                  : 'Cobertura Full / Todo Riesgo',
+            }))}
+            value={formData.tipo_cobertura_adicional}
+            onChange={(e) => setFormData({ ...formData, tipo_cobertura_adicional: e.target.value })}
+          />
           <Input label="Compañía Seguro" value={formData.compania_seguro} onChange={(e) => setFormData({ ...formData, compania_seguro: e.target.value })} placeholder="Ej: Mapfre, HDI, Sura" />
           <Input label="Número Póliza" value={formData.numero_poliza} onChange={(e) => setFormData({ ...formData, numero_poliza: e.target.value })} placeholder="Número de póliza" />
           <Input label="Vencimiento Póliza" type="date" value={formData.vencimiento_poliza} onChange={(e) => setFormData({ ...formData, vencimiento_poliza: e.target.value })} />

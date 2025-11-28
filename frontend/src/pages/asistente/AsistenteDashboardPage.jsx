@@ -72,7 +72,7 @@ export default function AsistenteDashboardPage({ onNavigate }) {
       {/* 1. Header INTERACTIVO */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div 
-          onClick={() => onNavigate && onNavigate('perfil')} // Navega a 'perfil'
+          onClick={() => onNavigate && onNavigate('perfil')} 
           className="group cursor-pointer"
         >
           <div className="flex items-center gap-2">
@@ -89,21 +89,13 @@ export default function AsistenteDashboardPage({ onNavigate }) {
             Ver mi ficha personal
           </p>
         </div>
-        
-        {/* Badge de Estado */}
-        <div className={`px-4 py-2 rounded-xl flex items-center gap-2 font-medium text-sm border ${
-          asistente?.estado === 'activo' 
-            ? 'bg-green-50 text-green-700 border-green-200' 
-            : 'bg-amber-50 text-amber-700 border-amber-200'
-        }`}>
-          <span className={`w-2 h-2 rounded-full ${asistente?.estado === 'activo' ? 'bg-green-500' : 'bg-amber-500'}`}></span>
-          Estado: {asistente?.estado?.toUpperCase()}
-        </div>
+
+        {/* 🔥 ELIMINADO: Badge de Estado del asistente */}
+
       </div>
 
       {/* 2. Tarjetas de Métricas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        
         {/* Turnos Hoy */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 group">
           <div className="flex justify-between items-start mb-2">
@@ -146,7 +138,7 @@ export default function AsistenteDashboardPage({ onNavigate }) {
             </div>
           </div>
           <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
-             <div className="bg-green-500 h-1.5 rounded-full" style={{ width: '100%' }}></div>
+            <div className="bg-green-500 h-1.5 rounded-full" style={{ width: '100%' }}></div>
           </div>
         </div>
 
@@ -169,13 +161,12 @@ export default function AsistenteDashboardPage({ onNavigate }) {
         </div>
       </div>
 
-      {/* 3. Sección Principal: Grid Asimétrico */}
+      {/* 3. Sección Principal */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* COLUMNA IZQUIERDA: Tarjeta Oscura de Perfil + Estadísticas Rápidas */}
+        {/* COLUMNA IZQ: Tarjeta Perfil */}
         <div className="lg:col-span-1 space-y-6">
             
-            {/* Tarjeta Perfil (Dark Gradient) */}
             <div 
                 onClick={() => onNavigate && onNavigate('perfil')}
                 className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl shadow-lg text-white relative overflow-hidden cursor-pointer group hover:shadow-xl transition-all"
@@ -188,21 +179,10 @@ export default function AsistenteDashboardPage({ onNavigate }) {
                         <Briefcase size={32} />
                     </div>
                     <h2 className="text-xl font-bold">{asistente?.nombre} {asistente?.apellido}</h2>
-                    <p className="text-slate-400 text-sm mt-1">Nº Ficha: {asistente?.numero_funcional}</p>
-                    
-                    <div className="mt-6 pt-6 border-t border-white/10 flex justify-between items-end">
-                        <div>
-                            <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Rol</p>
-                            <p className="text-lg font-bold text-blue-400">Asistente</p>
-                        </div>
-                        <div className={`px-3 py-1 rounded-lg text-xs font-bold bg-green-500/20 text-green-400`}>
-                            {asistente?.estado?.toUpperCase()}
-                        </div>
-                    </div>
+                    <p className="text-slate-400 text-sm mt-1">Ficha: {asistente?.numero_funcional}</p>
                 </div>
             </div>
 
-            {/* Resumen Mensual */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div className="flex items-center gap-2 mb-4">
                     <TrendingUp className="text-gray-400" size={20} />
@@ -220,9 +200,10 @@ export default function AsistenteDashboardPage({ onNavigate }) {
                     </div>
                 </div>
             </div>
+
         </div>
 
-        {/* COLUMNA DERECHA: Próximo Turno (Estilo Detallado) */}
+        {/* COLUMNA DERECHA: Próximo Turno */}
         <div className="lg:col-span-2">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 h-full flex flex-col">
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-2xl">
@@ -243,7 +224,6 @@ export default function AsistenteDashboardPage({ onNavigate }) {
                 <div className="p-8 flex-1 flex flex-col justify-center">
                     {proximo_turno ? (
                         <div className="space-y-8">
-                            {/* Fecha y Hora */}
                             <div className="flex flex-col md:flex-row gap-6 md:items-center justify-between">
                                 <div>
                                     <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Fecha</p>
@@ -266,7 +246,6 @@ export default function AsistenteDashboardPage({ onNavigate }) {
 
                             <hr className="border-dashed border-gray-200"/>
 
-                            {/* Bus Asignado */}
                             {proximo_turno.bus ? (
                                 <div>
                                     <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-3">Unidad Asignada</p>
@@ -298,8 +277,7 @@ export default function AsistenteDashboardPage({ onNavigate }) {
                         </div>
                     )}
                 </div>
-                
-                {/* Footer Resumen */}
+
                 <div className="bg-gray-50 p-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500 rounded-b-2xl">
                     <span>Tasa de cumplimiento mensual:</span>
                     <span className="font-bold text-gray-700 bg-white px-2 py-1 rounded shadow-sm">

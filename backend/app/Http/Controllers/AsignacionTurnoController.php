@@ -8,6 +8,8 @@ use App\Models\TurnoAsistente;
 use App\Models\Bus;
 use App\Models\Conductor;
 use App\Models\Asistente;
+use App\Models\Empleado;
+use App\Models\PermisoLicencia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -114,8 +116,6 @@ class AsignacionTurnoController extends Controller
     public function store(Request $request)
     {
         try {
-
-
             // Debug: ver que datos llegan
             \Log::info('=== DATOS RECIBIDOS EN TURNO ===');
             \Log::info('Request all: ' . json_encode($request->all()));
@@ -215,14 +215,35 @@ class AsignacionTurnoController extends Controller
                 ], 422);
             }
 
-            // 4. Validar conductores
+            // ============================================
+            // 4. VALIDAR CONDUCTORES (INCLUYE LICENCIAS)
+            // ============================================
             $erroresConductores = [];
             foreach ($request->conductores as $index => $conductorData) {
-                $conductor = Conductor::with('empleado')->find($conductorData['conductor_id']);
+                $conductor = Conductor::with('empleado.user')->find($conductorData['conductor_id']);
                 
                 if (!$conductor) {
                     $erroresConductores["conductores.{$index}.conductor_id"][] = "Conductor no encontrado";
                     continue;
+                }
+
+                // *** VALIDACIÓN DE LICENCIA MÉDICA ***
+                if ($conductor->empleado) {
+                    $empleado = $conductor->empleado;
+                    
+                    // Verificar si tiene licencia activa para la fecha del turno
+                    $licenciaActiva = PermisoLicencia::where('empleado_id', $empleado->id)
+                        ->where('estado', 'aprobado')
+                        ->where('fecha_inicio', '<=', $request->fecha_turno)
+                        ->where('fecha_termino', '>=', $request->fecha_turno)
+                        ->first();
+                    
+                    if ($licenciaActiva) {
+                        $nombreEmpleado = $empleado->user ? "{$empleado->user->nombre} {$empleado->user->apellido}" : "El conductor";
+                        $erroresConductores["conductores.{$index}.conductor_id"][] = 
+                            "{$nombreEmpleado} tiene licencia médica del {$licenciaActiva->fecha_inicio} al {$licenciaActiva->fecha_termino}";
+                        continue;
+                    }
                 }
 
                 // Validar estado del conductor
@@ -244,9 +265,6 @@ class AsignacionTurnoController extends Controller
                 if (AsignacionTurno::conductorTieneTurnoEnFecha($conductorData['conductor_id'], $request->fecha_turno)) {
                     $erroresConductores["conductores.{$index}.conductor_id"][] = "El conductor ya tiene un turno asignado ese día";
                 }
-
-                // Validar descanso de 12 horas (opcional - requiere más lógica)
-                // TODO: Implementar validación de 12 horas entre turnos
             }
 
             if (!empty($erroresConductores)) {
@@ -257,7 +275,9 @@ class AsignacionTurnoController extends Controller
                 ], 422);
             }
 
-            // 5. Validar asistentes si el bus es doble piso
+            // ============================================
+            // 5. VALIDAR ASISTENTES (INCLUYE LICENCIAS)
+            // ============================================
             if ($bus->tipo_bus === 'doble_piso') {
                 if (empty($request->asistentes) || count($request->asistentes) === 0) {
                     return response()->json([
@@ -269,11 +289,30 @@ class AsignacionTurnoController extends Controller
 
                 $erroresAsistentes = [];
                 foreach ($request->asistentes as $index => $asistenteData) {
-                    $asistente = Asistente::with('empleado')->find($asistenteData['asistente_id']);
+                    $asistente = Asistente::with('empleado.user')->find($asistenteData['asistente_id']);
                     
                     if (!$asistente) {
                         $erroresAsistentes["asistentes.{$index}.asistente_id"][] = "Asistente no encontrado";
                         continue;
+                    }
+
+                    // *** VALIDACIÓN DE LICENCIA MÉDICA ***
+                    if ($asistente->empleado) {
+                        $empleado = $asistente->empleado;
+                        
+                        // Verificar si tiene licencia activa para la fecha del turno
+                        $licenciaActiva = PermisoLicencia::where('empleado_id', $empleado->id)
+                            ->where('estado', 'aprobado')
+                            ->where('fecha_inicio', '<=', $request->fecha_turno)
+                            ->where('fecha_termino', '>=', $request->fecha_turno)
+                            ->first();
+                        
+                        if ($licenciaActiva) {
+                            $nombreEmpleado = $empleado->user ? "{$empleado->user->nombre} {$empleado->user->apellido}" : "El asistente";
+                            $erroresAsistentes["asistentes.{$index}.asistente_id"][] = 
+                                "{$nombreEmpleado} tiene licencia médica del {$licenciaActiva->fecha_inicio} al {$licenciaActiva->fecha_termino}";
+                            continue;
+                        }
                     }
 
                     // Validar estado del asistente

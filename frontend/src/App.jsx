@@ -20,6 +20,7 @@ import ViajesPage from "./pages/ViajesPage";
 import MantencionesPage from './pages/MantencionesPage';
 import LogisticPage from './pages/LogisticPage';
 import TurnosPage from './pages/TurnosPage';
+import LicenciasPage from './pages/LicenciasPage';
 
 // ==========================================
 // PÁGINAS CONDUCTOR
@@ -28,6 +29,7 @@ import ConductorDashboardPage from './pages/conductor/ConductorDashboardPage';
 import MisTurnosPage from './pages/conductor/MisTurnosPage';
 import MisViajesPage from './pages/conductor/MisViajesPage';
 import ConductorProfilePage from './pages/conductor/ConductorProfilePage';
+import MisLicenciasConductorPage from './pages/conductor/MisLicenciasPage';
 
 // ==========================================
 // PÁGINAS ASISTENTE
@@ -35,7 +37,8 @@ import ConductorProfilePage from './pages/conductor/ConductorProfilePage';
 import AsistenteDashboardPage from './pages/asistente/AsistenteDashboardPage';
 import MisTurnosAsistentePage from './pages/asistente/MisTurnosAsistentePage';
 import MisViajesAsistentePage from './pages/asistente/MisViajesAsistentePage';
-import AsistenteProfilePage from './pages/asistente/AsistenteProfilePage'; // <--- IMPORTAR NUEVA PÁGINA
+import AsistenteProfilePage from './pages/asistente/AsistenteProfilePage';
+import MisLicenciasAsistentePage from './pages/asistente/MisLicenciasPage';
 
 import { logout, me } from './services/api';
 import './index.css';
@@ -123,6 +126,8 @@ function App() {
           return <MisTurnosPage />;
         case 'conductor-viajes':    
           return <MisViajesPage />;
+        case 'licencias':
+          return <MisLicenciasConductorPage />;
         case 'perfil':              
           return <ConductorProfilePage onBack={setCurrentPage} />;
         default:                    
@@ -150,14 +155,14 @@ function App() {
     if (rolId === 5) {
       switch (currentPage) {
         case 'asistente-dashboard': 
-          // Pasamos onNavigate para ir al perfil
           return <AsistenteDashboardPage onNavigate={setCurrentPage} />;
         case 'asistente-turnos':    
           return <MisTurnosAsistentePage />;
         case 'asistente-viajes':    
           return <MisViajesAsistentePage />;
+        case 'licencias':
+          return <MisLicenciasAsistentePage />;
         case 'perfil':              
-          // Nueva ruta: Pasamos onBack para volver al dashboard
           return <AsistenteProfilePage onBack={setCurrentPage} />;
         default:                    
           return <AsistenteDashboardPage onNavigate={setCurrentPage} />;
@@ -181,6 +186,7 @@ function App() {
       case 'mantenimientos': return <MantencionesPage />;
       case 'logistica':      return <LogisticPage />;
       case 'turnos':         return <TurnosPage />;
+      case 'licencias':      return <LicenciasPage />;
       default:               return <DashboardPage onNavigate={setCurrentPage} />;
     }
   };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   User, Phone, Mail, MapPin, Briefcase, 
-  ShieldCheck, Activity, ArrowLeft
+  ShieldCheck, ArrowLeft
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import { fetchAsistenteDashboard } from '../../services/api';
@@ -26,8 +26,21 @@ export default function AsistenteProfilePage({ onBack }) {
     loadData();
   }, []);
 
-  if (loading) return <div className="flex justify-center items-center min-h-screen text-slate-500">Cargando perfil...</div>;
-  if (!asistenteData) return <div className="p-8 text-center text-red-500">No se pudo cargar la información del asistente.</div>;
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen text-slate-500">
+        Cargando perfil...
+      </div>
+    );
+  }
+
+  if (!asistenteData) {
+    return (
+      <div className="p-8 text-center text-red-500">
+        No se pudo cargar la información del asistente.
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-5xl mx-auto font-sans text-slate-800">
@@ -72,15 +85,8 @@ export default function AsistenteProfilePage({ onBack }) {
                     Asistente de Bus • Ficha #{asistenteData.numero_funcional}
                   </p>
                 </div>
-                
-                <div className={`px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-sm border ${
-                  asistenteData.estado === 'activo'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                    : 'bg-slate-50 text-slate-700 border-slate-200'
-                }`}>
-                  <Activity size={18} />
-                  {asistenteData.estado === 'activo' ? 'PERSONAL ACTIVO' : 'INACTIVO'}
-                </div>
+
+                {/* 🔥 Se eliminó el badge de estado (PERSONAL ACTIVO / INACTIVO) */}
               </div>
             </div>
           </div>
@@ -90,7 +96,9 @@ export default function AsistenteProfilePage({ onBack }) {
             
             {/* Columna 1: Contacto */}
             <div className="space-y-6">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Contacto</h3>
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">
+                Contacto
+              </h3>
               
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
@@ -98,7 +106,9 @@ export default function AsistenteProfilePage({ onBack }) {
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 font-semibold uppercase">Email</p>
-                  <p className="text-slate-800 font-medium">{asistenteData.email || 'No registrado'}</p>
+                  <p className="text-slate-800 font-medium">
+                    {asistenteData.email || 'No registrado'}
+                  </p>
                 </div>
               </div>
 
@@ -108,7 +118,9 @@ export default function AsistenteProfilePage({ onBack }) {
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 font-semibold uppercase">Teléfono</p>
-                  <p className="text-slate-800 font-medium">{asistenteData.telefono || 'No registrado'}</p>
+                  <p className="text-slate-800 font-medium">
+                    {asistenteData.telefono || 'No registrado'}
+                  </p>
                 </div>
               </div>
 
@@ -118,14 +130,18 @@ export default function AsistenteProfilePage({ onBack }) {
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 font-semibold uppercase">Dirección</p>
-                  <p className="text-slate-800 font-medium">{asistenteData.direccion || 'No registrada'}</p>
+                  <p className="text-slate-800 font-medium">
+                    {asistenteData.direccion || 'No registrada'}
+                  </p>
                 </div>
               </div>
             </div>
 
             {/* Columna 2: Información Laboral */}
             <div className="space-y-6">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Información Laboral</h3>
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">
+                Información Laboral
+              </h3>
               
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="flex justify-between items-start mb-2">
