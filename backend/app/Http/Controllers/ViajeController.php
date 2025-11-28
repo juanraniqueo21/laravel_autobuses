@@ -5,9 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Viaje;
 use App\Models\AsignacionTurno;
 use App\Models\Ruta;
+use App\Models\RutaParada; // Importante
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\DB;
 
 class ViajeController extends Controller
 {
@@ -15,19 +15,15 @@ class ViajeController extends Controller
     // LISTAR VIAJES
     // ============================================
 
-    /**
-     * Listar todos los viajes con información completa
-     */
     public function index(Request $request)
     {
         $query = Viaje::with([
             'asignacionTurno.bus',
-            'asignacionTurno.conductores.empleado',
-            'asignacionTurno.asistentes.empleado',
+            'asignacionTurno.conductores.empleado.user', // Cargar nombres
+            'asignacionTurno.asistentes.empleado.user',  // Cargar nombres
             'ruta.paradas'
         ]);
 
-        // Filtros opcionales
         if ($request->has('turno_id')) {
             $query->where('asignacion_turno_id', $request->turno_id);
         }
@@ -49,15 +45,12 @@ class ViajeController extends Controller
         return response()->json($viajes);
     }
 
-    /**
-     * Obtener un viaje específico
-     */
     public function show($id)
     {
         $viaje = Viaje::with([
             'asignacionTurno.bus',
-            'asignacionTurno.conductores.empleado',
-            'asignacionTurno.asistentes.empleado',
+            'asignacionTurno.conductores.empleado.user', // Cargar nombres
+            'asignacionTurno.asistentes.empleado.user',  // Cargar nombres
             'ruta.paradas'
         ])->find($id);
 
@@ -72,9 +65,6 @@ class ViajeController extends Controller
     // CREAR VIAJE
     // ============================================
 
-    /**
-     * Crear un nuevo viaje
-     */
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -91,13 +81,11 @@ class ViajeController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Verificar que el turno existe y está activo
         $turno = AsignacionTurno::find($request->asignacion_turno_id);
         if (!$turno) {
             return response()->json(['error' => 'Turno no encontrado'], 404);
         }
 
-        // Verificar que el viaje está dentro del horario del turno
         $horaSalida = date('H:i:s', strtotime($request->fecha_hora_salida));
         if ($horaSalida < $turno->hora_inicio || $horaSalida > $turno->hora_termino) {
             return response()->json([
@@ -105,17 +93,14 @@ class ViajeController extends Controller
             ], 422);
         }
 
-        // Obtener información de la ruta
         $ruta = Ruta::find($request->ruta_id);
         if (!$ruta) {
             return response()->json(['error' => 'Ruta no encontrada'], 404);
         }
 
-        // Generar código de viaje automático
         $fecha = date('Y-m-d', strtotime($request->fecha_hora_salida));
         $codigoViaje = Viaje::generarCodigo($fecha);
 
-        // Crear el viaje
         $viaje = Viaje::create([
             'asignacion_turno_id' => $request->asignacion_turno_id,
             'codigo_viaje' => $codigoViaje,
@@ -128,11 +113,10 @@ class ViajeController extends Controller
             'incidentes' => $request->incidentes,
         ]);
 
-        // Cargar relaciones
         $viaje->load([
             'asignacionTurno.bus',
-            'asignacionTurno.conductores.empleado',
-            'asignacionTurno.asistentes.empleado',
+            'asignacionTurno.conductores.empleado.user',
+            'asignacionTurno.asistentes.empleado.user',
             'ruta.paradas'
         ]);
 
@@ -140,12 +124,9 @@ class ViajeController extends Controller
     }
 
     // ============================================
-    // ACTUALIZAR VIAJE
+    // ACTUALIZAR VIAJE (AQUÍ ESTÁ LA LÓGICA DE PRECIOS Y HORAS)
     // ============================================
 
-    /**
-     * Actualizar un viaje existente
-     */
     public function update(Request $request, $id)
     {
         $viaje = Viaje::find($id);
@@ -160,13 +141,14 @@ class ViajeController extends Controller
             'estado' => 'nullable|in:programado,en_curso,completado,cancelado',
             'observaciones' => 'nullable|string',
             'incidentes' => 'nullable|string',
+            'paradas' => 'nullable|array' // Aceptamos array de paradas
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // No permitir cambiar turno o ruta una vez creado
+        // 1. Actualizar datos base del viaje
         $viaje->update($request->only([
             'fecha_hora_salida',
             'fecha_hora_llegada',
@@ -175,11 +157,38 @@ class ViajeController extends Controller
             'incidentes'
         ]));
 
-        // Cargar relaciones
+        // 2. Actualizar Tarifas y Horarios en las paradas
+        if ($request->has('paradas') && is_array($request->paradas)) {
+            foreach ($request->paradas as $paradaData) {
+                if (isset($paradaData['id'])) {
+                    // Buscar la parada asegurando que pertenece a la ruta de este viaje
+                    $parada = RutaParada::where('id', $paradaData['id'])
+                                        ->where('ruta_id', $viaje->ruta_id)
+                                        ->first();
+
+                    if ($parada) {
+                        // Actualizamos tanto precios como horas
+                        // IMPORTANTE: RutaParada debe tener estos campos en $fillable
+                        $parada->update([
+                            // Tarifas
+                            'tarifa_adulto'       => $paradaData['tarifa_adulto'] ?? $parada->tarifa_adulto,
+                            'tarifa_estudiante'   => $paradaData['tarifa_estudiante'] ?? $parada->tarifa_estudiante,
+                            'tarifa_tercera_edad' => $paradaData['tarifa_tercera_edad'] ?? $parada->tarifa_tercera_edad,
+                            
+                            // Horarios (NUEVO)
+                            'hora_llegada'        => $paradaData['hora_llegada'] ?? $parada->hora_llegada,
+                            'hora_salida'         => $paradaData['hora_salida'] ?? $parada->hora_salida,
+                        ]);
+                    }
+                }
+            }
+        }
+
+        // 3. Recargar relaciones completas para devolver al frontend
         $viaje->load([
             'asignacionTurno.bus',
-            'asignacionTurno.conductores.empleado',
-            'asignacionTurno.asistentes.empleado',
+            'asignacionTurno.conductores.empleado.user',
+            'asignacionTurno.asistentes.empleado.user',
             'ruta.paradas'
         ]);
 
@@ -190,9 +199,6 @@ class ViajeController extends Controller
     // FINALIZAR VIAJE
     // ============================================
 
-    /**
-     * Finalizar un viaje (registrar hora de llegada)
-     */
     public function finalizar(Request $request, $id)
     {
         $viaje = Viaje::find($id);
@@ -222,8 +228,8 @@ class ViajeController extends Controller
 
         $viaje->load([
             'asignacionTurno.bus',
-            'asignacionTurno.conductores.empleado',
-            'asignacionTurno.asistentes.empleado',
+            'asignacionTurno.conductores.empleado.user',
+            'asignacionTurno.asistentes.empleado.user',
             'ruta'
         ]);
 
@@ -234,9 +240,6 @@ class ViajeController extends Controller
     // CANCELAR VIAJE
     // ============================================
 
-    /**
-     * Cancelar un viaje
-     */
     public function cancelar(Request $request, $id)
     {
         $viaje = Viaje::find($id);
@@ -270,9 +273,6 @@ class ViajeController extends Controller
     // ELIMINAR VIAJE
     // ============================================
 
-    /**
-     * Eliminar un viaje
-     */
     public function destroy($id)
     {
         $viaje = Viaje::find($id);
@@ -281,7 +281,6 @@ class ViajeController extends Controller
             return response()->json(['error' => 'Viaje no encontrado'], 404);
         }
 
-        // Solo permitir eliminar viajes que no estén completados
         if ($viaje->estado === 'completado') {
             return response()->json([
                 'error' => 'No se puede eliminar un viaje completado. Cancélelo en su lugar.'
@@ -297,9 +296,6 @@ class ViajeController extends Controller
     // MÉTODOS AUXILIARES
     // ============================================
 
-    /**
-     * Obtener viajes de un turno específico
-     */
     public function porTurno($turnoId)
     {
         $viajes = Viaje::with([
@@ -312,14 +308,11 @@ class ViajeController extends Controller
         return response()->json($viajes);
     }
 
-    /**
-     * Obtener viajes activos (en curso)
-     */
     public function activos()
     {
         $viajes = Viaje::with([
             'asignacionTurno.bus',
-            'asignacionTurno.conductores.empleado',
+            'asignacionTurno.conductores.empleado.user',
             'ruta'
         ])
         ->where('estado', 'en_curso')
