@@ -143,7 +143,7 @@ const LicenciasPage = () => {
   };
 
   const abrirModalEditar = (licencia) => {
-    if (licencia.estado !== 'solicitado') {
+    if (licencia.estado && licencia.estado !== 'solicitado') {
       setError('Solo se pueden editar licencias en estado "solicitado"');
       return;
     }
@@ -153,7 +153,6 @@ const LicenciasPage = () => {
     setFormData({
       empleado_id: licencia.empleado_id,
       tipo: licencia.tipo,
-      // Normalizamos a YYYY-MM-DD por si viene con T...
       fecha_inicio: licencia.fecha_inicio ? licencia.fecha_inicio.split('T')[0] : '',
       fecha_termino: licencia.fecha_termino ? licencia.fecha_termino.split('T')[0] : '',
       motivo: licencia.motivo || '',
@@ -478,13 +477,19 @@ const LicenciasPage = () => {
                       {licencia.dias_totales}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getEstadoBadgeClass(
-                          licencia.estado
-                        )}`}
-                      >
-                        {licencia.estado.charAt(0).toUpperCase() + licencia.estado.slice(1)}
-                      </span>
+                      {licencia.estado ? (
+                        <span
+                          className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getEstadoBadgeClass(
+                            licencia.estado
+                          )}`}
+                        >
+                          {licencia.estado.charAt(0).toUpperCase() + licencia.estado.slice(1)}
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                          Sin estado
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {licencia.ruta_archivo ? (
@@ -498,41 +503,52 @@ const LicenciasPage = () => {
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      {licencia.estado === 'solicitado' && (
-                        <>
-                          <button
-                            onClick={() => abrirModalEditar(licencia)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            Editar
-                          </button>
-                          {puedeAprobarRechazar() && (
-                            <>
-                              <button
-                                onClick={() => handleAprobar(licencia.id)}
-                                className="text-green-600 hover:text-green-900"
-                              >
-                                Aprobar
-                              </button>
-                              <button
-                                onClick={() => abrirModalRechazar(licencia)}
-                                className="text-red-600 hover:text-red-900"
-                              >
-                                Rechazar
-                              </button>
-                            </>
-                          )}
-                          {puedeEliminar() && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex gap-2 flex-wrap">
+                        {/* Botones para licencias sin estado o en estado solicitado */}
+                        {(!licencia.estado || licencia.estado === 'solicitado') && (
+                          <>
                             <button
-                              onClick={() => handleEliminar(licencia.id)}
-                              className="text-red-600 hover:text-red-900"
+                              onClick={() => abrirModalEditar(licencia)}
+                              className="text-blue-600 hover:text-blue-900 font-medium"
                             >
-                              Eliminar
+                              Editar
                             </button>
-                          )}
-                        </>
-                      )}
+
+                            {puedeAprobarRechazar() && (
+                              <>
+                                <button
+                                  onClick={() => handleAprobar(licencia.id)}
+                                  className="text-green-600 hover:text-green-900 font-medium"
+                                >
+                                  Aprobar
+                                </button>
+                                <button
+                                  onClick={() => abrirModalRechazar(licencia)}
+                                  className="text-red-600 hover:text-red-900 font-medium"
+                                >
+                                  Rechazar
+                                </button>
+                              </>
+                            )}
+                          </>
+                        )}
+
+                        {/* Botón Eliminar - Siempre visible para Admin/RRHH */}
+                        {puedeEliminar() && (
+                          <button
+                            onClick={() => handleEliminar(licencia.id)}
+                            className="text-red-600 hover:text-red-900 font-medium"
+                          >
+                            Eliminar
+                          </button>
+                        )}
+
+                        {/* Si no hay ningún botón, mostrar guión */}
+                        {licencia.estado && licencia.estado !== 'solicitado' && !puedeEliminar() && (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -713,6 +729,7 @@ const LicenciasPage = () => {
 
             <div className="flex justify-end space-x-3">
               <button
+                type="button"
                 onClick={cerrarModalRechazar}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >

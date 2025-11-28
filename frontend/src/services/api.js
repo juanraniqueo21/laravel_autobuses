@@ -893,3 +893,210 @@ export const descargarPdfLicencia = async (id) => {
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 };
+
+// =============================================
+// LIQUIDACIONES
+// =============================================
+
+export const fetchLiquidaciones = async (filtros = {}) => {
+  const params = new URLSearchParams();
+  if (filtros.empleado_id) params.append('empleado_id', filtros.empleado_id);
+  if (filtros.estado) params.append('estado', filtros.estado);
+  if (filtros.anio) params.append('anio', filtros.anio);
+  if (filtros.mes) params.append('mes', filtros.mes);
+  
+  const url = `/liquidaciones${params.toString() ? '?' + params.toString() : ''}`;
+  const response = await fetch(`${API_URL}${url}`, fetchOptions('GET', null, true));
+  if (!response.ok) throw new Error('Error al obtener liquidaciones');
+  return response.json();
+};
+
+export const fetchEstadisticasLiquidaciones = async () => {
+  const response = await fetch(`${API_URL}/liquidaciones/estadisticas`, fetchOptions('GET', null, true));
+  if (!response.ok) throw new Error('Error al obtener estadísticas');
+  return response.json();
+};
+
+export const createLiquidacion = async (data) => {
+  const response = await fetch(`${API_URL}/liquidaciones`, fetchOptions('POST', data, true));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Error al crear liquidación');
+  }
+  return response.json();
+};
+
+export const updateLiquidacion = async (id, data) => {
+  const response = await fetch(`${API_URL}/liquidaciones/${id}`, fetchOptions('PUT', data, true));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Error al actualizar liquidación');
+  }
+  return response.json();
+};
+
+export const deleteLiquidacion = async (id) => {
+  const response = await fetch(`${API_URL}/liquidaciones/${id}`, fetchOptions('DELETE', null, true));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Error al eliminar liquidación');
+  }
+  return response.json();
+};
+
+export const calcularLiquidacion = async (empleadoId, periodoDesde, periodoHasta) => {
+  const response = await fetch(`${API_URL}/liquidaciones/calcular`, fetchOptions('POST', {
+    empleado_id: empleadoId,
+    periodo_desde: periodoDesde,
+    periodo_hasta: periodoHasta
+  }, true));
+  
+  if (!response.ok) throw new Error('Error al calcular liquidación');
+  return response.json();
+};
+
+export const descargarLiquidacionPDF = async (id) => {
+  try {
+    const token = getAuthToken();
+    const response = await fetch(`${API_URL}/liquidaciones/${id}/pdf`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) throw new Error('Error al descargar PDF');
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `liquidacion_${id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (error) {
+    console.error('Error:', error);
+    throw error;
+  }
+  
+};
+
+// ============================================
+// REPORTS / LOGÍSTICA
+// ============================================
+
+/**
+ * Obtener estadísticas generales de logística
+ * @param {number} mes - Mes (1-12)
+ * @param {number} anio - Año
+ */
+export const fetchEstadisticasLogistica = async (mes = null, anio = null) => {
+  const params = new URLSearchParams();
+  if (mes) params.append('mes', mes);
+  if (anio) params.append('anio', anio);
+
+  const url = `${API_URL}/reports/logistica${params.toString() ? '?' + params.toString() : ''}`;
+  const response = await fetch(url, fetchOptions('GET', null, true));
+  if (!response.ok) throw new Error('Error al obtener estadísticas de logística');
+  const data = await response.json();
+  return data.success ? data.data : data;
+};
+
+/**
+ * Obtener datos para gráfico de viajes por día
+ * @param {number} mes - Mes (1-12)
+ * @param {number} anio - Año
+ */
+export const fetchViajesPorDia = async (mes = null, anio = null) => {
+  const params = new URLSearchParams();
+  if (mes) params.append('mes', mes);
+  if (anio) params.append('anio', anio);
+
+  const url = `${API_URL}/reports/viajes-por-dia${params.toString() ? '?' + params.toString() : ''}`;
+  const response = await fetch(url, fetchOptions('GET', null, true));
+  if (!response.ok) throw new Error('Error al obtener viajes por día');
+  const data = await response.json();
+  return data.success ? data.data : data;
+};
+
+/**
+ * Obtener datos para gráfico de estado de buses
+ */
+export const fetchEstadoBuses = async () => {
+  const response = await fetch(`${API_URL}/reports/estado-buses`, fetchOptions('GET', null, true));
+  if (!response.ok) throw new Error('Error al obtener estado de buses');
+  const data = await response.json();
+  return data.success ? data.data : data;
+};
+
+/**
+ * Obtener datos para gráfico de rutas más activas
+ * @param {number} mes - Mes (1-12)
+ * @param {number} anio - Año
+ */
+export const fetchRutasActivas = async (mes = null, anio = null) => {
+  const params = new URLSearchParams();
+  if (mes) params.append('mes', mes);
+  if (anio) params.append('anio', anio);
+
+  const url = `${API_URL}/reports/rutas-activas${params.toString() ? '?' + params.toString() : ''}`;
+  const response = await fetch(url, fetchOptions('GET', null, true));
+  if (!response.ok) throw new Error('Error al obtener rutas activas');
+  const data = await response.json();
+  return data.success ? data.data : data;
+};
+
+/**
+ * Obtener datos para gráfico de ocupación de buses
+ * @param {number} mes - Mes (1-12)
+ * @param {number} anio - Año
+ */
+export const fetchOcupacionBuses = async (mes = null, anio = null) => {
+  const params = new URLSearchParams();
+  if (mes) params.append('mes', mes);
+  if (anio) params.append('anio', anio);
+
+  const url = `${API_URL}/reports/ocupacion-buses${params.toString() ? '?' + params.toString() : ''}`;
+  const response = await fetch(url, fetchOptions('GET', null, true));
+  if (!response.ok) throw new Error('Error al obtener ocupación de buses');
+  const data = await response.json();
+  return data.success ? data.data : data;
+};
+
+/**
+ * Descargar reporte mensual en PDF
+ * @param {number} mes - Mes (1-12)
+ * @param {number} anio - Año
+ */
+export const descargarReportePDF = async (mes, anio) => {
+  try {
+    const token = getAuthToken();
+    const params = new URLSearchParams();
+    params.append('mes', mes);
+    params.append('anio', anio);
+
+    const response = await fetch(`${API_URL}/reports/exportar-pdf?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) throw new Error('Error al descargar PDF');
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Reporte_Logistica_${anio}_${mes}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (error) {
+    console.error('Error al descargar PDF:', error);
+    throw error;
+  }
+};

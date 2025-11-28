@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Clock, MapPin, CheckCircle, XCircle, Calendar, Bus, Users, Map, Trash2, Pencil } from 'lucide-react';
+import { 
+  ArrowLeft, Plus, Clock, MapPin, CheckCircle, XCircle, Calendar, 
+  Bus, Users, Map, Trash2, Pencil 
+} from 'lucide-react';
 import Table from '../components/tables/Table';
 import FormDialog from '../components/forms/FormDialog';
 import Input from '../components/common/Input';
@@ -15,27 +18,30 @@ import {
   cancelarViaje,
   deleteViaje
 } from '../services/api';
+import { getNowDatetimeLocal, toBackendDatetime, formatTime } from '../utils/dateHelpers';
 
 export default function TurnoViajesPage({ turno, onVolver }) {
   const [viajes, setViajes] = useState([]);
   const [rutas, setRutas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
   const [openDialog, setOpenDialog] = useState(false);
-  
-  // Estados para la edición
+  const [openFinalizarDialog, setOpenFinalizarDialog] = useState(false);
+
+  const [viajeAFinalizar, setViajeAFinalizar] = useState(null);
+  const [viajeSeleccionado, setViajeSeleccionado] = useState(null);
+
+  // estados para edición
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
 
-  const [openFinalizarDialog, setOpenFinalizarDialog] = useState(false);
-  const [viajeAFinalizar, setViajeAFinalizar] = useState(null);
-  const [viajeSeleccionado, setViajeSeleccionado] = useState(null);
-  
   const [formData, setFormData] = useState({
     ruta_id: '',
     origen: '',
     destino: '',
     fecha_hora_salida: '',
+    fecha_hora_llegada: '',
     observaciones: '',
   });
 
@@ -46,6 +52,7 @@ export default function TurnoViajesPage({ turno, onVolver }) {
   const loadData = async () => {
     try {
       setLoading(true);
+      
       const viajesData = await fetchViajesPorTurno(turno.id);
       setViajes(viajesData);
       
@@ -65,16 +72,13 @@ export default function TurnoViajesPage({ turno, onVolver }) {
   const handleOpenDialog = () => {
     setIsEditing(false);
     setEditId(null);
-    const ahora = new Date();
-    // Ajuste zona horaria local simple
-    ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
-    const fechaHoraActual = ahora.toISOString().slice(0, 16);
-    
+
     setFormData({
       ruta_id: '',
       origen: '',
       destino: '',
-      fecha_hora_salida: fechaHoraActual,
+      fecha_hora_salida: getNowDatetimeLocal(),
+      fecha_hora_llegada: '',
       observaciones: '',
     });
     setOpenDialog(true);
@@ -97,7 +101,8 @@ export default function TurnoViajesPage({ turno, onVolver }) {
       ruta_id: viaje.ruta_id,
       origen: rutaDelViaje.origen || '',
       destino: rutaDelViaje.destino || '',
-      fecha_hora_salida: fechaFormateada,
+      fecha_hora_salida: fechaFormateada || getNowDatetimeLocal(),
+      fecha_hora_llegada: '',
       observaciones: viaje.observaciones || '',
     });
 
@@ -112,60 +117,82 @@ export default function TurnoViajesPage({ turno, onVolver }) {
 
   const handleSave = async () => {
     try {
+      if (!formData.fecha_hora_salida) {
+        alert('Por favor establece la hora de salida');
+        return;
+      }
+
       if (isEditing) {
+        // actualizar solo fecha/hora y observaciones
         await updateViaje(editId, {
-            fecha_hora_salida: formData.fecha_hora_salida,
-            observaciones: formData.observaciones,
+          fecha_hora_salida: toBackendDatetime(formData.fecha_hora_salida),
+          observaciones: formData.observaciones || '',
         });
         alert('Viaje actualizado exitosamente');
       } else {
+        // validación solo para creación
+        if (!formData.ruta_id) {
+          alert('Por favor selecciona una ruta');
+          return;
+        }
+
         const viajeData = {
-            asignacion_turno_id: turno.id,
-            ruta_id: formData.ruta_id,
-            fecha_hora_salida: formData.fecha_hora_salida,
-            fecha_hora_llegada: null,
-            estado: 'programado',
-            observaciones: formData.observaciones,
+          asignacion_turno_id: turno.id,
+          ruta_id: parseInt(formData.ruta_id, 10),
+          fecha_hora_salida: toBackendDatetime(formData.fecha_hora_salida),
+          fecha_hora_llegada: null,
+          estado: 'programado',
+          observaciones: formData.observaciones || '',
         };
+
+        console.log('Enviando al backend:', viajeData);
         await createViaje(viajeData);
         alert('Viaje programado exitosamente');
       }
+
       loadData();
       handleCloseDialog();
     } catch (err) {
       console.error('Error al guardar:', err);
       setError('Error al guardar: ' + err.message);
+      alert('Error al guardar el viaje: ' + err.message);
     }
   };
 
   const handleIniciarViaje = async (viajeId) => {
     try {
-      const ahora = new Date().toISOString();
       await updateViaje(viajeId, {
         estado: 'en_curso',
-        fecha_hora_salida: ahora
+        fecha_hora_salida: toBackendDatetime(getNowDatetimeLocal()),
       });
       loadData();
       alert('Viaje iniciado');
     } catch (err) {
       setError('Error al iniciar viaje: ' + err.message);
+      alert('Error al iniciar viaje: ' + err.message);
     }
   };
 
   const handleOpenFinalizar = (viaje) => {
     setViajeAFinalizar(viaje);
-    const ahora = new Date();
-    ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
-    const fechaHoraActual = ahora.toISOString().slice(0, 16);
-    setFormData({ ...formData, fecha_hora_llegada: fechaHoraActual, observaciones: viaje.observaciones || '' });
+    setFormData((prev) => ({
+      ...prev,
+      fecha_hora_llegada: getNowDatetimeLocal(),
+      observaciones: viaje.observaciones || '',
+    }));
     setOpenFinalizarDialog(true);
   };
 
   const handleFinalizar = async () => {
     try {
+      if (!formData.fecha_hora_llegada) {
+        alert('Por favor establece la hora de llegada');
+        return;
+      }
+
       await finalizarViaje(viajeAFinalizar.id, {
-        fecha_hora_llegada: formData.fecha_hora_llegada,
-        observaciones: formData.observaciones,
+        fecha_hora_llegada: toBackendDatetime(formData.fecha_hora_llegada),
+        observaciones: formData.observaciones || '',
       });
       loadData();
       setOpenFinalizarDialog(false);
@@ -174,18 +201,21 @@ export default function TurnoViajesPage({ turno, onVolver }) {
     } catch (err) {
       console.error('Error al finalizar:', err);
       setError('Error al finalizar: ' + err.message);
+      alert('Error al finalizar: ' + err.message);
     }
   };
 
   const handleCancelar = async (viajeId) => {
     const motivo = prompt('Ingresa el motivo de la cancelación:');
     if (!motivo) return;
+    
     try {
       await cancelarViaje(viajeId, motivo);
       loadData();
       alert('Viaje cancelado');
     } catch (err) {
       setError('Error al cancelar: ' + err.message);
+      alert('Error al cancelar: ' + err.message);
     }
   };
 
@@ -194,8 +224,10 @@ export default function TurnoViajesPage({ turno, onVolver }) {
       try {
         await deleteViaje(id);
         loadData();
+        alert('Viaje eliminado');
       } catch (err) {
         setError('Error al eliminar: ' + err.message);
+        alert('Error al eliminar: ' + err.message);
       }
     }
   };
@@ -223,7 +255,7 @@ export default function TurnoViajesPage({ turno, onVolver }) {
     { 
       id: 'patente', 
       label: 'Bus',
-      render: (row) => (
+      render: () => (
         <span className="font-mono font-bold text-gray-900">
           {turno.bus?.patente || 'N/A'}
         </span>
@@ -234,31 +266,23 @@ export default function TurnoViajesPage({ turno, onVolver }) {
       label: 'Ruta',
       render: (row) => (
         <button
-            onClick={() => setViajeSeleccionado(row.id)}
-            className="flex items-center gap-2 hover:text-blue-600 transition-colors text-left"
-            >
-            <MapPin size={16} className="text-green-400" />
-            <span className="font-medium underline">{row.nombre_viaje}</span>
-          
+          onClick={() => setViajeSeleccionado(row.id)}
+          className="flex items-center gap-2 hover:text-blue-600 transition-colors text-left"
+        >
+          <MapPin size={16} className="text-green-400" />
+          <span className="font-medium underline">{row.nombre_viaje}</span>
         </button>
       )
     },
     { 
       id: 'fecha_hora_salida', 
       label: 'Salida', 
-      render: (row) => {
-        const fecha = new Date(row.fecha_hora_salida);
-        return fecha.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
-      }
+      render: (row) => formatTime(row.fecha_hora_salida)
     },
     { 
       id: 'fecha_hora_llegada', 
       label: 'Llegada', 
-      render: (row) => {
-        if (!row.fecha_hora_llegada) return '-';
-        const fecha = new Date(row.fecha_hora_llegada);
-        return fecha.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
-      }
+      render: (row) => row.fecha_hora_llegada ? formatTime(row.fecha_hora_llegada) : '-'
     },
     {
       id: 'duracion',
@@ -287,15 +311,15 @@ export default function TurnoViajesPage({ turno, onVolver }) {
       label: 'Acciones',
       render: (row) => (
         <div className="flex gap-2">
-           {/* Botón Editar */}
-           {row.estado === 'programado' && (
-             <button
-                onClick={() => handleEdit(row)}
-                className="flex items-center justify-center w-8 h-8 text-gray-700 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 hover:border-gray-300 transition-colors"
-                title="Editar Viaje"
-             >
-                <Pencil size={16} />
-             </button>
+          {/* Editar solo cuando está programado */}
+          {row.estado === 'programado' && (
+            <button
+              onClick={() => handleEdit(row)}
+              className="flex items-center justify-center w-8 h-8 text-gray-700 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 hover:border-gray-300 transition-colors"
+              title="Editar Viaje"
+            >
+              <Pencil size={16} />
+            </button>
           )}
 
           {row.estado === 'programado' && (
@@ -389,7 +413,7 @@ export default function TurnoViajesPage({ turno, onVolver }) {
             className="flex items-center gap-2 shadow-lg"
           >
             <Plus size={20} />
-            Agregar Viaje
+            {isEditing ? 'Editar Viaje' : 'Agregar Viaje'}
           </Button>
         </div>
         <Map className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
@@ -468,14 +492,13 @@ export default function TurnoViajesPage({ turno, onVolver }) {
         </div>
       </div>
 
+      {/* Tabla de viajes */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-xl font-bold text-gray-900">
             Viajes Registrados ({viajes.length})
           </h2>
         </div>
-        
-        {/* CORRECCIÓN: NO PASAMOS onDelete AQUÍ para evitar duplicar columna */}
         <Table
           columns={columns}
           data={viajes}
@@ -483,20 +506,21 @@ export default function TurnoViajesPage({ turno, onVolver }) {
         />
       </div>
 
+      {/* Dialog Crear / Editar */}
       <FormDialog
         isOpen={openDialog}
-        title={isEditing ? "Editar Viaje" : "Agregar Viaje al Turno"}
+        title={isEditing ? 'Editar Viaje' : 'Agregar Viaje al Turno'}
         onSubmit={handleSave}
         onCancel={handleCloseDialog}
       >
         <div className="space-y-4">
           {!isEditing && (
-             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-               <p className="text-sm text-blue-800">
-                 <strong>Bus:</strong> {turno.bus?.patente || 'N/A'}<br />
-                 <strong>Tripulación:</strong> Heredada del turno automáticamente
-               </p>
-             </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
+                <strong>Bus:</strong> {turno.bus?.patente || 'N/A'}<br />
+                <strong>Tripulación:</strong> Heredada del turno automáticamente
+              </p>
+            </div>
           )}
 
           <Select
@@ -507,7 +531,7 @@ export default function TurnoViajesPage({ turno, onVolver }) {
             }))}
             value={formData.ruta_id}
             onChange={(e) => {
-              const rutaSeleccionada = rutas.find(r => r.id === parseInt(e.target.value));
+              const rutaSeleccionada = rutas.find(r => r.id === parseInt(e.target.value, 10));
               setFormData({ 
                 ...formData, 
                 ruta_id: e.target.value,
@@ -515,19 +539,21 @@ export default function TurnoViajesPage({ turno, onVolver }) {
                 destino: rutaSeleccionada?.destino || ''
               });
             }}
-            required
+            required={!isEditing}
             disabled={isEditing}
           />
-          
+
           {isEditing && (
-             <p className="text-xs text-gray-500 -mt-3 mb-3">La ruta no puede ser modificada una vez creado el viaje.</p>
+            <p className="text-xs text-gray-500 -mt-3 mb-3">
+              La ruta no puede ser modificada una vez creado el viaje.
+            </p>
           )}
 
           {formData.ruta_id && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-sm text-green-800">
-                <strong> Origen:</strong> {formData.origen}<br />
-                <strong> Destino:</strong> {formData.destino}
+                <strong>Origen:</strong> {formData.origen}<br />
+                <strong>Destino:</strong> {formData.destino}
               </p>
             </div>
           )}
@@ -555,14 +581,15 @@ export default function TurnoViajesPage({ turno, onVolver }) {
 
           {!isEditing && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-800">
-                    <strong>Importante:</strong> El viaje se creará como "PROGRAMADO". Luego presiona "Iniciar" cuando comience el viaje.
-                </p>
+              <p className="text-sm text-yellow-800">
+                Importante: El viaje se creará como "PROGRAMADO". Luego presiona "Iniciar" cuando comience el viaje.
+              </p>
             </div>
           )}
         </div>
       </FormDialog>
 
+      {/* Dialog Finalizar */}
       <FormDialog
         isOpen={openFinalizarDialog}
         title="Finalizar Viaje"

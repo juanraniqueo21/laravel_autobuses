@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Calendar as CalendarIcon, Clock, Bus, MapPin, Filter, 
+  Calendar, Clock, Bus, MapPin, Filter, 
   ChevronDown, Eye, X, Search, User 
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import { fetchMisTurnos, fetchViajesPorTurno } from '../../services/api';
+import { formatDate, formatTime, isToday } from '../../utils/dateHelpers';
 
 export default function MisTurnosPage() {
   const [turnos, setTurnos] = useState([]);
@@ -14,12 +15,10 @@ export default function MisTurnosPage() {
   const [error, setError] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
   
-  // Detalles
   const [turnoDetalle, setTurnoDetalle] = useState(null);
   const [viajesTurno, setViajesTurno] = useState([]);
   const [loadingViajes, setLoadingViajes] = useState(false);
 
-  // Filtros
   const [filters, setFilters] = useState({
     fecha_inicio: '',
     fecha_fin: '',
@@ -71,26 +70,12 @@ export default function MisTurnosPage() {
     }
   };
 
-  // --- HELPERS VISUALES ---
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString + 'T00:00:00');
-    return date.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' });
-  };
-
-  const formatTime = (timeString) => timeString ? timeString.substring(0, 5) : '';
-
   const getEstadoColor = (estado) => ({
     'programado': 'bg-blue-50 text-blue-700 border-blue-200',
     'en_curso': 'bg-amber-50 text-amber-700 border-amber-200',
     'completado': 'bg-emerald-50 text-emerald-700 border-emerald-200',
     'cancelado': 'bg-red-50 text-red-700 border-red-200',
   }[estado] || 'bg-gray-50 text-gray-700 border-gray-200');
-
-  const isToday = (dateString) => {
-    const today = new Date().toISOString().split('T')[0];
-    return dateString?.split('T')[0] === today;
-  };
 
   if (loading && turnos.length === 0) {
     return (
@@ -103,16 +88,14 @@ export default function MisTurnosPage() {
   return (
     <div className="p-6 bg-gray-50 min-h-screen font-sans text-slate-800">
       
-      {/* === HEADER CARD === */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10">
           <h1 className="text-3xl font-bold tracking-tight">Mis Turnos</h1>
           <p className="mt-2 text-slate-300 max-w-xl">Gestiona tu agenda y revisa tus asignaciones de viaje.</p>
         </div>
-        <CalendarIcon className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
+        <Calendar className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* === FILTROS === */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
         <button 
           onClick={() => setShowFilters(!showFilters)} 
@@ -161,7 +144,6 @@ export default function MisTurnosPage() {
         )}
       </div>
 
-      {/* === LISTA DE TURNOS (GRID) === */}
       {error && (
         <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex items-center gap-3">
           <X size={20} /> {error}
@@ -170,7 +152,7 @@ export default function MisTurnosPage() {
 
       {turnos.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center">
-          <CalendarIcon size={64} className="mx-auto text-slate-200 mb-4" />
+          <Calendar size={64} className="mx-auto text-slate-200 mb-4" />
           <h3 className="text-xl font-bold text-slate-700 mb-2">Sin asignaciones</h3>
           <p className="text-slate-500">
             {filters.mostrar_todos ? 'No hay resultados con los filtros actuales.' : 'No tienes turnos programados próximamente.'}
@@ -187,7 +169,6 @@ export default function MisTurnosPage() {
                   today ? 'ring-2 ring-blue-500 border-transparent' : 'border-gray-200'
                 }`}
               >
-                {/* Header Card */}
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-3">
                     <div className={`p-2.5 rounded-xl shadow-sm border ${today ? 'bg-blue-100 border-blue-200' : 'bg-gray-50 border-gray-100'}`}>
@@ -203,10 +184,9 @@ export default function MisTurnosPage() {
                   </span>
                 </div>
 
-                {/* Body Card */}
                 <div className="space-y-3 mb-5">
                   <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-2 rounded-lg">
-                    <CalendarIcon size={18} className="text-slate-400" />
+                    <Calendar size={18} className="text-slate-400" />
                     <span className="font-semibold text-sm capitalize">{formatDate(turno.fecha_turno)}</span>
                   </div>
                   
@@ -226,7 +206,6 @@ export default function MisTurnosPage() {
                   </div>
                 </div>
 
-                {/* Footer / Actions */}
                 <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
                    {today && <span className="text-xs font-bold text-blue-600 animate-pulse">● Turno de Hoy</span>}
                    {!today && <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">{turno.tipo_turno}</span>}
@@ -244,12 +223,10 @@ export default function MisTurnosPage() {
         </div>
       )}
 
-      {/* === MODAL DETALLE === */}
       {turnoDetalle && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             
-            {/* Modal Header */}
             <div className="bg-slate-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
               <div>
                 <h2 className="text-lg font-bold text-slate-800">Detalle del Turno</h2>
@@ -260,10 +237,8 @@ export default function MisTurnosPage() {
               </button>
             </div>
 
-            {/* Modal Content */}
             <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
               
-              {/* Info Grid */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100">
                   <p className="text-xs text-blue-600 font-bold uppercase mb-1">Horario</p>
@@ -275,7 +250,6 @@ export default function MisTurnosPage() {
                 </div>
               </div>
 
-              {/* Tripulación */}
               <div>
                 <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
                   <User size={16} /> Tripulación
@@ -296,7 +270,6 @@ export default function MisTurnosPage() {
                 </div>
               </div>
 
-              {/* Viajes */}
               <div>
                 <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
                   <MapPin size={16} /> Rutas Asignadas
@@ -313,7 +286,7 @@ export default function MisTurnosPage() {
                         <div>
                           <p className="font-bold text-slate-700 text-sm">{viaje.ruta?.nombre_ruta || viaje.nombre_viaje}</p>
                           <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                            <Clock size={12}/> Salida: {new Date(viaje.fecha_hora_salida).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                            <Clock size={12}/> Salida: {formatTime(viaje.fecha_hora_salida)}
                           </p>
                         </div>
                         <span className={`px-2 py-1 text-[10px] font-bold uppercase rounded border ${getEstadoColor(viaje.estado)}`}>
@@ -325,7 +298,6 @@ export default function MisTurnosPage() {
                 )}
               </div>
 
-              {/* Observaciones */}
               {turnoDetalle.observaciones && (
                  <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-sm text-amber-800">
                     <strong className="block text-amber-900 mb-1">Notas:</strong>
@@ -334,7 +306,6 @@ export default function MisTurnosPage() {
               )}
             </div>
 
-            {/* Modal Footer */}
             <div className="p-4 border-t border-gray-100 bg-gray-50">
                <Button variant="secondary" onClick={() => setTurnoDetalle(null)} className="w-full justify-center">Cerrar</Button>
             </div>

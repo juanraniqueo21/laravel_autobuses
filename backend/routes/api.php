@@ -16,6 +16,9 @@ use App\Http\Controllers\AsignacionTurnoController;
 use App\Http\Controllers\ConductorPanelController;
 use App\Http\Controllers\AsistentePanelController;
 use App\Http\Controllers\PermisoLicenciaController;
+use App\Http\Controllers\LiquidacionController;
+use App\Http\Controllers\ReportController;
+
 
 // ============================================
 // RUTAS PÚBLICAS (sin autenticación)
@@ -191,5 +194,28 @@ Route::middleware('jwt.auth')->group(function () {
     });
 
     
+});
+
+// Liquidaciones
+    Route::prefix('liquidaciones')->group(function () {
+        Route::get('/', [LiquidacionController::class, 'index']);
+        Route::get('/estadisticas', [LiquidacionController::class, 'estadisticas']);
+        Route::post('/calcular', [LiquidacionController::class, 'calcularLiquidacion']);
+        Route::get('/{id}', [LiquidacionController::class, 'show']);
+        Route::post('/', [LiquidacionController::class, 'store']);
+        Route::put('/{id}', [LiquidacionController::class, 'update']);
+        Route::delete('/{id}', [LiquidacionController::class, 'destroy']);
+        Route::get('/{id}/pdf', [LiquidacionController::class, 'exportarPDF']);
+    });
+    // ============================================
+// REPORTS / LOGÍSTICA - Agregar ANTES del último cierre de Route::middleware
+// ============================================
+Route::prefix('reports')->group(function () {
+    Route::get('/logistica', [ReportController::class, 'logistica']);
+    Route::get('/viajes-por-dia', [ReportController::class, 'viajesPorDia']);
+    Route::get('/estado-buses', [ReportController::class, 'estadoBuses']);
+    Route::get('/rutas-activas', [ReportController::class, 'rutasActivas']);
+    Route::get('/ocupacion-buses', [ReportController::class, 'ocupacionBuses']);
+    Route::get('/exportar-pdf', [ReportController::class, 'exportarPDF']);
 });
 

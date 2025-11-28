@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   MapPin, Clock, Bus, Calendar, Filter, ChevronDown, Eye, 
-  CheckCircle, XCircle, AlertCircle, Search, TrendingUp 
+  CheckCircle, XCircle, AlertCircle, Search
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import { fetchMisViajes } from '../../services/api';
+import { formatTime, formatDateLong } from '../../utils/dateHelpers';
 
 export default function MisViajesPage() {
   const [viajes, setViajes] = useState([]);
@@ -51,11 +52,6 @@ export default function MisViajesPage() {
     loadViajes(emptyFilters);
   };
 
-  const formatTime = (dateString) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
-  };
-
   const getEstadoConfig = (estado) => {
     const configs = {
       'programado': { color: 'bg-blue-50 text-blue-700 border-blue-200', icon: Clock, label: 'Programado' },
@@ -97,7 +93,7 @@ export default function MisViajesPage() {
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10">
           <h1 className="text-3xl font-bold tracking-tight">Mis Viajes (Conductor)</h1>
-          <p className="mt-2 text-slate-300 max-w-xl">Historial completo y programación de tus rutas.</p>
+          <p className="mt-2 text-slate-300 max-w-xl">Historial completo y programaciÃ³n de tus rutas.</p>
         </div>
         <Bus className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
@@ -174,7 +170,7 @@ export default function MisViajesPage() {
                 <div className="p-2 bg-blue-100 rounded-lg text-blue-700"><Calendar size={20} /></div>
                 <div>
                   <h3 className="font-bold text-slate-800 capitalize">
-                    {new Date(fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    {formatDateLong(fecha)}
                   </h3>
                   <p className="text-xs text-slate-500 font-medium">{viajesDia.length} viajes</p>
                 </div>
@@ -214,7 +210,7 @@ export default function MisViajesPage() {
                            </div>
                            
                            <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg">
-                              <Clock size={14}/> Duración estimada: <span className="font-semibold text-slate-700">{duracion || 'En proceso'}</span>
+                              <Clock size={14}/> DuraciÃ³n estimada: <span className="font-semibold text-slate-700">{duracion || 'En proceso'}</span>
                            </div>
 
                            {viaje.asignacionTurno?.bus && (

@@ -54,6 +54,11 @@ class Empleado extends Model
     // ============================================
     // RELACIONES
     // ============================================
+    // Dentro de la clase Empleado
+    public function liquidaciones()
+    {
+        return $this->hasMany(Liquidacion::class, 'empleado_id');
+    }
 
     /**
      * Relación: Empleado pertenece a un Usuario

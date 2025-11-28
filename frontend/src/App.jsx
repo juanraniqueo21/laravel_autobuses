@@ -20,25 +20,26 @@ import ViajesPage from "./pages/ViajesPage";
 import MantencionesPage from './pages/MantencionesPage';
 import LogisticPage from './pages/LogisticPage';
 import TurnosPage from './pages/TurnosPage';
-import LicenciasPage from './pages/LicenciasPage';
+import LicenciasPage from './pages/LicenciasPage';           // 🔵 Licencias (Admin / Gerente / RRHH)
+import LiquidacionesPage from './pages/LiquidacionesPage';   // 🟢 Liquidaciones
 
 // ==========================================
-// PÁGINAS CONDUCTOR
+// PANEL CONDUCTOR
 // ==========================================
 import ConductorDashboardPage from './pages/conductor/ConductorDashboardPage';
 import MisTurnosPage from './pages/conductor/MisTurnosPage';
 import MisViajesPage from './pages/conductor/MisViajesPage';
 import ConductorProfilePage from './pages/conductor/ConductorProfilePage';
-import MisLicenciasConductorPage from './pages/conductor/MisLicenciasPage';
+import MisLicenciasConductorPage from './pages/conductor/MisLicenciasPage'; // 🔵 Mis licencias Conductor
 
 // ==========================================
-// PÁGINAS ASISTENTE
+// PANEL ASISTENTE
 // ==========================================
 import AsistenteDashboardPage from './pages/asistente/AsistenteDashboardPage';
 import MisTurnosAsistentePage from './pages/asistente/MisTurnosAsistentePage';
 import MisViajesAsistentePage from './pages/asistente/MisViajesAsistentePage';
 import AsistenteProfilePage from './pages/asistente/AsistenteProfilePage';
-import MisLicenciasAsistentePage from './pages/asistente/MisLicenciasPage';
+import MisLicenciasAsistentePage from './pages/asistente/MisLicenciasPage'; // 🔵 Mis licencias Asistente
 
 import { logout, me } from './services/api';
 import './index.css';
@@ -49,12 +50,14 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('dashboard');
 
-  // Verificar autenticación al cargar la app
+  // ================================
+  // VERIFICAR AUTENTICACIÓN
+  // ================================
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('token');
       const savedUser = localStorage.getItem('user');
-      
+
       if (token && savedUser) {
         try {
           const response = await me();
@@ -72,7 +75,6 @@ function App() {
       }
       setLoading(false);
     };
-
     checkAuth();
   }, []);
 
@@ -111,13 +113,15 @@ function App() {
     }
   };
 
-  // Lógica de renderizado de páginas
+  // ==========================================
+  // RENDERIZAR PÁGINA SEGÚN ROL Y PERMISOS
+  // ==========================================
   const renderCurrentPage = () => {
     const rolId = user?.rol_id || user?.rol?.id;
 
-    // ------------------------------------------
-    // RENDER: CONDUCTOR (rol_id = 3)
-    // ------------------------------------------
+    // ==========================================
+    // PANEL CONDUCTOR (rol_id = 3)
+    // ==========================================
     if (rolId === 3) {
       switch (currentPage) {
         case 'conductor-dashboard': 
@@ -126,7 +130,7 @@ function App() {
           return <MisTurnosPage />;
         case 'conductor-viajes':    
           return <MisViajesPage />;
-        case 'licencias':
+        case 'licencias':           // 🔵 Mis licencias conductor
           return <MisLicenciasConductorPage />;
         case 'perfil':              
           return <ConductorProfilePage onBack={setCurrentPage} />;
@@ -135,9 +139,9 @@ function App() {
       }
     }
 
-    // ------------------------------------------
-    // RENDER: MECÁNICO (rol_id = 4)
-    // ------------------------------------------
+    // ==========================================
+    // PANEL MECÁNICO (rol_id = 4)
+    // ==========================================
     if (rolId === 4) {
       return (
         <div className="p-8 bg-gray-50 min-h-screen">
@@ -149,9 +153,9 @@ function App() {
       );
     }
 
-    // ------------------------------------------
-    // RENDER: ASISTENTE (rol_id = 5)
-    // ------------------------------------------
+    // ==========================================
+    // PANEL ASISTENTE (rol_id = 5)
+    // ==========================================
     if (rolId === 5) {
       switch (currentPage) {
         case 'asistente-dashboard': 
@@ -160,7 +164,7 @@ function App() {
           return <MisTurnosAsistentePage />;
         case 'asistente-viajes':    
           return <MisViajesAsistentePage />;
-        case 'licencias':
+        case 'licencias':           // 🔵 Mis licencias asistente
           return <MisLicenciasAsistentePage />;
         case 'perfil':              
           return <AsistenteProfilePage onBack={setCurrentPage} />;
@@ -169,28 +173,64 @@ function App() {
       }
     }
 
-    // ------------------------------------------
-    // RENDER: ADMIN / GERENTE / RRHH
-    // ------------------------------------------
+    // ==========================================
+    // ADMIN / GERENTE / RRHH (rol_id = 1, 2, 6)
+    // ==========================================
     switch (currentPage) {
-      case 'dashboard':      return <DashboardPage onNavigate={setCurrentPage} />;
-      case 'roles':          return <RolesPage />;
-      case 'usuarios':       return <UsersPage />;
-      case 'empleados':      return <EmployeesPage />;
-      case 'conductores':    return <ConductoresPage />;
-      case 'asistentes':     return <AsistentesPage />;
-      case 'mecanicos':      return <MecanicosPage />;
-      case 'buses':          return <BusesPage />;
-      case 'rutas':          return <RoutesPage />;
-      case 'viajes':         return <ViajesPage />;
-      case 'mantenimientos': return <MantencionesPage />;
-      case 'logistica':      return <LogisticPage />;
-      case 'turnos':         return <TurnosPage />;
-      case 'licencias':      return <LicenciasPage />;
-      default:               return <DashboardPage onNavigate={setCurrentPage} />;
+      case 'dashboard':      
+        return <DashboardPage onNavigate={setCurrentPage} />;
+      
+      case 'roles':          
+        return <RolesPage />;
+      
+      case 'usuarios':       
+        return <UsersPage />;
+      
+      case 'empleados':      
+        return <EmployeesPage />;
+      
+      case 'conductores':    
+        return <ConductoresPage />;
+      
+      case 'asistentes':     
+        return <AsistentesPage />;
+      
+      case 'mecanicos':      
+        return <MecanicosPage />;
+      
+      case 'buses':          
+        return <BusesPage />;
+      
+      case 'rutas':          
+        return <RoutesPage />;
+      
+      case 'viajes':         
+        return <ViajesPage />;
+      
+      case 'mantenimientos': 
+        return <MantencionesPage />;
+      
+      case 'logistica':      
+        return <LogisticPage />;
+      
+      case 'turnos':         
+        return <TurnosPage />;
+
+      case 'licencias':      // 🔵 Gestión de licencias (RRHH / Admin / Gerente)
+        return <LicenciasPage />;
+
+      // 🟢 LIQUIDACIONES: Admin (1), Gerente (2), RRHH (6)
+      case 'liquidaciones':
+        return <LiquidacionesPage user={user} />;
+
+      default:
+        return <DashboardPage onNavigate={setCurrentPage} />;
     }
   };
 
+  // ==========================================
+  // ESTADOS DE CARGA Y AUTENTICACIÓN
+  // ==========================================
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -210,10 +250,13 @@ function App() {
     );
   }
 
+  // ==========================================
+  // APLICACIÓN PRINCIPAL
+  // ==========================================
   return (
     <NotificationProvider>
       <MainLayout 
-        user={user} 
+        user={user}
         onLogout={handleLogout}
         currentPage={currentPage}
         onPageChange={setCurrentPage}

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   MapPin, Clock, Bus, Calendar, Filter, ChevronDown, Eye, 
-  CheckCircle, XCircle, AlertCircle, Search, TrendingUp 
+  CheckCircle, XCircle, AlertCircle, Search
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import { fetchMisViajesAsistente } from '../../services/api';
+import { formatTime, formatDateLong } from '../../utils/dateHelpers';
 
 export default function MisViajesAsistentePage() {
   const [viajes, setViajes] = useState([]);
@@ -48,12 +49,6 @@ export default function MisViajesAsistentePage() {
     const emptyFilters = { fecha_inicio: '', fecha_fin: '', estado: '' };
     setFilters(emptyFilters);
     loadViajes(emptyFilters);
-  };
-
-  // --- HELPERS ---
-  const formatTime = (dateString) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
   };
 
   const getEstadoConfig = (estado) => {
@@ -174,7 +169,7 @@ export default function MisViajesAsistentePage() {
                 <div className="p-2 bg-green-100 rounded-lg text-green-700"><Calendar size={20} /></div>
                 <div>
                   <h3 className="font-bold text-slate-800 capitalize">
-                    {new Date(fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    {formatDateLong(fecha)}
                   </h3>
                   <p className="text-xs text-slate-500 font-medium">{viajesDia.length} viajes</p>
                 </div>

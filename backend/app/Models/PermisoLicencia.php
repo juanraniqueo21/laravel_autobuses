@@ -35,6 +35,11 @@ class PermisoLicencia extends Model
         'dias_totales' => 'integer',
     ];
 
+    // ✅ AGREGAR ESTO: Valores por defecto
+    protected $attributes = [
+        'estado' => 'solicitado',
+    ];
+
     // Relación con Empleado
     public function empleado()
     {

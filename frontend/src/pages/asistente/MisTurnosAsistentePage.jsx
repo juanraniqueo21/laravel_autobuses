@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Calendar as CalendarIcon, Clock, Bus, MapPin, Filter, 
+  Calendar, Clock, Bus, MapPin, Filter, 
   ChevronDown, Eye, X, Search, User 
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import { fetchMisTurnosAsistente, fetchViajesPorTurno } from '../../services/api';
+import { formatDate, formatTime, isToday } from '../../utils/dateHelpers';
 
 export default function MisTurnosAsistentePage() {
   const [turnos, setTurnos] = useState([]);
@@ -67,15 +68,6 @@ export default function MisTurnosAsistentePage() {
     }
   };
 
-  // --- HELPERS ---
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString + 'T00:00:00');
-    return date.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' });
-  };
-
-  const formatTime = (timeString) => timeString ? timeString.substring(0, 5) : '';
-
   const getEstadoColor = (estado) => ({
     'programado': 'bg-blue-50 text-blue-700 border-blue-200',
     'en_curso': 'bg-amber-50 text-amber-700 border-amber-200',
@@ -90,11 +82,6 @@ export default function MisTurnosAsistentePage() {
       'general': 'General'
     };
     return labels[posicion] || posicion;
-  };
-
-  const isToday = (dateString) => {
-    const today = new Date().toISOString().split('T')[0];
-    return dateString?.split('T')[0] === today;
   };
 
   if (loading && turnos.length === 0) {
@@ -114,7 +101,7 @@ export default function MisTurnosAsistentePage() {
           <h1 className="text-3xl font-bold tracking-tight">Mis Turnos (Asistente)</h1>
           <p className="mt-2 text-slate-300 max-w-xl">Revisa tus asignaciones de bus y posiciones para la semana.</p>
         </div>
-        <CalendarIcon className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
+        <Calendar className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
       {/* FILTROS */}
@@ -158,7 +145,7 @@ export default function MisTurnosAsistentePage() {
       {/* LISTA DE TURNOS */}
       {turnos.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center">
-          <CalendarIcon size={64} className="mx-auto text-slate-200 mb-4" />
+          <Calendar size={64} className="mx-auto text-slate-200 mb-4" />
           <h3 className="text-xl font-bold text-slate-700 mb-2">Sin asignaciones</h3>
           <p className="text-slate-500">{filters.mostrar_todos ? 'No hay resultados.' : 'No tienes turnos programados.'}</p>
         </div>
@@ -185,7 +172,7 @@ export default function MisTurnosAsistentePage() {
                 {/* Body */}
                 <div className="space-y-3 mb-5">
                   <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-2 rounded-lg">
-                    <CalendarIcon size={18} className="text-slate-400" />
+                    <Calendar size={18} className="text-slate-400" />
                     <span className="font-semibold text-sm capitalize">{formatDate(turno.fecha_turno)}</span>
                   </div>
                   <div className="flex items-center gap-3 text-slate-600 px-2">
@@ -264,7 +251,7 @@ export default function MisTurnosAsistentePage() {
                       <div key={viaje.id} className="p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex justify-between items-center">
                         <div>
                           <p className="font-bold text-slate-700 text-sm">{viaje.ruta?.nombre_ruta || viaje.nombre_viaje}</p>
-                          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1"><Clock size={12}/> {new Date(viaje.fecha_hora_salida).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</p>
+                          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1"><Clock size={12}/> {formatTime(viaje.fecha_hora_salida)}</p>
                         </div>
                         <span className={`px-2 py-1 text-[10px] font-bold uppercase rounded border ${getEstadoColor(viaje.estado)}`}>{viaje.estado}</span>
                       </div>
