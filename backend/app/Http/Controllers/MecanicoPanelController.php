@@ -38,31 +38,30 @@ class MecanicoPanelController extends Controller
 
             $mecanico->load('empleado.user');
             
-            // ID para buscar en tabla mantenimientos (FK a empleados)
-            $empleadoId = $mecanico->empleado_id;
+            // --- CORRECCIÓN AQUÍ ---
+            // Usamos el ID del MECÁNICO (tabla mecanicos), no del empleado.
+            $mecanicoId = $mecanico->id; 
 
             $inicioMes = Carbon::now()->startOfMonth();
             $finMes = Carbon::now()->endOfMonth();
 
             // 1. Métricas
-            $pendientes = Mantenimiento::where('mecanico_id', $empleadoId)
+            $pendientes = Mantenimiento::where('mecanico_id', $mecanicoId)
                 ->where('estado', 'en_proceso')
                 ->count();
 
-            // Si tienes fecha_termino usa esa, sino updated_at o fecha_inicio
-            $completadasMes = Mantenimiento::where('mecanico_id', $empleadoId)
+            $completadasMes = Mantenimiento::where('mecanico_id', $mecanicoId)
                 ->where('estado', 'completado')
                 ->whereBetween('fecha_inicio', [$inicioMes, $finMes]) 
                 ->count();
             
-            $totalHistorico = Mantenimiento::where('mecanico_id', $empleadoId)
+            $totalHistorico = Mantenimiento::where('mecanico_id', $mecanicoId)
                 ->where('estado', 'completado')
                 ->count();
 
             // 2. Próxima Tarea
-            // CORRECCIÓN POSTGRESQL: Ordenar manualmente sin FIELD()
             $proximaMantencion = Mantenimiento::with(['bus'])
-                ->where('mecanico_id', $empleadoId)
+                ->where('mecanico_id', $mecanicoId)
                 ->where('estado', 'en_proceso')
                 ->orderBy('fecha_inicio', 'asc')
                 ->first();
@@ -94,7 +93,6 @@ class MecanicoPanelController extends Controller
                         'completadas_mes' => $completadasMes,
                         'total_historico' => $totalHistorico
                     ],
-                    // Mapeo directo para evitar errores de nombres
                     'proxima_mantencion' => $proximaMantencion ? [
                         'id' => $proximaMantencion->id,
                         'tipo_mantenimiento' => $proximaMantencion->tipo_mantenimiento,
@@ -121,17 +119,17 @@ class MecanicoPanelController extends Controller
             $mecanico = $this->getMecanicoActual();
             if (!$mecanico) return response()->json(['success' => false, 'message' => 'No autorizado'], 404);
 
-            $empleadoId = $mecanico->empleado_id;
+            // --- CORRECCIÓN AQUÍ ---
+            // Usamos el ID de la tabla mecanicos
+            $mecanicoId = $mecanico->id; 
 
             $query = Mantenimiento::with(['bus'])
-                ->where('mecanico_id', $empleadoId);
+                ->where('mecanico_id', $mecanicoId);
 
             if ($request->has('estado') && $request->estado !== '') {
                 $query->where('estado', $request->estado);
             }
 
-            // CORRECCIÓN POSTGRESQL: Ordenamiento compatible
-            // Ordenamos: 1. En Proceso, 2. Completado, 3. Cancelado
             $query->orderByRaw("CASE 
                 WHEN estado = 'en_proceso' THEN 1 
                 WHEN estado = 'completado' THEN 2 

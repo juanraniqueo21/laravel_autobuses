@@ -43,8 +43,13 @@ export default function MisMantencionesPage() {
     try {
       setLoading(true);
       const filtersToUse = customFilters || filters;
-      const data = await fetchMisMantenciones(filtersToUse);
-      setMantenciones(Array.isArray(data) ? data : []);
+      const response = await fetchMisMantenciones(filtersToUse);
+      
+      // --- CORRECCIÓN AQUÍ ---
+      // Verificamos si la respuesta es un array directo o si viene dentro de .data
+      const listaMantenciones = Array.isArray(response) ? response : (response.data || []);
+      
+      setMantenciones(listaMantenciones);
       setError(null);
     } catch (err) {
       console.error('Error cargando mantenciones:', err);
@@ -257,11 +262,7 @@ export default function MisMantencionesPage() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     {Object.entries(mantencionesAgrupadas).sort(([a], [b]) => new Date(a) - new Date(b)).map(([fecha, listaDia]) => (
-                         <div key={fecha} className="contents"> {/* Usamos contents para que los items sigan en el grid principal o los agrupamos visualmente */}
-                            {/* Header de fecha opcional, si quieres separar por días visualmente dentro del grid podrías necesitar ajustar el grid, 
-                                pero para mantener el estilo de tarjetas como en conductor, iteramos directamente sobre los items o mantenemos el grupo.
-                                Para que se vea EXACTAMENTE como conductor que agrupa por fecha:
-                            */}
+                         <div key={fecha} className="contents">
                             <div className="col-span-full flex items-center gap-3 px-2 mt-4 first:mt-0">
                                 <div className="p-2 bg-blue-100 rounded-lg text-blue-700"><Calendar size={20} /></div>
                                 <div>
