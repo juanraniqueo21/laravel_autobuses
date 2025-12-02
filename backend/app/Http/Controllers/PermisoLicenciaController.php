@@ -13,7 +13,6 @@ class PermisoLicenciaController extends Controller
 {
     /**
      * Listar todas las licencias (con filtros opcionales)
-     * Acceso: Administrador, Manager, RRHH
      */
     public function index(Request $request)
     {
@@ -99,8 +98,9 @@ class PermisoLicenciaController extends Controller
         }
 
         // Verificar que el usuario puede crear licencia para este empleado
-        // 3=Conductor, 5=Asistente solo pueden crear para sí mismos
-        if (in_array($user->rol_id, [3, 5])) {
+        // 3=Conductor, 4=Mecánico, 5=Asistente solo pueden crear para sí mismos
+        // MODIFICACION: Agregado el 4 al array
+        if (in_array($user->rol_id, [3, 4, 5])) {
             $empleado = Empleado::where('user_id', $user->id)->first();
             if (!$empleado || $empleado->id != $request->empleado_id) {
                 return response()->json(['message' => 'Solo puedes crear licencias para ti mismo'], 403);
@@ -170,8 +170,9 @@ class PermisoLicenciaController extends Controller
         }
 
         // Verificar permisos: Admin/Manager/RRHH ven todo, Conductor/Asistente solo las suyas
-        // 3=Conductor, 5=Asistente
-        if (in_array($user->rol_id, [3, 5])) {
+        // 3=Conductor, 4=Mecánico, 5=Asistente
+        // MODIFICACION: Agregado el 4 al array
+        if (in_array($user->rol_id, [3, 4, 5])) {
             $empleado = Empleado::where('user_id', $user->id)->first();
             if (!$empleado || $licencia->empleado_id != $empleado->id) {
                 return response()->json(['message' => 'No autorizado'], 403);
@@ -199,8 +200,9 @@ class PermisoLicenciaController extends Controller
         }
 
         // Verificar permisos
-        // 3=Conductor, 5=Asistente solo pueden editar las suyas
-        if (in_array($user->rol_id, [3, 5])) {
+        // 3=Conductor, 4=Mecánico, 5=Asistente solo pueden editar las suyas
+        // MODIFICACION: Agregado el 4 al array
+        if (in_array($user->rol_id, [3, 4, 5])) {
             $empleado = Empleado::where('user_id', $user->id)->first();
             if (!$empleado || $licencia->empleado_id != $empleado->id) {
                 return response()->json(['message' => 'No autorizado'], 403);

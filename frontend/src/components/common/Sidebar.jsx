@@ -2,12 +2,12 @@ import React from 'react';
 import { 
   LayoutDashboard, Users, UserCog, Wrench, Bus, Map, 
   CalendarClock, Navigation, TrendingUp, Shield, User, Briefcase,
-  X, DollarSign, Calendar, MapPin, FileText
+  X, DollarSign, Calendar, MapPin, FileText, ClipboardList
 } from 'lucide-react';
 
 const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
-  // Soporta user.rol_id o user.rol.id
-  const rolId = user?.rol_id || user?.rol?.id || 0;
+  // CORRECCIÓN: aseguramos que rolId sea numérico
+  const rolId = user ? Number(user.rol_id || user.rol?.id || 0) : 0;
 
   const getButtonClasses = (id) =>
     `w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group text-left ${
@@ -53,6 +53,15 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
       >
         <CalendarClock size={20} className={getIconClasses('turnos')} />
         <span className="font-medium truncate">Planificación</span>
+      </button>
+
+      {/* REPORTES - AGREGADO */}
+      <button
+        onClick={() => handleSelect('reportes')}
+        className={getButtonClasses('reportes')}
+      >
+        <ClipboardList size={20} className={getIconClasses('reportes')} />
+        <span className="font-medium truncate">Reportes</span>
       </button>
 
       <button
@@ -194,6 +203,15 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
         Operaciones
       </p>
 
+      {/* REPORTES - AGREGADO */}
+      <button
+        onClick={() => handleSelect('reportes')}
+        className={getButtonClasses('reportes')}
+      >
+        <ClipboardList size={20} className={getIconClasses('reportes')} />
+        <span className="font-medium truncate">Reportes</span>
+      </button>
+
       <button
         onClick={() => handleSelect('liquidaciones')}
         className={getButtonClasses('liquidaciones')}
@@ -293,6 +311,15 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
         <span className="font-medium truncate">Mis Viajes</span>
       </button>
 
+      {/* MIS REPORTES - AGREGADO */}
+      <button
+        onClick={() => handleSelect('mis-reportes')}
+        className={getButtonClasses('mis-reportes')}
+      >
+        <ClipboardList size={20} className={getIconClasses('mis-reportes')} />
+        <span className="font-medium truncate">Mis Reportes</span>
+      </button>
+
       <button
         onClick={() => handleSelect('licencias')}
         className={getButtonClasses('licencias')}
@@ -359,6 +386,15 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
         <span className="font-medium truncate">Mis Viajes</span>
       </button>
 
+      {/* MIS REPORTES - AGREGADO */}
+      <button
+        onClick={() => handleSelect('mis-reportes')}
+        className={getButtonClasses('mis-reportes')}
+      >
+        <ClipboardList size={20} className={getIconClasses('mis-reportes')} />
+        <span className="font-medium truncate">Mis Reportes</span>
+      </button>
+
       <button
         onClick={() => handleSelect('licencias')}
         className={getButtonClasses('licencias')}
@@ -413,6 +449,36 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
         />
         <span className="font-medium truncate">Mis Trabajos</span>
       </button>
+
+      {/* MIS REPORTES - AGREGADO */}
+      <button
+        onClick={() => handleSelect('mis-reportes')}
+        className={getButtonClasses('mis-reportes')}
+      >
+        <ClipboardList size={20} className={getIconClasses('mis-reportes')} />
+        <span className="font-medium truncate">Mis Reportes</span>
+      </button>
+
+      {/* MIS LICENCIAS - DEL PANEL GENERAL */}
+      <button
+        onClick={() => handleSelect('licencias')}
+        className={getButtonClasses('licencias')}
+      >
+        <FileText size={20} className={getIconClasses('licencias')} />
+        <span className="font-medium truncate">Mis Licencias</span>
+      </button>
+
+      <p className="px-4 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 mt-6">
+        Cuenta
+      </p>
+
+      <button
+        onClick={() => handleSelect('perfil')}
+        className={getButtonClasses('perfil')}
+      >
+        <User size={20} className={getIconClasses('perfil')} />
+        <span className="font-medium truncate">Mi Perfil</span>
+      </button>
     </>
   );
 
@@ -426,7 +492,7 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
 
     return (
       <p className="px-4 text-xs text-gray-500">
-        Sin permisos de navegación.
+        Sin permisos de navegación. (Rol ID: {rolId})
       </p>
     );
   };

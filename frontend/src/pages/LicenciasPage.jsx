@@ -1,4 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  FileText, Plus, Filter, Search, Check, X, 
+  Trash2, Edit2, Download, AlertCircle 
+} from 'lucide-react';
 import {
   fetchLicencias,
   fetchEmpleados,
@@ -9,6 +13,12 @@ import {
   eliminarLicencia,
   descargarPdfLicencia,
 } from '../services/api';
+
+import Table from '../components/tables/Table';
+import Button from '../components/common/Button';
+import Input from '../components/common/Input';
+import Select from '../components/common/Select';
+import FormDialog from '../components/forms/FormDialog';
 
 // Helper para formatear fecha (evita el desfase de un día)
 const formatDate = (dateString) => {
@@ -27,7 +37,7 @@ const LicenciasPage = () => {
   const [currentUser, setCurrentUser] = useState(null);
 
   // Filtros
-  const [filtroEmpleado, setFiltroEmpleado] = useState('');
+  const [filtroEmpleado, setFiltroEmpleado] = useState(''); // Ahora almacenará el texto de búsqueda
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
 
@@ -83,11 +93,31 @@ const LicenciasPage = () => {
     }
   };
 
+  // --- HELPERS PARA DATOS ---
+  const getEmpleadoNombre = (empleadoId) => {
+    const empleado = empleados.find((e) => e.id === empleadoId);
+    if (!empleado) return 'Desconocido';
+    return `${empleado.user?.nombre || ''} ${empleado.user?.apellido || ''}`.trim();
+  };
+
+  const getEmpleadoRut = (empleadoId) => {
+    const empleado = empleados.find((e) => e.id === empleadoId);
+    if (!empleado || !empleado.user) return '-';
+    return `${empleado.user.rut}-${empleado.user.rut_verificador}`;
+  };
+
+  // --- LÓGICA DE FILTROS ACTUALIZADA ---
   const aplicarFiltros = () => {
     let resultado = [...licencias];
 
+    // MODIFICADO: Ahora filtra por coincidencia de texto (nombre o RUT)
     if (filtroEmpleado) {
-      resultado = resultado.filter((l) => l.empleado_id === parseInt(filtroEmpleado));
+      const termino = filtroEmpleado.toLowerCase();
+      resultado = resultado.filter((l) => {
+        const nombre = getEmpleadoNombre(l.empleado_id).toLowerCase();
+        const rut = getEmpleadoRut(l.empleado_id).toLowerCase();
+        return nombre.includes(termino) || rut.includes(termino);
+      });
     }
 
     if (filtroEstado) {
@@ -107,6 +137,7 @@ const LicenciasPage = () => {
     setFiltroTipo('');
   };
 
+  // --- MANEJADORES DE FORMULARIOS Y ACCIONES ---
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -230,7 +261,9 @@ const LicenciasPage = () => {
     setMotivoRechazo('');
   };
 
-  const handleRechazar = async () => {
+  const handleRechazar = async (e) => {
+    if(e) e.preventDefault();
+    
     if (!motivoRechazo || motivoRechazo.trim().length < 10) {
       setError('El motivo de rechazo debe tener al menos 10 caracteres');
       return;
@@ -269,30 +302,13 @@ const LicenciasPage = () => {
     }
   };
 
-  const getEmpleadoNombre = (empleadoId) => {
-    const empleado = empleados.find((e) => e.id === empleadoId);
-    if (!empleado) return 'Desconocido';
-    return `${empleado.user?.nombre || ''} ${empleado.user?.apellido || ''}`.trim();
-  };
-
-  const getEmpleadoRut = (empleadoId) => {
-    const empleado = empleados.find((e) => e.id === empleadoId);
-    if (!empleado || !empleado.user) return '-';
-    return `${empleado.user.rut}-${empleado.user.rut_verificador}`;
-  };
-
   const getEstadoBadgeClass = (estado) => {
     switch (estado) {
-      case 'solicitado':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'aprobado':
-        return 'bg-green-100 text-green-800';
-      case 'rechazado':
-        return 'bg-red-100 text-red-800';
-      case 'completado':
-        return 'bg-blue-100 text-blue-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+      case 'solicitado': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'aprobado': return 'bg-green-100 text-green-800 border-green-200';
+      case 'rechazado': return 'bg-red-100 text-red-800 border-red-200';
+      case 'completado': return 'bg-blue-100 text-blue-800 border-blue-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
@@ -315,436 +331,357 @@ const LicenciasPage = () => {
     return currentUser && [1, 6].includes(currentUser.rol_id);
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-xl text-gray-600">Cargando licencias...</div>
-      </div>
-    );
-  }
+  // Definición de columnas para la tabla reutilizable
+  const columns = useMemo(() => [
+    {
+      label: 'Empleado',
+      key: 'empleado',
+      render: (licencia) => (
+        <div>
+          <div className="font-semibold text-gray-900">{getEmpleadoNombre(licencia.empleado_id)}</div>
+          <div className="text-xs text-gray-500 font-mono">{getEmpleadoRut(licencia.empleado_id)}</div>
+        </div>
+      )
+    },
+    {
+      label: 'Tipo',
+      key: 'tipo',
+      render: (licencia) => (
+        <span className="capitalize text-sm text-gray-700">{getTipoLabel(licencia.tipo)}</span>
+      )
+    },
+    {
+      label: 'Inicio',
+      key: 'fecha_inicio',
+      render: (licencia) => formatDate(licencia.fecha_inicio)
+    },
+    {
+      label: 'Término',
+      key: 'fecha_termino',
+      render: (licencia) => formatDate(licencia.fecha_termino)
+    },
+    {
+      label: 'Días',
+      key: 'dias_totales',
+      render: (licencia) => <span className="font-mono">{licencia.dias_totales}</span>
+    },
+    {
+      label: 'Estado',
+      key: 'estado',
+      render: (licencia) => (
+        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase border ${getEstadoBadgeClass(licencia.estado || '')}`}>
+          {licencia.estado || 'Sin estado'}
+        </span>
+      )
+    },
+    {
+      label: 'PDF',
+      key: 'pdf',
+      render: (licencia) => licencia.ruta_archivo ? (
+        <button
+          onClick={() => handleDescargarPdf(licencia.id)}
+          className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50 transition-colors"
+          title="Descargar PDF"
+        >
+          <Download size={18} />
+        </button>
+      ) : <span className="text-gray-300">-</span>
+    },
+    {
+      label: 'Acciones',
+      key: 'acciones',
+      render: (licencia) => (
+        <div className="flex gap-1 justify-center">
+          {(!licencia.estado || licencia.estado === 'solicitado') && (
+            <>
+              <button
+                onClick={() => abrirModalEditar(licencia)}
+                className="p-1.5 text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
+                title="Editar"
+              >
+                <Edit2 size={16} />
+              </button>
+
+              {puedeAprobarRechazar() && (
+                <>
+                  <button
+                    onClick={() => handleAprobar(licencia.id)}
+                    className="p-1.5 text-green-600 bg-green-50 border border-green-200 rounded hover:bg-green-100 transition-colors"
+                    title="Aprobar"
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button
+                    onClick={() => abrirModalRechazar(licencia)}
+                    className="p-1.5 text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors"
+                    title="Rechazar"
+                  >
+                    <X size={16} />
+                  </button>
+                </>
+              )}
+            </>
+          )}
+
+          {puedeEliminar() && (
+            <button
+              onClick={() => handleEliminar(licencia.id)}
+              className="p-1.5 text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors"
+              title="Eliminar"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </div>
+      )
+    }
+  ], [empleados, currentUser]); 
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Gestión de Licencias</h1>
-        <p className="text-gray-600">Administra las solicitudes de licencias médicas, permisos y vacaciones</p>
+    <div className="p-8 bg-gray-50 min-h-screen">
+      
+      {/* Header con estilo de proyecto */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Gestión de Licencias</h1>
+            <p className="mt-2 text-slate-300 max-w-xl">Administra las solicitudes de licencias médicas, permisos y vacaciones.</p>
+          </div>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={abrirModalCrear}
+            className="flex items-center gap-2 shadow-lg"
+          >
+            <Plus size={20} />
+            Nueva Solicitud
+          </Button>
+        </div>
+        <FileText className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Mensajes */}
+      {/* Mensajes de feedback */}
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex items-center gap-2">
+          <AlertCircle size={20} />
+          <span>{error}</span>
         </div>
       )}
       {success && (
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-          {success}
+        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6 flex items-center gap-2">
+          <Check size={20} />
+          <span>{success}</span>
         </div>
       )}
 
-      {/* Filtros y Botón Crear */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Filtro Empleado */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Empleado</label>
-            <select
-              value={filtroEmpleado}
-              onChange={(e) => setFiltroEmpleado(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">Todos</option>
-              {empleados
-                .filter((emp) => emp.estado === 'activo')
-                .map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {getEmpleadoNombre(emp.id)} ({getEmpleadoRut(emp.id)})
-                  </option>
-                ))}
-            </select>
-          </div>
+      {/* Filtros en tarjeta blanca */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
+        <div className="flex flex-col space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            
+            {/* MODIFICADO: Input de búsqueda en lugar de Select */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Buscar Empleado</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  placeholder="Nombre o RUT..."
+                  value={filtroEmpleado}
+                  onChange={(e) => setFiltroEmpleado(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                {filtroEmpleado && (
+                   <button 
+                     onClick={() => setFiltroEmpleado('')}
+                     className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                   >
+                     <X size={14} />
+                   </button>
+                )}
+              </div>
+            </div>
 
-          {/* Filtro Estado */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-            <select
-              value={filtroEstado}
-              onChange={(e) => setFiltroEstado(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">Todos</option>
-              <option value="solicitado">Solicitado</option>
-              <option value="aprobado">Aprobado</option>
-              <option value="rechazado">Rechazado</option>
-              <option value="completado">Completado</option>
-            </select>
-          </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Estado</label>
+              <select
+                value={filtroEstado}
+                onChange={(e) => setFiltroEstado(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700 cursor-pointer"
+              >
+                <option value="">Todos</option>
+                <option value="solicitado">Solicitado</option>
+                <option value="aprobado">Aprobado</option>
+                <option value="rechazado">Rechazado</option>
+                <option value="completado">Completado</option>
+              </select>
+            </div>
 
-          {/* Filtro Tipo */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-            <select
-              value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">Todos</option>
-              <option value="licencia_medica">Licencia Médica</option>
-              <option value="permiso">Permiso</option>
-              <option value="vacaciones">Vacaciones</option>
-              <option value="licencia_maternidad">Licencia Maternidad</option>
-              <option value="licencia_paternidad">Licencia Paternidad</option>
-            </select>
-          </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tipo</label>
+              <select
+                value={filtroTipo}
+                onChange={(e) => setFiltroTipo(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700 cursor-pointer"
+              >
+                <option value="">Todos</option>
+                <option value="licencia_medica">Licencia Médica</option>
+                <option value="permiso">Permiso</option>
+                <option value="vacaciones">Vacaciones</option>
+                <option value="licencia_maternidad">Licencia Maternidad</option>
+                <option value="licencia_paternidad">Licencia Paternidad</option>
+              </select>
+            </div>
 
-          {/* Botones */}
-          <div className="flex items-end gap-2">
-            <button
-              onClick={limpiarFiltros}
-              className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition text-sm font-medium"
-            >
-              Limpiar
-            </button>
-            <button
-              onClick={abrirModalCrear}
-              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium"
-            >
-              + Nueva
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabla de Licencias */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Empleado
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Tipo
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Fecha Inicio
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Fecha Término
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Días
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  PDF
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {licenciasFiltradas.length === 0 ? (
-                <tr>
-                  <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
-                    No se encontraron licencias
-                  </td>
-                </tr>
-              ) : (
-                licenciasFiltradas.map((licencia) => (
-                  <tr key={licencia.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {getEmpleadoNombre(licencia.empleado_id)}
-                      </div>
-                      <div className="text-sm text-gray-500">{getEmpleadoRut(licencia.empleado_id)}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {getTipoLabel(licencia.tipo)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(licencia.fecha_inicio)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(licencia.fecha_termino)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {licencia.dias_totales}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {licencia.estado ? (
-                        <span
-                          className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getEstadoBadgeClass(
-                            licencia.estado
-                          )}`}
-                        >
-                          {licencia.estado.charAt(0).toUpperCase() + licencia.estado.slice(1)}
-                        </span>
-                      ) : (
-                        <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                          Sin estado
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {licencia.ruta_archivo ? (
-                        <button
-                          onClick={() => handleDescargarPdf(licencia.id)}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          Ver PDF
-                        </button>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex gap-2 flex-wrap">
-                        {/* Botones para licencias sin estado o en estado solicitado */}
-                        {(!licencia.estado || licencia.estado === 'solicitado') && (
-                          <>
-                            <button
-                              onClick={() => abrirModalEditar(licencia)}
-                              className="text-blue-600 hover:text-blue-900 font-medium"
-                            >
-                              Editar
-                            </button>
-
-                            {puedeAprobarRechazar() && (
-                              <>
-                                <button
-                                  onClick={() => handleAprobar(licencia.id)}
-                                  className="text-green-600 hover:text-green-900 font-medium"
-                                >
-                                  Aprobar
-                                </button>
-                                <button
-                                  onClick={() => abrirModalRechazar(licencia)}
-                                  className="text-red-600 hover:text-red-900 font-medium"
-                                >
-                                  Rechazar
-                                </button>
-                              </>
-                            )}
-                          </>
-                        )}
-
-                        {/* Botón Eliminar - Siempre visible para Admin/RRHH */}
-                        {puedeEliminar() && (
-                          <button
-                            onClick={() => handleEliminar(licencia.id)}
-                            className="text-red-600 hover:text-red-900 font-medium"
-                          >
-                            Eliminar
-                          </button>
-                        )}
-
-                        {/* Si no hay ningún botón, mostrar guión */}
-                        {licencia.estado && licencia.estado !== 'solicitado' && !puedeEliminar() && (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+            <div className="flex items-end">
+              {(filtroEmpleado || filtroEstado || filtroTipo) && (
+                <button
+                  onClick={limpiarFiltros}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 border border-gray-200 hover:border-red-200 rounded-lg transition-colors text-sm font-medium h-[38px]"
+                >
+                  <Filter size={16} />
+                  Limpiar
+                </button>
               )}
-            </tbody>
-          </table>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Modal Crear/Editar */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-4">
-              {isEditing ? 'Editar Licencia' : 'Nueva Licencia'}
-            </h2>
+      {/* Tabla reutilizable */}
+      <Table 
+        columns={columns} 
+        data={licenciasFiltradas} 
+        loading={loading}
+        emptyMessage="No se encontraron licencias con los filtros seleccionados"
+      />
 
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
-                {/* Empleado */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Empleado *
-                  </label>
-                  <select
-                    name="empleado_id"
-                    value={formData.empleado_id}
-                    onChange={handleInputChange}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3"
-                    required
-                  >
-                    <option value="">Seleccione un empleado...</option>
-                    {empleados
-                      .filter((emp) => emp.estado === 'activo')
-                      .map((emp) => (
-                        <option key={emp.id} value={emp.id}>
-                          {getEmpleadoNombre(emp.id)} ({getEmpleadoRut(emp.id)})
-                        </option>
-                      ))}
-                  </select>
-                </div>
+      {/* Modal Crear/Editar usando FormDialog */}
+      <FormDialog
+        isOpen={showModal}
+        title={isEditing ? 'Editar Licencia' : 'Nueva Licencia'}
+        onSubmit={handleSubmit}
+        onCancel={cerrarModal}
+        onClose={cerrarModal}
+      >
+        <div className="grid grid-cols-1 gap-4">
+          <Select
+            label="Empleado *"
+            value={formData.empleado_id}
+            onChange={handleInputChange}
+            name="empleado_id"
+            options={empleados
+              .filter((emp) => emp.estado === 'activo')
+              .map((emp) => ({
+                id: emp.id,
+                label: `${getEmpleadoNombre(emp.id)} (${getEmpleadoRut(emp.id)})`
+              }))}
+            required
+            disabled={isEditing}
+          />
 
-                {/* Tipo */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo *</label>
-                  <select
-                    name="tipo"
-                    value={formData.tipo}
-                    onChange={handleInputChange}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3"
-                    required
-                  >
-                    <option value="licencia_medica">Licencia Médica</option>
-                    <option value="permiso">Permiso</option>
-                    <option value="vacaciones">Vacaciones</option>
-                    <option value="licencia_maternidad">Licencia Maternidad</option>
-                    <option value="licencia_paternidad">Licencia Paternidad</option>
-                  </select>
-                </div>
+          <Select
+            label="Tipo *"
+            value={formData.tipo}
+            onChange={handleInputChange}
+            name="tipo"
+            options={[
+              { id: 'licencia_medica', label: 'Licencia Médica' },
+              { id: 'permiso', label: 'Permiso' },
+              { id: 'vacaciones', label: 'Vacaciones' },
+              { id: 'licencia_maternidad', label: 'Licencia Maternidad' },
+              { id: 'licencia_paternidad', label: 'Licencia Paternidad' },
+            ]}
+            required
+          />
 
-                {/* Archivo PDF */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Archivo PDF {!isEditing && '*'}
-                  </label>
-                  <input
-                    type="file"
-                    accept="application/pdf"
-                    onChange={handleFileChange}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3"
-                    required={!isEditing}
-                  />
-                  {isEditing && currentLicencia?.nombre_archivo && (
-                    <p className="text-xs text-green-600 mt-1">
-                      Archivo actual: {currentLicencia.nombre_archivo}
-                    </p>
-                  )}
-                </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input 
+              label="Fecha Inicio *" 
+              type="date" 
+              name="fecha_inicio"
+              value={formData.fecha_inicio} 
+              onChange={handleInputChange} 
+              required 
+            />
+            <Input 
+              label="Fecha Término *" 
+              type="date" 
+              name="fecha_termino"
+              value={formData.fecha_termino} 
+              onChange={handleInputChange} 
+              required 
+            />
+          </div>
 
-                {/* Fechas */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Fecha Inicio *
-                    </label>
-                    <input
-                      type="date"
-                      name="fecha_inicio"
-                      value={formData.fecha_inicio}
-                      onChange={handleInputChange}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Fecha Término *
-                    </label>
-                    <input
-                      type="date"
-                      name="fecha_termino"
-                      value={formData.fecha_termino}
-                      onChange={handleInputChange}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3"
-                      required
-                    />
-                  </div>
-                </div>
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-gray-700">Archivo PDF {!isEditing && '*'}</label>
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={handleFileChange}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              required={!isEditing}
+            />
+            {isEditing && currentLicencia?.nombre_archivo && (
+              <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                <Check size={12}/> Archivo actual: {currentLicencia.nombre_archivo}
+              </p>
+            )}
+          </div>
 
-                {/* Motivo */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Motivo</label>
-                  <textarea
-                    name="motivo"
-                    value={formData.motivo}
-                    onChange={handleInputChange}
-                    rows="3"
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3"
-                    placeholder="Motivo de la licencia..."
-                  />
-                </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Motivo</label>
+            <textarea
+              name="motivo"
+              value={formData.motivo}
+              onChange={handleInputChange}
+              rows="3"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              placeholder="Motivo de la licencia..."
+            />
+          </div>
 
-                {/* Observaciones */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Observaciones
-                  </label>
-                  <textarea
-                    name="observaciones"
-                    value={formData.observaciones}
-                    onChange={handleInputChange}
-                    rows="2"
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3"
-                    placeholder="Observaciones adicionales..."
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  type="button"
-                  onClick={cerrarModal}
-                  className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-                >
-                  {isEditing ? 'Actualizar' : 'Crear'} Licencia
-                </button>
-              </div>
-            </form>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
+            <textarea
+              name="observaciones"
+              value={formData.observaciones}
+              onChange={handleInputChange}
+              rows="2"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              placeholder="Observaciones adicionales..."
+            />
           </div>
         </div>
-      )}
+      </FormDialog>
 
-      {/* Modal Rechazar */}
-      {showRechazarModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Rechazar Licencia</h2>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Motivo del rechazo *
-              </label>
-              <textarea
-                value={motivoRechazo}
-                onChange={(e) => setMotivoRechazo(e.target.value)}
-                rows="4"
-                className="w-full border border-gray-300 rounded-lg px-4 py-3"
-                placeholder="Explique el motivo del rechazo (mínimo 10 caracteres)..."
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">Mínimo 10 caracteres</p>
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={cerrarModalRechazar}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleRechazar}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                Rechazar Licencia
-              </button>
-            </div>
-          </div>
+      {/* Modal Rechazar usando FormDialog */}
+      <FormDialog
+        isOpen={showRechazarModal}
+        title="Rechazar Licencia"
+        onSubmit={handleRechazar}
+        onCancel={cerrarModalRechazar}
+        onClose={cerrarModalRechazar}
+      >
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Motivo del rechazo *
+          </label>
+          <textarea
+            value={motivoRechazo}
+            onChange={(e) => setMotivoRechazo(e.target.value)}
+            rows="4"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            placeholder="Explique el motivo del rechazo (mínimo 10 caracteres)..."
+            required
+          />
+          <p className="text-xs text-gray-500 mt-1">Mínimo 10 caracteres</p>
         </div>
-      )}
+        
+        {/* Footer personalizado para rechazo */}
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100"></div>
+      </FormDialog>
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, X, Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
-  Edit2, Trash2, Clock, MapPin, Users, Bus, AlertCircle 
+  Edit2, Trash2, Clock, MapPin, Users, Bus, AlertCircle, UserCheck 
 } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
@@ -169,14 +169,11 @@ export default function TurnosPage() {
           yaSeleccionado: yaSeleccionadoEnOtroCampo
         };
       })
-      // FILTRAR: Solo mostrar los que NO tienen licencia, NO tienen turno y NO están ya seleccionados
-      // EXCEPCIÓN: Si están en el turno actual que estamos editando, sí mostrarlos
+      // FILTRAR
       .filter(conductor => {
-        // Si está asignado al turno que estamos editando, siempre mostrarlo
         if (editingTurno && conductoresAsignadosEnEsteTurno.includes(conductor.id)) {
           return true;
         }
-        // Si no, solo mostrar si está disponible
         return !conductor.tieneLicencia && !conductor.yaTieneTurno;
       });
   };
@@ -198,29 +195,23 @@ export default function TurnosPage() {
         // Verificar si tiene licencia
         const licencia = empleadoTieneLicenciaEnFecha(asistente.empleado_id, formData.fecha_turno);
         
-        // Verificar si ya tiene turno ese día (excepto el turno actual si estamos editando)
+        // Verificar si ya tiene turno ese día
         let yaTieneTurnoEseDia = false;
         if (formData.fecha_turno) {
           const fechaTurno = formData.fecha_turno;
           
           yaTieneTurnoEseDia = turnos.some(turno => {
-            // Si estamos editando, excluir el turno actual
             if (editingTurno && turno.id === editingTurno.id) {
               return false;
             }
-            
-            // Verificar si es la misma fecha
             const turnoFecha = turno.fecha_turno.split('T')[0];
             if (turnoFecha !== fechaTurno) {
               return false;
             }
-            
-            // Verificar si este asistente está asignado a ese turno
             return turno.asistentes?.some(a => a.id === asistente.id);
           });
         }
         
-        // Verificar si ya fue seleccionado en otro campo del formulario
         const yaSeleccionadoEnOtroCampo = asistentesSeleccionados.includes(asistente.id) && 
                                           !asistentesAsignadosEnEsteTurno.includes(asistente.id);
         
@@ -232,14 +223,10 @@ export default function TurnosPage() {
           yaSeleccionado: yaSeleccionadoEnOtroCampo
         };
       })
-      // FILTRAR: Solo mostrar los que NO tienen licencia, NO tienen turno y NO están ya seleccionados
-      // EXCEPCIÓN: Si están en el turno actual que estamos editando, sí mostrarlos
       .filter(asistente => {
-        // Si está asignado al turno que estamos editando, siempre mostrarlo
         if (editingTurno && asistentesAsignadosEnEsteTurno.includes(asistente.id)) {
           return true;
         }
-        // Si no, solo mostrar si está disponible
         return !asistente.tieneLicencia && !asistente.yaTieneTurno;
       });
   };
@@ -304,13 +291,13 @@ export default function TurnosPage() {
         return; 
       }
 
-      // Validar licencias del lado del cliente (el backend también valida)
+      // Validar licencias del lado del cliente
       for (const c of conductoresValidos) {
         const conductor = conductores.find(x => x.id === parseInt(c.conductor_id));
         if (conductor) {
           const licencia = empleadoTieneLicenciaEnFecha(conductor.empleado_id, formData.fecha_turno);
           if (licencia) {
-            setError(`El conductor ${conductor.empleado?.user?.nombre} ${conductor.empleado?.user?.apellido} tiene licencia médica hasta el ${licencia.fecha_termino}`);
+            setError(`El conductor ${conductor.empleado?.user?.nombre} ${conductor.empleado?.user?.apellido} tiene licencia médica`);
             return;
           }
         }
@@ -321,7 +308,7 @@ export default function TurnosPage() {
         if (asistente) {
           const licencia = empleadoTieneLicenciaEnFecha(asistente.empleado_id, formData.fecha_turno);
           if (licencia) {
-            setError(`El asistente ${asistente.empleado?.user?.nombre} ${asistente.empleado?.user?.apellido} tiene licencia médica hasta el ${licencia.fecha_termino}`);
+            setError(`El asistente ${asistente.empleado?.user?.nombre} ${asistente.empleado?.user?.apellido} tiene licencia médica`);
             return;
           }
         }
@@ -374,17 +361,13 @@ export default function TurnosPage() {
   const conductoresDisponibles = getConductoresDisponibles();
   const asistentesDisponibles = getAsistentesDisponibles();
 
-  // Gestión dinámica de conductores/asistentes en formulario
+  // Gestión dinámica de conductores/asistentes
   const handleConductorChange = (idx, field, val) => {
-    const newC = [...formConductores]; 
-    newC[idx][field] = val; 
-    setFormConductores(newC);
+    const newC = [...formConductores]; newC[idx][field] = val; setFormConductores(newC);
   };
   
   const handleAsistenteChange = (idx, field, val) => {
-    const newA = [...formAsistentes]; 
-    newA[idx][field] = val; 
-    setFormAsistentes(newA);
+    const newA = [...formAsistentes]; newA[idx][field] = val; setFormAsistentes(newA);
   };
 
   return (
@@ -408,16 +391,15 @@ export default function TurnosPage() {
         <CalendarIcon className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Feedback Messages */}
+      {/* Messages */}
       {success && <div className="mb-4 p-4 bg-green-100 text-green-700 rounded-lg flex justify-between">{success}<X onClick={()=>setSuccess(null)} className="cursor-pointer" size={18}/></div>}
       {error && <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg flex justify-between">{error}<X onClick={()=>setError(null)} className="cursor-pointer" size={18}/></div>}
 
-      {/* === LAYOUT DIVIDIDO: CALENDARIO (IZQ) | AGENDA (DER) === */}
+      {/* === LAYOUT DIVIDIDO === */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* 1. CALENDARIO (8 columnas) */}
+        {/* 1. CALENDARIO */}
         <div className="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[600px]">
-          {/* Calendar Header */}
           <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
             <h2 className="text-xl font-bold capitalize text-slate-700">{monthName}</h2>
             <div className="flex gap-2">
@@ -427,14 +409,12 @@ export default function TurnosPage() {
             </div>
           </div>
 
-          {/* Grid Days Header */}
           <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
             {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(d => (
               <div key={d} className="py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">{d}</div>
             ))}
           </div>
 
-          {/* Grid Cells */}
           <div className="grid grid-cols-7 flex-1 bg-gray-100 gap-px border-gray-200">
             {Array.from({ length: startingDayOfWeek }).map((_, i) => (
               <div key={`e-${i}`} className="bg-gray-50" />
@@ -461,7 +441,6 @@ export default function TurnosPage() {
                     {i + 1}
                   </span>
                   
-                  {/* Indicadores de eventos (Puntos) */}
                   <div className="flex flex-wrap justify-center gap-1 content-start w-full px-1">
                     {Array.from({ length: Math.min(count, 4) }).map((_, idx) => (
                       <div key={idx} className={`h-1.5 w-1.5 rounded-full ${idx === 3 ? 'bg-gray-300' : 'bg-blue-400'}`} />
@@ -473,7 +452,7 @@ export default function TurnosPage() {
           </div>
         </div>
 
-        {/* 2. AGENDA DEL DÍA (4 columnas) */}
+        {/* 2. AGENDA DEL DÍA (MODIFICADO) */}
         <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col h-[600px]">
           <div className="p-5 border-b border-gray-100 bg-gray-50/50">
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -497,6 +476,7 @@ export default function TurnosPage() {
             ) : (
               turnosSelected.map((turno) => (
                 <div key={turno.id} className={`group relative bg-white rounded-xl p-4 border shadow-sm hover:shadow-md transition-all ${getEstadoColor(turno.estado)}`}>
+                  
                   {/* Header Card */}
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex items-center gap-2">
@@ -514,36 +494,55 @@ export default function TurnosPage() {
                   </div>
 
                   {/* Body Card */}
-                  <div className="space-y-2 text-sm text-slate-600 mb-3">
-                    <div className="flex items-center gap-2">
-                      <Clock size={14} className="text-slate-400"/>
-                      <span className="font-medium">{turno.hora_inicio} - {turno.hora_termino}</span>
+                  <div className="space-y-3 text-sm text-slate-600 mb-3">
+                    
+                    {/* Hora */}
+                    <div className="flex items-center gap-2 bg-white/50 p-1.5 rounded">
+                      <Clock size={14} className="text-slate-500"/>
+                      <span className="font-medium text-xs">{turno.hora_inicio} - {turno.hora_termino}</span>
                     </div>
+
+                    {/* Conductores */}
                     <div className="flex items-start gap-2">
-                      <Users size={14} className="text-slate-400 mt-0.5"/>
+                      <div className="min-w-[16px]"><Users size={14} className="text-blue-500 mt-0.5"/></div>
                       <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Conductores</span>
                         {turno.conductores?.slice(0,2).map((c, idx) => (
-                          <span key={idx} className="text-xs">{c.empleado?.user?.nombre} {c.empleado?.user?.apellido}</span>
+                          <span key={idx} className="text-xs font-medium text-slate-700">
+                            {c.empleado?.user?.nombre} {c.empleado?.user?.apellido}
+                          </span>
                         ))}
-                        {(turno.conductores?.length > 2) && <span className="text-xs italic">+ {turno.conductores.length - 2} más</span>}
+                        {(turno.conductores?.length > 2) && <span className="text-[10px] italic text-slate-400">+ {turno.conductores.length - 2} más</span>}
                       </div>
                     </div>
+
+                    {/* Asistentes (NUEVA SECCIÓN) */}
+                    {turno.asistentes && turno.asistentes.length > 0 && (
+                      <div className="flex items-start gap-2 pt-2 border-t border-black/5">
+                        <div className="min-w-[16px]"><UserCheck size={14} className="text-emerald-500 mt-0.5"/></div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Asistentes</span>
+                          {turno.asistentes.slice(0, 2).map((a, idx) => (
+                            <span key={idx} className="text-xs font-medium text-slate-700">
+                              {a.empleado?.user?.nombre} {a.empleado?.user?.apellido}
+                            </span>
+                          ))}
+                          {turno.asistentes.length > 2 && (
+                            <span className="text-[10px] italic text-slate-400">
+                              + {turno.asistentes.length - 2} más
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Actions Overlay (Visible on Hover) */}
+                  {/* Actions */}
                   <div className="flex justify-end gap-2 border-t border-gray-100/50 pt-3 mt-2">
-                    <button 
-                      onClick={() => handleOpenDialog(turno)}
-                      className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors" 
-                      title="Editar"
-                    >
+                    <button onClick={() => handleOpenDialog(turno)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="Editar">
                       <Edit2 size={16} />
                     </button>
-                    <button 
-                      onClick={() => handleDelete(turno.id)}
-                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors" 
-                      title="Eliminar"
-                    >
+                    <button onClick={() => handleDelete(turno.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Eliminar">
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -565,13 +564,7 @@ export default function TurnosPage() {
         <div className="space-y-6">
           {/* Info Básica */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input 
-              label="Fecha *" 
-              type="date" 
-              value={formData.fecha_turno} 
-              onChange={(e) => setFormData({...formData, fecha_turno: e.target.value})} 
-              required 
-            />
+            <Input label="Fecha *" type="date" value={formData.fecha_turno} onChange={(e) => setFormData({...formData, fecha_turno: e.target.value})} required />
             <Select label="Tipo *" options={TIPOS_TURNO.map(t => ({id:t, label:t}))} value={formData.tipo_turno} onChange={(e) => setFormData({...formData, tipo_turno: e.target.value})} required />
             <Input label="Inicio *" type="time" value={formData.hora_inicio} onChange={(e) => setFormData({...formData, hora_inicio: e.target.value})} required />
             <Input label="Término *" type="time" value={formData.hora_termino} onChange={(e) => setFormData({...formData, hora_termino: e.target.value})} required />
@@ -580,11 +573,6 @@ export default function TurnosPage() {
           {/* Bus */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Bus *</label>
-
-
-          {/* Personal */}
-          <div className="border-t pt-4">
-            <h4 className="text-sm font-bold text-slate-700 mb-3">Tripulación</h4>
             <select
               value={formData.bus_id}
               onChange={(e) => setFormData({...formData, bus_id: e.target.value})}
@@ -592,23 +580,15 @@ export default function TurnosPage() {
               required
             >
               <option value="">Seleccione un bus...</option>
-              {buses
-                .filter(b => b.estado === 'operativo')
-                .map(bus => (
-                  <option key={bus.id} value={bus.id}>
-                    {bus.patente} - {bus.modelo} ({bus.tipo_bus})
-                  </option>
-                ))}
+              {buses.filter(b => b.estado === 'operativo').map(bus => (
+                <option key={bus.id} value={bus.id}>{bus.patente} - {bus.modelo} ({bus.tipo_bus})</option>
+              ))}
             </select>
-            {/*mensaje si no hay disponibles*/}
-            {buses.filter(b => b.estado === 'operativo').length === 0 && (
-              <p className="text-xs text-amber-700 mt-1 flex items-center gap-1">
-                <AlertCircle size={12} />
-                No hay buses operativos disponibles. Algunos pueden estar en mantenimiento.
-              </p>
-            )}
-
           </div>
+
+          {/* Personal */}
+          <div className="border-t pt-4">
+            <h4 className="text-sm font-bold text-slate-700 mb-3">Tripulación</h4>
               
             {/* Conductores */}
             <div className="space-y-2 mb-4">
@@ -616,7 +596,6 @@ export default function TurnosPage() {
               {formConductores.map((c, i) => {
                 const conductor = conductoresDisponibles.find(x => x.id === parseInt(c.conductor_id));
                 const tieneLicencia = conductor?.tieneLicencia;
-                
                 return (
                   <div key={i} className="space-y-2">
                     <div className="flex gap-2">
@@ -627,52 +606,26 @@ export default function TurnosPage() {
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                         >
                           <option value="">Seleccione...</option>
-                          {conductoresDisponibles.map(conductor => (
-                            <option 
-                              key={conductor.id} 
-                              value={conductor.id}
-                            >
-                              {conductor.empleado?.user?.nombre} {conductor.empleado?.user?.apellido}
-                            </option>
+                          {conductoresDisponibles.map(con => (
+                            <option key={con.id} value={con.id}>{con.empleado?.user?.nombre} {con.empleado?.user?.apellido}</option>
                           ))}
                         </select>
                       </div>
                       <div className="w-32">
                         <Select options={ROLES_CONDUCTOR.map(r=>({id:r, label:r}))} value={c.rol} onChange={(e)=>handleConductorChange(i,'rol',e.target.value)} />
                       </div>
-                      {formConductores.length > 1 && (
-                        <button 
-                          type="button" 
-                          onClick={() => {const n=[...formConductores]; n.splice(i,1); setFormConductores(n)}} 
-                          className="text-red-500 p-2"
-                        >
-                          <X size={16}/>
-                        </button>
-                      )}
+                      {formConductores.length > 1 && <button type="button" onClick={() => {const n=[...formConductores]; n.splice(i,1); setFormConductores(n)}} className="text-red-500 p-2"><X size={16}/></button>}
                     </div>
-                    
-                    {/* Advertencia de Licencia */}
                     {tieneLicencia && conductor.licenciaInfo && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
                         <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                        <div className="text-xs text-amber-800">
-                          <p className="font-semibold">Empleado con licencia médica</p>
-                          <p>Del {conductor.licenciaInfo.fecha_inicio} al {conductor.licenciaInfo.fecha_termino}</p>
-                          <p className="text-amber-700 mt-1">No puede ser asignado a turnos en estas fechas</p>
-                        </div>
+                        <div className="text-xs text-amber-800"><p className="font-semibold">Empleado con licencia médica</p></div>
                       </div>
                     )}
                   </div>
                 );
               })}
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setFormConductores([...formConductores, {conductor_id:'', rol:'apoyo'}])} 
-                className="w-full border-dashed text-slate-500 hover:text-blue-600 hover:border-blue-300 text-xs py-1"
-              >
-                + Añadir Conductor
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => setFormConductores([...formConductores, {conductor_id:'', rol:'apoyo'}])} className="w-full border-dashed text-slate-500 hover:text-blue-600 hover:border-blue-300 text-xs py-1">+ Añadir Conductor</Button>
             </div>
 
             {/* Asistentes */}
@@ -681,7 +634,6 @@ export default function TurnosPage() {
               {formAsistentes.map((a, i) => {
                 const asistente = asistentesDisponibles.find(x => x.id === parseInt(a.asistente_id));
                 const tieneLicencia = asistente?.tieneLicencia;
-                
                 return (
                   <div key={i} className="space-y-2">
                     <div className="flex gap-2">
@@ -692,54 +644,29 @@ export default function TurnosPage() {
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                         >
                           <option value="">Seleccione...</option>
-                          {asistentesDisponibles.map(asistente => (
-                            <option 
-                              key={asistente.id} 
-                              value={asistente.id}
-                            >
-                              {asistente.empleado?.user?.nombre} {asistente.empleado?.user?.apellido}
-                            </option>
+                          {asistentesDisponibles.map(asist => (
+                            <option key={asist.id} value={asist.id}>{asist.empleado?.user?.nombre} {asist.empleado?.user?.apellido}</option>
                           ))}
                         </select>
                       </div>
                       <div className="w-32">
                         <Select options={POSICIONES_ASISTENTE.map(p=>({id:p, label:p.replace('_',' ')}))} value={a.posicion} onChange={(e)=>handleAsistenteChange(i,'posicion',e.target.value)} />
                       </div>
-                      <button 
-                        type="button" 
-                        onClick={() => {const n=[...formAsistentes]; n.splice(i,1); setFormAsistentes(n)}} 
-                        className="text-red-500 p-2"
-                      >
-                        <X size={16}/>
-                      </button>
+                      <button type="button" onClick={() => {const n=[...formAsistentes]; n.splice(i,1); setFormAsistentes(n)}} className="text-red-500 p-2"><X size={16}/></button>
                     </div>
-                    
-                    {/* Advertencia de Licencia */}
                     {tieneLicencia && asistente.licenciaInfo && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
-                        <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                        <div className="text-xs text-amber-800">
-                          <p className="font-semibold">Empleado con licencia médica</p>
-                          <p>Del {asistente.licenciaInfo.fecha_inicio} al {asistente.licenciaInfo.fecha_termino}</p>
-                          <p className="text-amber-700 mt-1">No puede ser asignado a turnos en estas fechas</p>
-                        </div>
-                      </div>
+                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
+                       <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                       <div className="text-xs text-amber-800"><p className="font-semibold">Empleado con licencia médica</p></div>
+                     </div>
                     )}
                   </div>
                 );
               })}
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setFormAsistentes([...formAsistentes, {asistente_id:'', posicion:'general'}])} 
-                className="w-full border-dashed text-slate-500 hover:text-blue-600 hover:border-blue-300 text-xs py-1"
-              >
-                + Añadir Asistente
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => setFormAsistentes([...formAsistentes, {asistente_id:'', posicion:'general'}])} className="w-full border-dashed text-slate-500 hover:text-blue-600 hover:border-blue-300 text-xs py-1">+ Añadir Asistente</Button>
             </div>
           </div>
 
-          {/* Estado y Notas */}
           <div className="grid grid-cols-1 gap-4 border-t pt-4">
             <Select label="Estado" options={ESTADOS_TURNO.map(e => ({id:e, label:e}))} value={formData.estado} onChange={(e) => setFormData({...formData, estado: e.target.value})} />
             <div>

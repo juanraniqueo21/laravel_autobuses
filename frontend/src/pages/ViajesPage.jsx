@@ -3,8 +3,8 @@ import { Calendar, Activity } from 'lucide-react';
 import TurnoViajesPage from './TurnoViajesPage';
 import { fetchTurnos, fetchViajesPorTurno } from '../services/api';
 import { Clock, Bus, Users, ChevronRight } from 'lucide-react';
-import usePagination from '../hooks/usePagination'; // IMPORTAR HOOK
-import Pagination from '../components/common/Pagination'; // IMPORTAR COMPONENTE
+import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 export default function ViajesPage() {
   const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date().toISOString().split('T')[0]);
@@ -125,45 +125,54 @@ export default function ViajesPage() {
         </div>
       ) : (
         <div className="grid gap-6">
-          {paginatedData.map((turno) => (
-            <div key={turno.id} className="group bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-200 overflow-hidden">
-              <div className="flex flex-col lg:flex-row">
-                <div className="p-6 lg:w-1/3 border-b lg:border-b-0 lg:border-r border-gray-100 bg-gray-50/50">
-                  <div className="flex items-start justify-between mb-4">
-                    <h3 className="text-xl font-bold text-gray-900 capitalize">{turno.tipo_turno}</h3>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${getEstadoStyles(turno.estado)}`}>{turno.estado}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-gray-700 mb-2">
-                    <Clock size={18} className="text-blue-500" />
-                    <span className="font-mono text-lg font-semibold">{turno.hora_inicio.slice(0, 5)} → {turno.hora_termino.slice(0, 5)}</span>
-                  </div>
-                </div>
-                
-                <div className="p-6 lg:w-1/2 grid grid-cols-2 gap-6">
-                   <div>
-                      <p className="text-xs font-bold text-gray-400 uppercase mb-1 flex items-center gap-1"><Bus size={12}/> Bus</p>
-                      <p className="text-lg font-bold text-gray-900">{turno.bus?.patente || '---'}</p>
-                      <p className="text-xs text-gray-500">{turno.bus?.marca}</p>
-                   </div>
-                   <div>
-                      <p className="text-xs font-bold text-gray-400 uppercase mb-1 flex items-center gap-1"><Users size={12}/> Tripulación</p>
-                      <p className="text-lg font-bold text-gray-900">{turno.conductores?.length || 0}</p>
-                      <p className="text-xs text-gray-500">Personas</p>
-                   </div>
-                </div>
+          {paginatedData.map((turno) => {
+            // CÁLCULO DE TRIPULACIÓN TOTAL (Conductores + Asistentes)
+            const numConductores = turno.conductores?.length || 0;
+            const numAsistentes = turno.asistentes?.length || 0;
+            const totalTripulacion = numConductores + numAsistentes;
 
-                <div className="p-6 lg:w-1/6 flex items-center justify-end">
-                  <button onClick={() => setTurnoSeleccionado(turno)} className="w-full bg-white border border-gray-200 hover:bg-blue-50 hover:text-blue-600 text-gray-700 font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all">
-                    Gestionar <ChevronRight size={16} />
-                  </button>
+            return (
+              <div key={turno.id} className="group bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-200 overflow-hidden">
+                <div className="flex flex-col lg:flex-row">
+                  <div className="p-6 lg:w-1/3 border-b lg:border-b-0 lg:border-r border-gray-100 bg-gray-50/50">
+                    <div className="flex items-start justify-between mb-4">
+                      <h3 className="text-xl font-bold text-gray-900 capitalize">{turno.tipo_turno}</h3>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${getEstadoStyles(turno.estado)}`}>{turno.estado}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-gray-700 mb-2">
+                      <Clock size={18} className="text-blue-500" />
+                      <span className="font-mono text-lg font-semibold">{turno.hora_inicio.slice(0, 5)} → {turno.hora_termino.slice(0, 5)}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="p-6 lg:w-1/2 grid grid-cols-2 gap-6">
+                     <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase mb-1 flex items-center gap-1"><Bus size={12}/> Bus</p>
+                        <p className="text-lg font-bold text-gray-900">{turno.bus?.patente || '---'}</p>
+                        <p className="text-xs text-gray-500">{turno.bus?.marca}</p>
+                     </div>
+                     <div>
+                        {/* SECCIÓN TRIPULACIÓN MODIFICADA PARA MOSTRAR TODOS */}
+                        <p className="text-xs font-bold text-gray-400 uppercase mb-1 flex items-center gap-1"><Users size={12}/> Tripulación</p>
+                        <p className="text-lg font-bold text-gray-900">{totalTripulacion}</p>
+                        <p className="text-xs text-gray-500">
+                          {numConductores} Cond. {numAsistentes > 0 ? `/ ${numAsistentes} Asist.` : ''}
+                        </p>
+                     </div>
+                  </div>
+
+                  <div className="p-6 lg:w-1/6 flex items-center justify-end">
+                    <button onClick={() => setTurnoSeleccionado(turno)} className="w-full bg-white border border-gray-200 hover:bg-blue-50 hover:text-blue-600 text-gray-700 font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all">
+                      Gestionar <ChevronRight size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* PAGINACIÓN COMPONENTE */}
       <Pagination 
         currentPage={currentPage}
         totalPages={totalPages}

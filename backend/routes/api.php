@@ -15,15 +15,17 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AsignacionTurnoController;
 use App\Http\Controllers\ConductorPanelController;
 use App\Http\Controllers\AsistentePanelController;
+use App\Http\Controllers\MecanicoPanelController; // <-- agregado desde el api.php de tu amigo
 use App\Http\Controllers\PermisoLicenciaController;
 use App\Http\Controllers\LiquidacionController;
-use App\Http\Controllers\ReportController;
-
+use App\Http\Controllers\ReportController; // Controlador de Logística
+use App\Http\Controllers\ReporteController; // Controlador de Reportes (Nuevo)
 
 // ============================================
 // RUTAS PÚBLICAS (sin autenticación)
 // ============================================
-Route::post('/login', [AuthController::class, 'login']);
+// Se agrega ->name('login') para evitar error "Route [login] not defined"
+Route::post('/login', [AuthController::class, 'login'])->name('login');
 
 // ============================================
 // RUTAS PROTEGIDAS (requieren JWT token)
@@ -69,7 +71,7 @@ Route::middleware('jwt.auth')->group(function () {
     Route::put('/conductores/{id}', [ConductorController::class, 'update']);
     Route::delete('/conductores/{id}', [ConductorController::class, 'destroy']);
 
-    // catologos buses
+    // CATÁLOGOS BUSES
     Route::get('/buses/catalogos/todos', [BusController::class, 'getCatalogosCompletos']);
     Route::get('/buses/catalogos/marcas/{tipo}', [BusController::class, 'getMarcas']);
     Route::get('/buses/catalogos/modelos/{marcaId}', [BusController::class, 'getModelos']);
@@ -89,13 +91,11 @@ Route::middleware('jwt.auth')->group(function () {
     Route::put('/rutas/{id}', [RutaController::class, 'update']);
     Route::delete('/rutas/{id}', [RutaController::class, 'destroy']);
 
-    // rutas ges paradas
+    // RUTAS PARADAS
     Route::post('/rutas/{rutaId}/paradas', [RutaController::class, 'agregarParada']);
     Route::post('/rutas/{rutaId}/paradas/guardar', [RutaController::class, 'guardarParadas']);
     Route::put('/rutas/{rutaId}/paradas/{paradaId}', [RutaController::class, 'actualizarParada']);
     Route::delete('/rutas/{rutaId}/paradas/{paradaId}', [RutaController::class, 'eliminarParada']);
-
-    
 
     // ASISTENTES
     Route::get('/asistentes', [AsistenteController::class, 'index']);
@@ -115,17 +115,13 @@ Route::middleware('jwt.auth')->group(function () {
     Route::post('/viajes/{id}/cancelar', [ViajeController::class, 'cancelar']);
     Route::delete('/viajes/{id}', [ViajeController::class, 'destroy']);
 
-
-
     // TURNOS / ROTATIVAS
-    
     Route::get('/turnos/calendario/{anio}/{mes}', [AsignacionTurnoController::class, 'calendario']);
     Route::get('/turnos', [AsignacionTurnoController::class, 'index']);
     Route::get('/turnos/{id}', [AsignacionTurnoController::class, 'show']);
     Route::post('/turnos', [AsignacionTurnoController::class, 'store']);
     Route::put('/turnos/{id}', [AsignacionTurnoController::class, 'update']);
     Route::delete('/turnos/{id}', [AsignacionTurnoController::class, 'destroy']);
-
 
     // MECANICOS
     Route::get('/mecanicos', [MecanicoController::class, 'index']);
@@ -137,43 +133,20 @@ Route::middleware('jwt.auth')->group(function () {
     // MANTENIMIENTOS
     Route::apiResource('mantenimientos', MantenimientoController::class);
     
-    // ============================================
     // LICENCIAS MÉDICAS Y PERMISOS
-    // ============================================
     Route::prefix('licencias')->group(function () {
-        // Listar todas las licencias (Admin, Manager, RRHH)
         Route::get('/', [PermisoLicenciaController::class, 'index']);
-        
-        // Mis licencias (Conductor ve solo las suyas)
         Route::get('/mis-licencias', [PermisoLicenciaController::class, 'misLicencias']);
-        
-        // Ver una licencia específica
         Route::get('/{id}', [PermisoLicenciaController::class, 'show']);
-        
-        // Crear nueva licencia
         Route::post('/', [PermisoLicenciaController::class, 'store']);
-        
-        // Actualizar licencia (solo si está en estado "solicitado")
         Route::put('/{id}', [PermisoLicenciaController::class, 'update']);
-        
-        // Aprobar licencia (Admin, Manager, RRHH)
         Route::post('/{id}/aprobar', [PermisoLicenciaController::class, 'aprobar']);
-        
-        // Rechazar licencia (Admin, Manager, RRHH)
         Route::post('/{id}/rechazar', [PermisoLicenciaController::class, 'rechazar']);
-        
-        // Eliminar licencia
         Route::delete('/{id}', [PermisoLicenciaController::class, 'destroy']);
-        
-        // Descargar PDF de respaldo
         Route::get('/{id}/descargar-pdf', [PermisoLicenciaController::class, 'descargarPdf']);
     });
     
-  
-    
-     // ============================================
-    // PANEL CONDUCTOR - Rutas específicas para el rol conductor
-    // ============================================
+    // PANEL CONDUCTOR
     Route::prefix('conductor')->group(function () {
         Route::get('/dashboard', [ConductorPanelController::class, 'dashboard']);
         Route::get('/mis-turnos', [ConductorPanelController::class, 'misTurnos']);
@@ -182,9 +155,7 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/mis-viajes/{id}', [ConductorPanelController::class, 'verViaje']);
     });
 
-    // ============================================
-    // PANEL ASISTENTE - Rutas específicas para el rol asistente
-    // ============================================
+    // PANEL ASISTENTE
     Route::prefix('asistente')->group(function () {
         Route::get('/dashboard', [AsistentePanelController::class, 'dashboard']);
         Route::get('/mis-turnos', [AsistentePanelController::class, 'misTurnos']);
@@ -193,10 +164,13 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/mis-viajes/{id}', [AsistentePanelController::class, 'verViaje']);
     });
 
-    
-});
+    // PANEL MECÁNICO (del api.php de tu amigo)
+    Route::prefix('mecanico')->group(function () {
+        Route::get('/dashboard', [MecanicoPanelController::class, 'dashboard']);
+        Route::get('/mis-mantenciones', [MecanicoPanelController::class, 'misMantenciones']);
+    });
 
-// Liquidaciones
+    // LIQUIDACIONES
     Route::prefix('liquidaciones')->group(function () {
         Route::get('/', [LiquidacionController::class, 'index']);
         Route::get('/estadisticas', [LiquidacionController::class, 'estadisticas']);
@@ -207,15 +181,28 @@ Route::middleware('jwt.auth')->group(function () {
         Route::delete('/{id}', [LiquidacionController::class, 'destroy']);
         Route::get('/{id}/pdf', [LiquidacionController::class, 'exportarPDF']);
     });
-    // ============================================
-// REPORTS / LOGÍSTICA - Agregar ANTES del último cierre de Route::middleware
-// ============================================
-Route::prefix('reports')->group(function () {
-    Route::get('/logistica', [ReportController::class, 'logistica']);
-    Route::get('/viajes-por-dia', [ReportController::class, 'viajesPorDia']);
-    Route::get('/estado-buses', [ReportController::class, 'estadoBuses']);
-    Route::get('/rutas-activas', [ReportController::class, 'rutasActivas']);
-    Route::get('/ocupacion-buses', [ReportController::class, 'ocupacionBuses']);
-    Route::get('/exportar-pdf', [ReportController::class, 'exportarPDF']);
-});
 
+    // REPORTS / LOGÍSTICA
+    Route::prefix('reports')->group(function () {
+        Route::get('/logistica', [ReportController::class, 'logistica']);
+        Route::get('/viajes-por-dia', [ReportController::class, 'viajesPorDia']);
+        Route::get('/estado-buses', [ReportController::class, 'estadoBuses']);
+        Route::get('/rutas-activas', [ReportController::class, 'rutasActivas']);
+        Route::get('/ocupacion-buses', [ReportController::class, 'ocupacionBuses']);
+        Route::get('/exportar-pdf', [ReportController::class, 'exportarPDF']);
+    });
+
+    // REPORTES (NUEVO MÓDULO)
+    Route::prefix('reportes')->group(function () {
+        Route::get('/', [ReporteController::class, 'index']);
+        Route::get('/mis-reportes', [ReporteController::class, 'misReportes']);
+        Route::get('/{id}', [ReporteController::class, 'show']);
+        Route::post('/', [ReporteController::class, 'store']);
+        Route::put('/{id}', [ReporteController::class, 'update']);
+        Route::post('/{id}/aprobar', [ReporteController::class, 'aprobar']);
+        Route::post('/{id}/rechazar', [ReporteController::class, 'rechazar']);
+        Route::delete('/{id}', [ReporteController::class, 'destroy']);
+        Route::get('/{id}/descargar-documento', [ReporteController::class, 'descargarDocumento']);
+    });
+
+}); // <-- aquí cierra el grupo protegido por jwt.auth

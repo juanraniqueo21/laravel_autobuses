@@ -476,17 +476,31 @@ export default function TurnoViajesPage({ turno, onVolver }) {
             </div>
             <div>
               <p className="text-xs text-gray-600">Tripulación</p>
-              {turno.conductores && turno.conductores.length > 0 ? (
-                <div className="text-sm">
-                  {turno.conductores.map((c, i) => (
-                    <p key={i} className="font-medium text-gray-900">
-                      {c.empleado?.user?.nombre} {c.empleado?.user?.apellido?.charAt(0)}.
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">Sin conductores</p>
-              )}
+              
+              <div className="mt-1 space-y-1">
+                {/* Listado de Conductores */}
+                {turno.conductores?.map((c, i) => (
+                    <div key={`c-${i}`} className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                        <div className="w-1.5 h-1.5 rounded-full bg-orange-400" title="Conductor"></div>
+                        <span>{c.empleado?.user?.nombre} {c.empleado?.user?.apellido?.charAt(0)}.</span>
+                        <span className="text-[10px] text-gray-400 bg-gray-100 px-1 rounded">COND</span>
+                    </div>
+                ))}
+
+                {/* Listado de Asistentes */}
+                {turno.asistentes?.map((a, i) => (
+                    <div key={`a-${i}`} className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                        <div className="w-1.5 h-1.5 rounded-full bg-purple-400" title="Asistente"></div>
+                        <span>{a.empleado?.user?.nombre} {a.empleado?.user?.apellido?.charAt(0)}.</span>
+                        <span className="text-[10px] text-gray-400 bg-gray-100 px-1 rounded">ASIST</span>
+                    </div>
+                ))}
+
+                {(!turno.conductores?.length && !turno.asistentes?.length) && (
+                    <span className="text-sm text-gray-400 italic">Sin asignar</span>
+                )}
+              </div>
+
             </div>
           </div>
         </div>

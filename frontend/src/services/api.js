@@ -1100,3 +1100,225 @@ export const descargarReportePDF = async (mes, anio) => {
     throw error;
   }
 };
+
+// ============================================
+// PANEL MECANICO (Vista Personal)
+// ============================================
+
+/**
+ * Obtener dashboard del mecánico autenticado
+ */
+export const fetchMecanicoDashboard = async () => {
+  const response = await fetch(`${API_URL}/mecanico/dashboard`, fetchOptions('GET'));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  const data = await response.json();
+  // Retornamos data.data si success es true
+  return data.success ? data.data : data;
+};
+
+/**
+ * Obtener mantenciones asignadas al mecánico
+ */
+export const fetchMisMantenciones = async (filters = {}) => {
+  const queryParams = new URLSearchParams();
+  Object.keys(filters).forEach(key => {
+    if (filters[key]) queryParams.append(key, filters[key]);
+  });
+
+  const url = `${API_URL}/mecanico/mis-mantenciones${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions('GET'));
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  const data = await response.json();
+  return data.success ? data.data : data;
+};
+
+// ============================================
+// REPORTES (NUEVO MÓDULO)
+// ============================================
+
+/**
+ * Obtener todos los reportes (Admin/RRHH ven todos, otros ven los suyos)
+ */
+export const fetchReportes = async (filtros = {}) => {
+  const queryParams = new URLSearchParams();
+  Object.keys(filtros).forEach(key => {
+    if (filtros[key] !== undefined && filtros[key] !== null && filtros[key] !== '') {
+      queryParams.append(key, filtros[key]);
+    }
+  });
+
+  const url = `${API_URL}/reportes${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions('GET'));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
+/**
+ * Obtener mis reportes (usuario autenticado)
+ */
+export const fetchMisReportes = async () => {
+  const response = await fetch(`${API_URL}/reportes/mis-reportes`, fetchOptions('GET'));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
+/**
+ * Obtener un reporte específico
+ */
+export const fetchReporte = async (id) => {
+  const response = await fetch(`${API_URL}/reportes/${id}`, fetchOptions('GET'));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
+/**
+ * Crear nuevo reporte (con soporte para FormData)
+ */
+export const crearReporte = async (formData) => {
+  const token = getAuthToken();
+  const options = {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      // NO incluir Content-Type para FormData
+    },
+    body: formData,
+  };
+
+  const response = await fetch(`${API_URL}/reportes`, options);
+  const data = await response.json();
+  
+  if (!response.ok) {
+    if (data.errors) {
+      throw new Error(Object.values(data.errors).flat().join(', '));
+    }
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Actualizar reporte (con soporte para FormData)
+ */
+export const actualizarReporte = async (id, formData) => {
+  const token = getAuthToken();
+  
+  // Para PUT con FormData, necesitamos usar _method
+  formData.append('_method', 'PUT');
+  
+  const options = {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  };
+
+  const response = await fetch(`${API_URL}/reportes/${id}`, options);
+  const data = await response.json();
+  
+  if (!response.ok) {
+    if (data.errors) {
+      throw new Error(Object.values(data.errors).flat().join(', '));
+    }
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Aprobar reporte
+ */
+export const aprobarReporte = async (id, observaciones = '') => {
+  const response = await fetch(
+    `${API_URL}/reportes/${id}/aprobar`, 
+    fetchOptions('POST', { observaciones_revision: observaciones })
+  );
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Rechazar reporte
+ */
+export const rechazarReporte = async (id, observaciones) => {
+  const response = await fetch(
+    `${API_URL}/reportes/${id}/rechazar`, 
+    fetchOptions('POST', { observaciones_revision: observaciones })
+  );
+  const data = await response.json();
+  
+  if (!response.ok) {
+    if (data.errors) {
+      throw new Error(Object.values(data.errors).flat().join(', '));
+    }
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Eliminar reporte
+ */
+export const eliminarReporte = async (id) => {
+  const response = await fetch(`${API_URL}/reportes/${id}`, fetchOptions('DELETE'));
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || `HTTP error! status: ${response.status}`);
+  }
+  
+  return data;
+};
+
+/**
+ * Descargar documento adjunto de reporte
+ */
+export const descargarDocumentoReporte = async (id) => {
+  const token = getAuthToken();
+  const response = await fetch(`${API_URL}/reportes/${id}/descargar-documento`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  // Descargar el archivo
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `reporte_documento_${id}`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+};

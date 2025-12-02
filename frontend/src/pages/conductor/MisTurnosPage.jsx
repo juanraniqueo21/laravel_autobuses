@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Clock, Bus, MapPin, Filter, 
-  ChevronDown, Eye, X, Search, User 
+  ChevronDown, Eye, X, Search, User,
+  Grid, List, ChevronLeft, ChevronRight // Iconos nuevos
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -18,6 +19,10 @@ export default function MisTurnosPage() {
   const [turnoDetalle, setTurnoDetalle] = useState(null);
   const [viajesTurno, setViajesTurno] = useState([]);
   const [loadingViajes, setLoadingViajes] = useState(false);
+
+  // Estados para el Calendario
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'calendar'
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   const [filters, setFilters] = useState({
     fecha_inicio: '',
@@ -77,6 +82,78 @@ export default function MisTurnosPage() {
     'cancelado': 'bg-red-50 text-red-700 border-red-200',
   }[estado] || 'bg-gray-50 text-gray-700 border-gray-200');
 
+  // --- LÓGICA DE CALENDARIO ---
+  const getDaysInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const days = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay(); 
+    const firstDayAdjusted = firstDay === 0 ? 6 : firstDay - 1; // Lunes=0
+    return { days, firstDay: firstDayAdjusted };
+  };
+
+  const changeMonth = (increment) => {
+    setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + increment)));
+  };
+
+  const renderCalendar = () => {
+    const { days, firstDay } = getDaysInMonth(currentDate);
+    const daysArray = [...Array(days).keys()].map(i => i + 1);
+    const emptyDays = [...Array(firstDay).keys()];
+
+    const monthTurnos = turnos.filter(t => {
+      const tDate = new Date(t.fecha_turno);
+      return tDate.getMonth() === currentDate.getMonth() && tDate.getFullYear() === currentDate.getFullYear();
+    });
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in">
+        <div className="flex justify-between items-center p-4 border-b border-gray-200 bg-gray-50">
+          <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-gray-200 rounded-full text-gray-600"><ChevronLeft size={20}/></button>
+          <h3 className="text-lg font-bold text-gray-800 capitalize">
+            {currentDate.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })}
+          </h3>
+          <button onClick={() => changeMonth(1)} className="p-2 hover:bg-gray-200 rounded-full text-gray-600"><ChevronRight size={20}/></button>
+        </div>
+        
+        <div className="grid grid-cols-7 bg-gray-100 text-center text-xs font-bold text-gray-500 uppercase py-2 border-b border-gray-200">
+          <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
+        </div>
+
+        <div className="grid grid-cols-7 auto-rows-fr bg-gray-200 gap-px">
+          {emptyDays.map((_, i) => (
+            <div key={`empty-${i}`} className="bg-white min-h-[120px]"></div>
+          ))}
+          {daysArray.map(day => {
+            const dayTurnos = monthTurnos.filter(t => new Date(t.fecha_turno).getDate() === day);
+            const isCurrentDay = new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
+            
+            return (
+              <div key={day} className={`bg-white min-h-[120px] p-2 transition-colors hover:bg-gray-50 ${isCurrentDay ? 'bg-blue-50/30' : ''}`}>
+                <div className={`text-sm font-bold mb-2 ${isCurrentDay ? 'text-blue-600' : 'text-gray-700'}`}>
+                  {isCurrentDay ? <span className="bg-blue-600 text-white w-7 h-7 flex items-center justify-center rounded-full">{day}</span> : day}
+                </div>
+                <div className="space-y-1.5 overflow-y-auto max-h-[100px] custom-scrollbar">
+                  {dayTurnos.map((turno, idx) => (
+                    <div 
+                        key={idx} 
+                        onClick={() => handleVerDetalle(turno)}
+                        className={`text-[10px] px-2 py-1.5 rounded border cursor-pointer hover:opacity-80 transition-opacity truncate ${getEstadoColor(turno.estado)}`}
+                        title={`${turno.tipo_turno} - ${turno.bus?.patente}`}
+                    >
+                      <p className="font-bold">{formatTime(turno.hora_inicio)}</p>
+                      <p className="truncate">{turno.bus?.patente || 'S/P'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   if (loading && turnos.length === 0) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-gray-50">
@@ -96,52 +173,71 @@ export default function MisTurnosPage() {
         <Calendar className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
-        <button 
-          onClick={() => setShowFilters(!showFilters)} 
-          className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex items-center gap-2 text-slate-700 font-medium">
-            <Filter size={20} className="text-blue-600" />
-            Filtrar Turnos
-          </div>
-          <ChevronDown size={20} className={`text-slate-400 transform transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-        </button>
+      {/* BARRA DE CONTROLES: FILTROS Y VISTA */}
+      <div className="flex flex-col lg:flex-row gap-4 mb-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 flex-1 overflow-hidden">
+            <button 
+            onClick={() => setShowFilters(!showFilters)} 
+            className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+            >
+            <div className="flex items-center gap-2 text-slate-700 font-medium">
+                <Filter size={20} className="text-blue-600" />
+                Filtrar Turnos
+            </div>
+            <ChevronDown size={20} className={`text-slate-400 transform transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+            </button>
 
-        {showFilters && (
-          <div className="px-6 pb-6 pt-2 border-t border-gray-100 bg-gray-50/50">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Input label="Desde" type="date" value={filters.fecha_inicio} onChange={(e) => handleFilterChange('fecha_inicio', e.target.value)} />
-              <Input label="Hasta" type="date" value={filters.fecha_fin} onChange={(e) => handleFilterChange('fecha_fin', e.target.value)} />
-              <Select 
-                label="Estado" 
-                options={[
-                  { id: '', label: 'Todos' },
-                  { id: 'programado', label: 'Programado' },
-                  { id: 'en_curso', label: 'En Curso' },
-                  { id: 'completado', label: 'Completado' },
-                  { id: 'cancelado', label: 'Cancelado' },
-                ]}
-                value={filters.estado}
-                onChange={(e) => handleFilterChange('estado', e.target.value)}
-              />
-              <div className="flex items-end pb-2">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input type="checkbox" checked={filters.mostrar_todos} onChange={(e) => handleFilterChange('mostrar_todos', e.target.checked)} className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" />
-                  <span className="text-sm text-slate-600">Incluir historial pasado</span>
-                </label>
-              </div>
+            {showFilters && (
+            <div className="px-6 pb-6 pt-2 border-t border-gray-100 bg-gray-50/50">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Input label="Desde" type="date" value={filters.fecha_inicio} onChange={(e) => handleFilterChange('fecha_inicio', e.target.value)} />
+                <Input label="Hasta" type="date" value={filters.fecha_fin} onChange={(e) => handleFilterChange('fecha_fin', e.target.value)} />
+                <Select 
+                    label="Estado" 
+                    options={[
+                    { id: '', label: 'Todos' },
+                    { id: 'programado', label: 'Programado' },
+                    { id: 'en_curso', label: 'En Curso' },
+                    { id: 'completado', label: 'Completado' },
+                    { id: 'cancelado', label: 'Cancelado' },
+                    ]}
+                    value={filters.estado}
+                    onChange={(e) => handleFilterChange('estado', e.target.value)}
+                />
+                <div className="flex items-end pb-2">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" checked={filters.mostrar_todos} onChange={(e) => handleFilterChange('mostrar_todos', e.target.checked)} className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" />
+                    <span className="text-sm text-slate-600">Incluir historial pasado</span>
+                    </label>
+                </div>
+                </div>
+                <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200/50">
+                <Button variant="primary" size="sm" onClick={applyFilters} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md">
+                    <Search size={16} className="mr-2"/> Buscar
+                </Button>
+                <Button variant="outline" size="sm" onClick={clearFilters} className="border-slate-300 text-slate-600 hover:bg-white">
+                    Limpiar
+                </Button>
+                </div>
             </div>
-            <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200/50">
-              <Button variant="primary" size="sm" onClick={applyFilters} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md">
-                <Search size={16} className="mr-2"/> Buscar
-              </Button>
-              <Button variant="outline" size="sm" onClick={clearFilters} className="border-slate-300 text-slate-600 hover:bg-white">
-                Limpiar
-              </Button>
-            </div>
-          </div>
-        )}
+            )}
+        </div>
+
+        {/* SELECTOR DE VISTA */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-2 flex items-center gap-1 h-fit">
+            <button 
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${viewMode === 'list' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+                <List size={18} /> Lista
+            </button>
+            <button 
+                onClick={() => setViewMode('calendar')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${viewMode === 'calendar' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+                <Grid size={18} /> Calendario
+            </button>
+        </div>
       </div>
 
       {error && (
@@ -150,77 +246,82 @@ export default function MisTurnosPage() {
         </div>
       )}
 
-      {turnos.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center">
-          <Calendar size={64} className="mx-auto text-slate-200 mb-4" />
-          <h3 className="text-xl font-bold text-slate-700 mb-2">Sin asignaciones</h3>
-          <p className="text-slate-500">
-            {filters.mostrar_todos ? 'No hay resultados con los filtros actuales.' : 'No tienes turnos programados próximamente.'}
-          </p>
-        </div>
+      {/* CONTENIDO PRINCIPAL: LISTA O CALENDARIO */}
+      {viewMode === 'calendar' ? (
+         renderCalendar()
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {turnos.map((turno) => {
-            const today = isToday(turno.fecha_turno);
-            return (
-              <div 
-                key={turno.id} 
-                className={`group relative bg-white rounded-2xl p-5 border shadow-sm hover:shadow-lg transition-all duration-300 ${
-                  today ? 'ring-2 ring-blue-500 border-transparent' : 'border-gray-200'
-                }`}
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2.5 rounded-xl shadow-sm border ${today ? 'bg-blue-100 border-blue-200' : 'bg-gray-50 border-gray-100'}`}>
-                      <Bus size={24} className={today ? 'text-blue-600' : 'text-slate-600'} />
+        turnos.length === 0 ? (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center">
+            <Calendar size={64} className="mx-auto text-slate-200 mb-4" />
+            <h3 className="text-xl font-bold text-slate-700 mb-2">Sin asignaciones</h3>
+            <p className="text-slate-500">
+                {filters.mostrar_todos ? 'No hay resultados con los filtros actuales.' : 'No tienes turnos programados próximamente.'}
+            </p>
+            </div>
+        ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {turnos.map((turno) => {
+                const today = isToday(turno.fecha_turno);
+                return (
+                <div 
+                    key={turno.id} 
+                    className={`group relative bg-white rounded-2xl p-5 border shadow-sm hover:shadow-lg transition-all duration-300 ${
+                    today ? 'ring-2 ring-blue-500 border-transparent' : 'border-gray-200'
+                    }`}
+                >
+                    <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2.5 rounded-xl shadow-sm border ${today ? 'bg-blue-100 border-blue-200' : 'bg-gray-50 border-gray-100'}`}>
+                        <Bus size={24} className={today ? 'text-blue-600' : 'text-slate-600'} />
+                        </div>
+                        <div>
+                        <p className="font-bold text-slate-800 text-lg leading-tight">{turno.bus?.patente || 'S/P'}</p>
+                        <p className="text-xs text-slate-500 font-medium">{turno.bus?.modelo}</p>
+                        </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-slate-800 text-lg leading-tight">{turno.bus?.patente || 'S/P'}</p>
-                      <p className="text-xs text-slate-500 font-medium">{turno.bus?.modelo}</p>
+                    <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wide border ${getEstadoColor(turno.estado)}`}>
+                        {turno.estado.replace('_', ' ')}
+                    </span>
                     </div>
-                  </div>
-                  <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wide border ${getEstadoColor(turno.estado)}`}>
-                    {turno.estado.replace('_', ' ')}
-                  </span>
+
+                    <div className="space-y-3 mb-5">
+                    <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-2 rounded-lg">
+                        <Calendar size={18} className="text-slate-400" />
+                        <span className="font-semibold text-sm capitalize">{formatDate(turno.fecha_turno)}</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 text-slate-600 px-2">
+                        <Clock size={18} className="text-slate-400" />
+                        <span className="text-sm font-medium">{formatTime(turno.hora_inicio)} - {formatTime(turno.hora_termino)}</span>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-slate-600 px-2">
+                        <User size={18} className="text-slate-400" />
+                        <span className="text-sm">Rol: <span className="font-semibold text-blue-600 capitalize">{turno.mi_rol || 'Principal'}</span></span>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-slate-600 px-2">
+                        <MapPin size={18} className="text-slate-400" />
+                        <span className="text-sm">{turno.viajes?.length || 0} Viajes programados</span>
+                    </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
+                        {today && <span className="text-xs font-bold text-blue-600 animate-pulse">● Turno de Hoy</span>}
+                        {!today && <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">{turno.tipo_turno}</span>}
+                        
+                        <button 
+                        onClick={() => handleVerDetalle(turno)}
+                        className="flex items-center gap-1.5 text-sm font-bold text-slate-700 hover:text-blue-600 transition-colors bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-blue-200"
+                        >
+                        Ver Detalle <Eye size={16} />
+                        </button>
+                    </div>
                 </div>
-
-                <div className="space-y-3 mb-5">
-                  <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-2 rounded-lg">
-                    <Calendar size={18} className="text-slate-400" />
-                    <span className="font-semibold text-sm capitalize">{formatDate(turno.fecha_turno)}</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-3 text-slate-600 px-2">
-                    <Clock size={18} className="text-slate-400" />
-                    <span className="text-sm font-medium">{formatTime(turno.hora_inicio)} - {formatTime(turno.hora_termino)}</span>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-slate-600 px-2">
-                    <User size={18} className="text-slate-400" />
-                    <span className="text-sm">Rol: <span className="font-semibold text-blue-600 capitalize">{turno.mi_rol || 'Principal'}</span></span>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-slate-600 px-2">
-                    <MapPin size={18} className="text-slate-400" />
-                    <span className="text-sm">{turno.viajes?.length || 0} Viajes programados</span>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
-                   {today && <span className="text-xs font-bold text-blue-600 animate-pulse">● Turno de Hoy</span>}
-                   {!today && <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">{turno.tipo_turno}</span>}
-                   
-                   <button 
-                    onClick={() => handleVerDetalle(turno)}
-                    className="flex items-center gap-1.5 text-sm font-bold text-slate-700 hover:text-blue-600 transition-colors bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-blue-200"
-                   >
-                     Ver Detalle <Eye size={16} />
-                   </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                );
+            })}
+            </div>
+        )
       )}
 
       {turnoDetalle && (

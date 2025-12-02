@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Clock, Bus, MapPin, Filter, 
-  ChevronDown, Eye, X, Search, User 
+  ChevronDown, Eye, X, Search, User,
+  Grid, List, ChevronLeft, ChevronRight // Nuevos iconos
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -18,6 +19,10 @@ export default function MisTurnosAsistentePage() {
   const [turnoDetalle, setTurnoDetalle] = useState(null);
   const [viajesTurno, setViajesTurno] = useState([]);
   const [loadingViajes, setLoadingViajes] = useState(false);
+
+  // Estados Calendario
+  const [viewMode, setViewMode] = useState('list'); 
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   const [filters, setFilters] = useState({
     fecha_inicio: '',
@@ -84,6 +89,77 @@ export default function MisTurnosAsistentePage() {
     return labels[posicion] || posicion;
   };
 
+  // --- LÓGICA CALENDARIO ---
+  const getDaysInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const days = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay(); 
+    const firstDayAdjusted = firstDay === 0 ? 6 : firstDay - 1; 
+    return { days, firstDay: firstDayAdjusted };
+  };
+
+  const changeMonth = (increment) => {
+    setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + increment)));
+  };
+
+  const renderCalendar = () => {
+    const { days, firstDay } = getDaysInMonth(currentDate);
+    const daysArray = [...Array(days).keys()].map(i => i + 1);
+    const emptyDays = [...Array(firstDay).keys()];
+
+    const monthTurnos = turnos.filter(t => {
+      const tDate = new Date(t.fecha_turno);
+      return tDate.getMonth() === currentDate.getMonth() && tDate.getFullYear() === currentDate.getFullYear();
+    });
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in">
+        <div className="flex justify-between items-center p-4 border-b border-gray-200 bg-gray-50">
+          <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-gray-200 rounded-full text-gray-600"><ChevronLeft size={20}/></button>
+          <h3 className="text-lg font-bold text-gray-800 capitalize">
+            {currentDate.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })}
+          </h3>
+          <button onClick={() => changeMonth(1)} className="p-2 hover:bg-gray-200 rounded-full text-gray-600"><ChevronRight size={20}/></button>
+        </div>
+        
+        <div className="grid grid-cols-7 bg-gray-100 text-center text-xs font-bold text-gray-500 uppercase py-2 border-b border-gray-200">
+          <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
+        </div>
+
+        <div className="grid grid-cols-7 auto-rows-fr bg-gray-200 gap-px">
+          {emptyDays.map((_, i) => (
+            <div key={`empty-${i}`} className="bg-white min-h-[120px]"></div>
+          ))}
+          {daysArray.map(day => {
+            const dayTurnos = monthTurnos.filter(t => new Date(t.fecha_turno).getDate() === day);
+            const isCurrentDay = new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
+            
+            return (
+              <div key={day} className={`bg-white min-h-[120px] p-2 transition-colors hover:bg-green-50 ${isCurrentDay ? 'bg-green-50/30' : ''}`}>
+                <div className={`text-sm font-bold mb-2 ${isCurrentDay ? 'text-green-600' : 'text-gray-700'}`}>
+                  {isCurrentDay ? <span className="bg-green-600 text-white w-7 h-7 flex items-center justify-center rounded-full">{day}</span> : day}
+                </div>
+                <div className="space-y-1.5 overflow-y-auto max-h-[100px] custom-scrollbar">
+                  {dayTurnos.map((turno, idx) => (
+                    <div 
+                        key={idx} 
+                        onClick={() => handleVerDetalle(turno)}
+                        className={`text-[10px] px-2 py-1.5 rounded border cursor-pointer hover:opacity-80 transition-opacity truncate ${getEstadoColor(turno.estado)}`}
+                    >
+                      <p className="font-bold">{formatTime(turno.hora_inicio)}</p>
+                      <p className="truncate">{turno.bus?.patente || 'S/P'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   if (loading && turnos.length === 0) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-gray-50">
@@ -95,7 +171,6 @@ export default function MisTurnosAsistentePage() {
   return (
     <div className="p-6 bg-gray-50 min-h-screen font-sans text-slate-800">
       
-      {/* HEADER */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10">
           <h1 className="text-3xl font-bold tracking-tight">Mis Turnos (Asistente)</h1>
@@ -104,106 +179,122 @@ export default function MisTurnosAsistentePage() {
         <Calendar className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* FILTROS */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
-        <button onClick={() => setShowFilters(!showFilters)} className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors">
-          <div className="flex items-center gap-2 text-slate-700 font-medium">
-            <Filter size={20} className="text-blue-600" /> Filtrar Turnos
-          </div>
-          <ChevronDown size={20} className={`text-slate-400 transform transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-        </button>
+      <div className="flex flex-col lg:flex-row gap-4 mb-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 flex-1 overflow-hidden">
+            <button onClick={() => setShowFilters(!showFilters)} className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-2 text-slate-700 font-medium">
+                <Filter size={20} className="text-blue-600" /> Filtrar Turnos
+                </div>
+                <ChevronDown size={20} className={`text-slate-400 transform transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+            </button>
 
-        {showFilters && (
-          <div className="px-6 pb-6 pt-2 border-t border-gray-100 bg-gray-50/50">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Input label="Desde" type="date" value={filters.fecha_inicio} onChange={(e) => handleFilterChange('fecha_inicio', e.target.value)} />
-              <Input label="Hasta" type="date" value={filters.fecha_fin} onChange={(e) => handleFilterChange('fecha_fin', e.target.value)} />
-              <Select 
-                label="Estado" 
-                options={[{ id: '', label: 'Todos' }, { id: 'programado', label: 'Programado' }, { id: 'en_curso', label: 'En Curso' }, { id: 'completado', label: 'Completado' }, { id: 'cancelado', label: 'Cancelado' }]}
-                value={filters.estado}
-                onChange={(e) => handleFilterChange('estado', e.target.value)}
-              />
-              <div className="flex items-end pb-2">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input type="checkbox" checked={filters.mostrar_todos} onChange={(e) => handleFilterChange('mostrar_todos', e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
-                  <span className="text-sm text-slate-600">Incluir historial pasado</span>
-                </label>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200/50">
-              <Button variant="primary" size="sm" onClick={applyFilters} className="bg-blue-600 text-white"><Search size={16} className="mr-2"/> Buscar</Button>
-              <Button variant="outline" size="sm" onClick={clearFilters} className="border-slate-300 text-slate-600">Limpiar</Button>
-            </div>
-          </div>
-        )}
+            {showFilters && (
+                <div className="px-6 pb-6 pt-2 border-t border-gray-100 bg-gray-50/50">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Input label="Desde" type="date" value={filters.fecha_inicio} onChange={(e) => handleFilterChange('fecha_inicio', e.target.value)} />
+                    <Input label="Hasta" type="date" value={filters.fecha_fin} onChange={(e) => handleFilterChange('fecha_fin', e.target.value)} />
+                    <Select 
+                    label="Estado" 
+                    options={[{ id: '', label: 'Todos' }, { id: 'programado', label: 'Programado' }, { id: 'en_curso', label: 'En Curso' }, { id: 'completado', label: 'Completado' }, { id: 'cancelado', label: 'Cancelado' }]}
+                    value={filters.estado}
+                    onChange={(e) => handleFilterChange('estado', e.target.value)}
+                    />
+                    <div className="flex items-end pb-2">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" checked={filters.mostrar_todos} onChange={(e) => handleFilterChange('mostrar_todos', e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                        <span className="text-sm text-slate-600">Incluir historial pasado</span>
+                    </label>
+                    </div>
+                </div>
+                <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200/50">
+                    <Button variant="primary" size="sm" onClick={applyFilters} className="bg-blue-600 text-white"><Search size={16} className="mr-2"/> Buscar</Button>
+                    <Button variant="outline" size="sm" onClick={clearFilters} className="border-slate-300 text-slate-600">Limpiar</Button>
+                </div>
+                </div>
+            )}
+        </div>
+
+        {/* SELECTOR DE VISTA */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-2 flex items-center gap-1 h-fit">
+            <button 
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${viewMode === 'list' ? 'bg-green-50 text-green-700' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+                <List size={18} /> Lista
+            </button>
+            <button 
+                onClick={() => setViewMode('calendar')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${viewMode === 'calendar' ? 'bg-green-50 text-green-700' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+                <Grid size={18} /> Calendario
+            </button>
+        </div>
       </div>
 
-      {/* ERROR */}
       {error && <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex items-center gap-3"><X size={20} /> {error}</div>}
 
-      {/* LISTA DE TURNOS */}
-      {turnos.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center">
-          <Calendar size={64} className="mx-auto text-slate-200 mb-4" />
-          <h3 className="text-xl font-bold text-slate-700 mb-2">Sin asignaciones</h3>
-          <p className="text-slate-500">{filters.mostrar_todos ? 'No hay resultados.' : 'No tienes turnos programados.'}</p>
-        </div>
+      {/* VISTA LISTA / CALENDARIO */}
+      {viewMode === 'calendar' ? (
+         renderCalendar()
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {turnos.map((turno) => {
-            const today = isToday(turno.fecha_turno);
-            return (
-              <div key={turno.id} className={`group relative bg-white rounded-2xl p-5 border shadow-sm hover:shadow-lg transition-all duration-300 ${today ? 'ring-2 ring-green-500 border-transparent' : 'border-gray-200'}`}>
-                {/* Header */}
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2.5 rounded-xl shadow-sm border ${today ? 'bg-green-100 border-green-200' : 'bg-gray-50 border-gray-100'}`}>
-                      <Bus size={24} className={today ? 'text-green-600' : 'text-slate-600'} />
+        turnos.length === 0 ? (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-16 text-center">
+            <Calendar size={64} className="mx-auto text-slate-200 mb-4" />
+            <h3 className="text-xl font-bold text-slate-700 mb-2">Sin asignaciones</h3>
+            <p className="text-slate-500">{filters.mostrar_todos ? 'No hay resultados.' : 'No tienes turnos programados.'}</p>
+            </div>
+        ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {turnos.map((turno) => {
+                const today = isToday(turno.fecha_turno);
+                return (
+                <div key={turno.id} className={`group relative bg-white rounded-2xl p-5 border shadow-sm hover:shadow-lg transition-all duration-300 ${today ? 'ring-2 ring-green-500 border-transparent' : 'border-gray-200'}`}>
+                    <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2.5 rounded-xl shadow-sm border ${today ? 'bg-green-100 border-green-200' : 'bg-gray-50 border-gray-100'}`}>
+                        <Bus size={24} className={today ? 'text-green-600' : 'text-slate-600'} />
+                        </div>
+                        <div>
+                        <p className="font-bold text-slate-800 text-lg leading-tight">{turno.bus?.patente || 'S/P'}</p>
+                        <p className="text-xs text-slate-500 font-medium">{turno.bus?.modelo}</p>
+                        </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-slate-800 text-lg leading-tight">{turno.bus?.patente || 'S/P'}</p>
-                      <p className="text-xs text-slate-500 font-medium">{turno.bus?.modelo}</p>
+                    <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wide border ${getEstadoColor(turno.estado)}`}>{turno.estado.replace('_', ' ')}</span>
                     </div>
-                  </div>
-                  <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wide border ${getEstadoColor(turno.estado)}`}>{turno.estado.replace('_', ' ')}</span>
-                </div>
 
-                {/* Body */}
-                <div className="space-y-3 mb-5">
-                  <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-2 rounded-lg">
-                    <Calendar size={18} className="text-slate-400" />
-                    <span className="font-semibold text-sm capitalize">{formatDate(turno.fecha_turno)}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-slate-600 px-2">
-                    <Clock size={18} className="text-slate-400" />
-                    <span className="text-sm font-medium">{formatTime(turno.hora_inicio)} - {formatTime(turno.hora_termino)}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-slate-600 px-2">
-                    <User size={18} className="text-slate-400" />
-                    <span className="text-sm">Posición: <span className="font-semibold text-green-600 capitalize">{getPosicionLabel(turno.mi_posicion)}</span></span>
-                  </div>
-                  <div className="flex items-center gap-3 text-slate-600 px-2">
-                    <MapPin size={18} className="text-slate-400" />
-                    <span className="text-sm">{turno.viajes?.length || 0} Viajes</span>
-                  </div>
-                </div>
+                    <div className="space-y-3 mb-5">
+                    <div className="flex items-center gap-3 text-slate-600 bg-slate-50 p-2 rounded-lg">
+                        <Calendar size={18} className="text-slate-400" />
+                        <span className="font-semibold text-sm capitalize">{formatDate(turno.fecha_turno)}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-slate-600 px-2">
+                        <Clock size={18} className="text-slate-400" />
+                        <span className="text-sm font-medium">{formatTime(turno.hora_inicio)} - {formatTime(turno.hora_termino)}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-slate-600 px-2">
+                        <User size={18} className="text-slate-400" />
+                        <span className="text-sm">Posición: <span className="font-semibold text-green-600 capitalize">{getPosicionLabel(turno.mi_posicion)}</span></span>
+                    </div>
+                    <div className="flex items-center gap-3 text-slate-600 px-2">
+                        <MapPin size={18} className="text-slate-400" />
+                        <span className="text-sm">{turno.viajes?.length || 0} Viajes</span>
+                    </div>
+                    </div>
 
-                {/* Footer */}
-                <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
-                   {today && <span className="text-xs font-bold text-green-600 animate-pulse">● Turno de Hoy</span>}
-                   {!today && <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">{turno.tipo_turno}</span>}
-                   <button onClick={() => handleVerDetalle(turno)} className="flex items-center gap-1.5 text-sm font-bold text-slate-700 hover:text-green-600 transition-colors bg-white hover:bg-green-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-green-200">
-                     Ver Detalle <Eye size={16} />
-                   </button>
+                    <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
+                        {today && <span className="text-xs font-bold text-green-600 animate-pulse">● Turno de Hoy</span>}
+                        {!today && <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">{turno.tipo_turno}</span>}
+                        <button onClick={() => handleVerDetalle(turno)} className="flex items-center gap-1.5 text-sm font-bold text-slate-700 hover:text-green-600 transition-colors bg-white hover:bg-green-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-green-200">
+                        Ver Detalle <Eye size={16} />
+                        </button>
+                    </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+                );
+            })}
+            </div>
+        )
       )}
 
-      {/* MODAL DETALLE */}
       {turnoDetalle && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -236,6 +327,12 @@ export default function MisTurnosAsistentePage() {
                       <span className="text-xs bg-gray-100 px-2 py-1 rounded text-slate-500 capitalize">Conductor ({c.pivot?.rol})</span>
                     </div>
                   ))}
+                  {turnoDetalle.asistentes?.map((a, i) => (
+                    <div key={`a-${i}`} className="px-4 py-3 flex justify-between items-center text-sm">
+                       <span className="text-slate-700 font-medium">{a.empleado?.user?.nombre} {a.empleado?.user?.apellido}</span>
+                       <span className="text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded capitalize">Asistente</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -251,7 +348,7 @@ export default function MisTurnosAsistentePage() {
                       <div key={viaje.id} className="p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex justify-between items-center">
                         <div>
                           <p className="font-bold text-slate-700 text-sm">{viaje.ruta?.nombre_ruta || viaje.nombre_viaje}</p>
-                          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1"><Clock size={12}/> {formatTime(viaje.fecha_hora_salida)}</p>
+                          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1"><Clock size={12}/> Salida: {formatTime(viaje.fecha_hora_salida)}</p>
                         </div>
                         <span className={`px-2 py-1 text-[10px] font-bold uppercase rounded border ${getEstadoColor(viaje.estado)}`}>{viaje.estado}</span>
                       </div>
