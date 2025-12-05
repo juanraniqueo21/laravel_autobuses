@@ -611,13 +611,78 @@ export default function EmployeesPage() {
           {/* 5. Previsión */}
           <div>
             <h4 className="text-sm font-bold text-gray-700 mb-3 uppercase border-b pb-1">5. Previsión y Salud</h4>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <Select label="AFP" options={[{id:'', label:'Seleccione...'}, ...afps.map(a => ({id:a.id, label:a.nombre}))]} value={formData.afp_id} onChange={e => setFormData({...formData, afp_id: e.target.value})} />
-              <Select label="Tramo FONASA" options={TRAMOS_FONASA} value={formData.tipo_fonasa} onChange={e => setFormData({...formData, tipo_fonasa: e.target.value})} />
+            
+            {/* AFP (siempre visible) */}
+            <div className="mb-4">
+              <Select 
+                label="AFP *" 
+                options={[
+                  { id: '', label: 'Sin AFP' }, 
+                  ...afps.map(a => ({ id: a.id, label: a.nombre }))
+                ]} 
+                value={formData.afp_id} 
+                onChange={(e) => setFormData({ ...formData, afp_id: e.target.value })} 
+              />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Select label="Isapre" options={[{id:'', label:'Seleccione...'}, ...isapres.map(i => ({id:i.id, label:i.nombre}))]} value={formData.isapre_id} onChange={e => setFormData({...formData, isapre_id: e.target.value})} />
-              <Input label="Seguro Cesantía" value={formData.numero_seguro_cesantia} onChange={e => setFormData({...formData, numero_seguro_cesantia: e.target.value})} />
+
+            {/* Sistema de Salud: Radio Buttons */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Sistema de Salud *</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="sistema_salud"
+                    value="fonasa"
+                    checked={!formData.isapre_id}
+                    onChange={() => setFormData({ ...formData, isapre_id: '', tipo_fonasa: 'B' })}
+                    className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700 font-medium">FONASA (Público)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="sistema_salud"
+                    value="isapre"
+                    checked={!!formData.isapre_id}
+                    onChange={() => setFormData({ ...formData, isapre_id: (isapres[0]?.id || ''), tipo_fonasa: '' })}
+                    className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700 font-medium">ISAPRE (Privado)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Mostrar Tramos FONASA o Listado ISAPRE según elección */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              {!formData.isapre_id ? (
+                // ✅ Si eligió FONASA → Mostrar tramos
+                <Select 
+                  label="Tramo FONASA *" 
+                  options={TRAMOS_FONASA} 
+                  value={formData.tipo_fonasa} 
+                  onChange={(e) => setFormData({ ...formData, tipo_fonasa: e.target.value })} 
+                />
+              ) : (
+                // ✅ Si eligió ISAPRE → Mostrar listado
+                <Select 
+                  label="Isapre *" 
+                  options={[
+                    { id: '', label: 'Seleccione...' }, 
+                    ...isapres.map(i => ({ id: i.id, label: i.nombre }))
+                  ]} 
+                  value={formData.isapre_id} 
+                  onChange={(e) => setFormData({ ...formData, isapre_id: e.target.value })} 
+                />
+              )}
+
+              {/* Seguro de Cesantía (siempre visible) */}
+              <Input 
+                label="N° Seguro Cesantía" 
+                value={formData.numero_seguro_cesantia} 
+                onChange={e => setFormData({ ...formData, numero_seguro_cesantia: e.target.value })} 
+              />
             </div>
           </div>
 

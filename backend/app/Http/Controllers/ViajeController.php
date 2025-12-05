@@ -52,7 +52,19 @@ class ViajeController extends Controller
             return response()->json(['error' => 'Viaje no encontrado'], 404);
         }
 
-        return response()->json($viaje);
+        // Agregar datos calculados para análisis
+        $viajeData = $viaje->toArray();
+        $viajeData['analisis'] = [
+            'tipo_servicio' => $viaje->tipo_servicio,
+            'nombre_tipo_servicio' => $viaje->nombre_tipo_servicio,
+            'tasa_ocupacion' => $viaje->calcularTasaOcupacion(),
+            'margen_ganancia' => $viaje->calcularMargenGanancia(),
+            'diferencia_recaudacion' => $viaje->calcularDiferencia(),
+            'km_recorridos' => $viaje->calcularKilometrosRecorridos(),
+            'eficiencia_combustible' => $viaje->calcularEficienciaCombustible(),
+        ];
+
+        return response()->json($viajeData);
     }
 
     public function store(Request $request)
@@ -110,6 +122,11 @@ class ViajeController extends Controller
             $fechaHoraLlegada = str_replace('T', ' ', $fechaHoraLlegada);
         }
 
+        // Calcular tarifa aplicada según tipo de servicio del bus
+        $bus = $turno->bus;
+        $tarifaBase = $ruta->tarifa_base ?? 0;
+        $tarifaAplicada = $bus ? $bus->calcularTarifa($tarifaBase) : $tarifaBase;
+
         try {
             DB::beginTransaction();
 
@@ -121,6 +138,7 @@ class ViajeController extends Controller
                 'fecha_hora_salida' => DB::raw("'{$fechaHoraSalida}'::timestamp"),
                 'fecha_hora_llegada' => $fechaHoraLlegada ? DB::raw("'{$fechaHoraLlegada}'::timestamp") : null,
                 'estado' => $request->estado ?? 'programado',
+                'tarifa_aplicada' => $tarifaAplicada, // Tarifa con factor del tipo de servicio
                 'observaciones' => $request->observaciones,
                 'incidentes' => $request->incidentes,
                 'created_at' => now(),
@@ -174,7 +192,7 @@ class ViajeController extends Controller
         try {
             DB::beginTransaction();
 
-            // Fechas (respetando zona horaria como en la versión de tu amigo)
+            // Fechas (respetando zona horaria)
             if ($request->has('fecha_hora_salida')) {
                 $fechaHoraSalida = $request->fecha_hora_salida;
                 if (strlen($fechaHoraSalida) === 16) {
@@ -208,7 +226,7 @@ class ViajeController extends Controller
                 'incidentes'
             ]));
 
-            // Actualizar tarifas y horarios de paradas (lógica tuya original)
+            // Actualizar tarifas y horarios de paradas
             if ($request->has('paradas') && is_array($request->paradas)) {
                 foreach ($request->paradas as $paradaData) {
                     if (isset($paradaData['id'])) {

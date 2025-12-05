@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Liquidacion;
 use App\Models\Empleado;
+use App\Models\Viaje;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -11,6 +12,13 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class LiquidacionController extends Controller
 {
+    // ==========================================
+    // PARÁMETROS ECONÓMICOS CHILE (PROYECCIÓN DIC 2025)
+    // ==========================================
+    const SUELDO_MINIMO       = 529000;
+    const TOPE_GRATIFICACION  = 209396; // 4.75 * IMM / 12
+    const VALOR_UTM           = 69260;  // Proyección para cálculo de Impuesto a la Renta
+    
     public function __construct()
     {
         $this->middleware('auth:api');
@@ -22,41 +30,25 @@ class LiquidacionController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        $rolId = $user->rol_id;
-
-        // Validar permisos (Admin=1, Gerente=2, RRHH=6)
-        if (!in_array($rolId, [1, 2, 6])) {
-            return response()->json(['error' => 'No tiene permisos para ver liquidaciones'], 403);
+        // Permisos: Admin(1), Gerente(2), RRHH(6)
+        if (!in_array($user->rol_id, [1, 2, 6])) {
+            return response()->json(['error' => 'No autorizado'], 403);
         }
 
         $query = Liquidacion::with(['empleado.user']);
 
-        // Filtros opcionales
         if ($request->has('empleado_id')) {
             $query->where('empleado_id', $request->empleado_id);
         }
-
         if ($request->has('estado')) {
             $query->where('estado', $request->estado);
         }
-
-        if ($request->has('periodo_desde') && $request->has('periodo_hasta')) {
-            $query->porPeriodo($request->periodo_desde, $request->periodo_hasta);
+        if ($request->has('mes') && $request->has('anio')) {
+            $query->whereMonth('periodo_desde', $request->mes)
+                  ->whereYear('periodo_desde', $request->anio);
         }
 
-        if ($request->has('anio')) {
-            $query->whereYear('periodo_desde', $request->anio);
-        }
-
-        if ($request->has('mes')) {
-            $query->whereMonth('periodo_desde', $request->mes);
-        }
-
-        $liquidaciones = $query->orderBy('periodo_desde', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        return response()->json($liquidaciones);
+        return response()->json($query->orderBy('created_at', 'desc')->get());
     }
 
     /**
@@ -64,13 +56,6 @@ class LiquidacionController extends Controller
      */
     public function show($id)
     {
-        $user = Auth::user();
-        $rolId = $user->rol_id;
-
-        if (!in_array($rolId, [1, 2, 6])) {
-            return response()->json(['error' => 'No tiene permisos'], 403);
-        }
-
         $liquidacion = Liquidacion::with(['empleado.user', 'empleado.afp', 'empleado.isapre'])
             ->findOrFail($id);
 
@@ -78,211 +63,163 @@ class LiquidacionController extends Controller
     }
 
     /**
-     * Crear nueva liquidación (solo Admin y RRHH)
+     * Endpoint para SIMULAR la liquidación (sin guardar en BD)
+     * Usado por el frontend para mostrar la "Previsualización"
+     */
+    public function calcularLiquidacion(Request $request)
+    {
+        $user = Auth::user();
+        if (!in_array($user->rol_id, [1, 6])) {
+            return response()->json(['error' => 'No tiene permisos'], 403);
+        }
+
+        $validated = $request->validate([
+            'empleado_id'   => 'required|exists:empleados,id',
+            'periodo_desde' => 'required|date',
+            'periodo_hasta' => 'required|date|after_or_equal:periodo_desde',
+        ]);
+
+        $empleado = Empleado::with(['afp', 'isapre', 'user', 'conductor'])
+            ->findOrFail($validated['empleado_id']);
+
+        // Llamamos al motor interno de cálculo
+        $calculo = $this->calcularLiquidacionInterno(
+            $empleado,
+            $validated['periodo_desde'],
+            $validated['periodo_hasta']
+        );
+
+        return response()->json($calculo);
+    }
+
+    /**
+     * Guarda una nueva liquidación calculando los montos en el BACKEND (Seguridad)
      */
     public function store(Request $request)
     {
         $user = Auth::user();
-        $rolId = $user->rol_id;
-
-        if (!in_array($rolId, [1, 6])) {
-            return response()->json(['error' => 'No tiene permisos para crear liquidaciones'], 403);
+        if (!in_array($user->rol_id, [1, 6])) {
+            return response()->json(['error' => 'No autorizado'], 403);
         }
 
+        // Validar solo datos base, los montos los calculamos nosotros
         $validated = $request->validate([
-            'empleado_id' => 'required|exists:empleados,id',
+            'empleado_id'   => 'required|exists:empleados,id',
             'periodo_desde' => 'required|date',
             'periodo_hasta' => 'required|date|after_or_equal:periodo_desde',
-            'sueldo_base' => 'required|integer|min:0',
-            'descuento_afp' => 'nullable|integer|min:0',
-            'descuento_isapre' => 'nullable|integer|min:0',
-            'descuento_impuesto_renta' => 'nullable|integer|min:0',
-            'descuento_seguro_desempleo' => 'nullable|integer|min:0',
-            'otros_descuentos' => 'nullable|integer|min:0',
-            'bonificaciones' => 'nullable|integer|min:0',
-            'horas_extras_valor' => 'nullable|integer|min:0',
-            'estado' => 'nullable|in:borrador,procesada,pagada,cancelada',
-            'fecha_pago' => 'nullable|date',
+            'estado'        => 'nullable|string',
             'observaciones' => 'nullable|string',
         ]);
 
+        $empleado = Empleado::with(['afp', 'isapre', 'user', 'conductor'])
+            ->findOrFail($validated['empleado_id']);
+
+        // RECALCULAR TODO EN EL BACKEND PARA EVITAR FRAUDE
+        $calculo    = $this->calcularLiquidacionInterno(
+            $empleado,
+            $validated['periodo_desde'],
+            $validated['periodo_hasta']
+        );
+        
+        $haberes    = $calculo['haberes'];
+        $descuentos = $calculo['descuentos'];
+        $totales    = $calculo['totales'];
+
         DB::beginTransaction();
+
         try {
-            // Calcular sueldo líquido
-            $totalHaberes = $validated['sueldo_base'] 
-                + ($validated['bonificaciones'] ?? 0) 
-                + ($validated['horas_extras_valor'] ?? 0);
+            $comprobante = Liquidacion::generarNumeroComprobante();
 
-            $totalDescuentos = ($validated['descuento_afp'] ?? 0)
-                + ($validated['descuento_isapre'] ?? 0)
-                + ($validated['descuento_impuesto_renta'] ?? 0)
-                + ($validated['descuento_seguro_desempleo'] ?? 0)
-                + ($validated['otros_descuentos'] ?? 0);
+            $liquidacion = Liquidacion::create([
+                'empleado_id'          => $validated['empleado_id'],
+                'periodo_desde'        => $validated['periodo_desde'],
+                'periodo_hasta'        => $validated['periodo_hasta'],
+                'numero_comprobante'   => $comprobante,
+                'estado'               => $validated['estado'] ?? 'procesada',
 
-            $validated['sueldo_liquido'] = $totalHaberes - $totalDescuentos;
+                // Haberes
+                'sueldo_base'          => $haberes['sueldo_base'],
+                // Sumamos gratificación + bono producción en "bonificaciones"
+                'bonificaciones'       => ($haberes['gratificacion'] ?? 0) + ($haberes['bono_produccion'] ?? 0),
+                'horas_extras_valor'   => 0, 
 
-            // Generar número de comprobante si está procesada o pagada
-            if (in_array($validated['estado'] ?? 'borrador', ['procesada', 'pagada'])) {
-                $validated['numero_comprobante'] = Liquidacion::generarNumeroComprobante();
-            }
+                // Descuentos (Guardamos los valores reales calculados)
+                'descuento_afp'              => $descuentos['afp']['monto'] ?? 0,
+                'descuento_isapre'           => $descuentos['salud']['monto'] ?? 0,
+                'descuento_seguro_desempleo' => $descuentos['cesantia']['monto'] ?? 0,
+                'descuento_impuesto_renta'   => $descuentos['impuesto']['monto'] ?? 0, // <--- AQUÍ SE GUARDA EL IMPUESTO ÚNICO
 
-            $liquidacion = Liquidacion::create($validated);
+                // Totales
+                'sueldo_liquido'       => $totales['sueldo_liquido'] ?? 0,
+                'observaciones'        => $validated['observaciones'] ?? null,
+            ]);
 
             DB::commit();
 
             return response()->json([
-                'message' => 'Liquidación creada exitosamente',
-                'liquidacion' => $liquidacion->load(['empleado.user'])
+                'message' => 'Liquidación generada exitosamente',
+                'data'    => $liquidacion,
+                'calculo' => $calculo, // Retornamos el detalle para mostrar en frontend
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['error' => 'Error al crear liquidación: ' . $e->getMessage()], 500);
+            return response()->json(['error' => 'Error al guardar liquidación: ' . $e->getMessage()], 500);
         }
     }
 
     /**
-     * Actualizar liquidación (solo Admin y RRHH)
+     * Actualizar liquidación (permite edición manual posterior)
      */
     public function update(Request $request, $id)
     {
         $user = Auth::user();
-        $rolId = $user->rol_id;
-
-        if (!in_array($rolId, [1, 6])) {
-            return response()->json(['error' => 'No tiene permisos para editar liquidaciones'], 403);
+        if (!in_array($user->rol_id, [1, 6])) {
+            return response()->json(['error' => 'No autorizado'], 403);
         }
 
         $liquidacion = Liquidacion::findOrFail($id);
 
-        // No permitir editar si ya está pagada
         if ($liquidacion->estado === 'pagada') {
             return response()->json(['error' => 'No se puede editar una liquidación pagada'], 400);
         }
 
-        $validated = $request->validate([
-            'periodo_desde' => 'sometimes|date',
-            'periodo_hasta' => 'sometimes|date|after_or_equal:periodo_desde',
-            'sueldo_base' => 'sometimes|integer|min:0',
-            'descuento_afp' => 'nullable|integer|min:0',
-            'descuento_isapre' => 'nullable|integer|min:0',
-            'descuento_impuesto_renta' => 'nullable|integer|min:0',
-            'descuento_seguro_desempleo' => 'nullable|integer|min:0',
-            'otros_descuentos' => 'nullable|integer|min:0',
-            'bonificaciones' => 'nullable|integer|min:0',
-            'horas_extras_valor' => 'nullable|integer|min:0',
-            'estado' => 'nullable|in:borrador,procesada,pagada,cancelada',
-            'fecha_pago' => 'nullable|date',
-            'observaciones' => 'nullable|string',
+        $liquidacion->update($request->only([
+            'periodo_desde', 'periodo_hasta', 'sueldo_base',
+            'bonificaciones', 'descuento_afp', 'descuento_isapre',
+            'descuento_seguro_desempleo', 'descuento_impuesto_renta',
+            'sueldo_liquido', 'estado', 'observaciones'
+        ]));
+
+        return response()->json([
+            'message' => 'Actualizada correctamente',
+            'data'    => $liquidacion
         ]);
+    }
 
-        DB::beginTransaction();
-        try {
-            // Recalcular sueldo líquido si cambian montos
-            if (isset($validated['sueldo_base']) || 
-                isset($validated['bonificaciones']) || 
-                isset($validated['horas_extras_valor']) ||
-                isset($validated['descuento_afp']) ||
-                isset($validated['descuento_isapre']) ||
-                isset($validated['descuento_impuesto_renta']) ||
-                isset($validated['descuento_seguro_desempleo']) ||
-                isset($validated['otros_descuentos'])) {
-                
-                $totalHaberes = ($validated['sueldo_base'] ?? $liquidacion->sueldo_base)
-                    + ($validated['bonificaciones'] ?? $liquidacion->bonificaciones)
-                    + ($validated['horas_extras_valor'] ?? $liquidacion->horas_extras_valor);
-
-                $totalDescuentos = ($validated['descuento_afp'] ?? $liquidacion->descuento_afp)
-                    + ($validated['descuento_isapre'] ?? $liquidacion->descuento_isapre)
-                    + ($validated['descuento_impuesto_renta'] ?? $liquidacion->descuento_impuesto_renta)
-                    + ($validated['descuento_seguro_desempleo'] ?? $liquidacion->descuento_seguro_desempleo)
-                    + ($validated['otros_descuentos'] ?? $liquidacion->otros_descuentos);
-
-                $validated['sueldo_liquido'] = $totalHaberes - $totalDescuentos;
-            }
-
-            // Generar comprobante si cambia a procesada/pagada
-            if (isset($validated['estado']) && 
-                in_array($validated['estado'], ['procesada', 'pagada']) && 
-                !$liquidacion->numero_comprobante) {
-                $validated['numero_comprobante'] = Liquidacion::generarNumeroComprobante();
-            }
-
-            $liquidacion->update($validated);
-
-            DB::commit();
-
-            return response()->json([
-                'message' => 'Liquidación actualizada exitosamente',
-                'liquidacion' => $liquidacion->load(['empleado.user'])
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['error' => 'Error al actualizar liquidación: ' . $e->getMessage()], 500);
+    /**
+     * Eliminar liquidación
+     */
+    public function destroy($id)
+    {
+        $user = Auth::user();
+        if (!in_array($user->rol_id, [1, 6])) {
+            return response()->json(['error' => 'No autorizado'], 403);
         }
+          
+        Liquidacion::destroy($id);
+
+        return response()->json(['message' => 'Eliminado correctamente']);
     }
 
     /**
- * Eliminar liquidación
- * Este método REEMPLAZA al que tienes en LiquidacionController.php
- * 
- * Ubicación: backend/app/Http/Controllers/LiquidacionController.php
- * 
- * Permite eliminar liquidaciones en cualquier estado con permisos de Admin/RRHH
- */
-public function destroy($id)
-{
-    $user = Auth::user();
-    $rolId = $user->rol_id;
-
-    // Solo Admin (1) y RRHH (6) pueden eliminar
-    if (!in_array($rolId, [1, 6])) {
-        return response()->json(['error' => 'No tiene permisos para eliminar liquidaciones'], 403);
-    }
-
-    $liquidacion = Liquidacion::with('empleado.user')->find($id);
-
-    if (!$liquidacion) {
-        return response()->json(['error' => 'Liquidación no encontrada'], 404);
-    }
-
-    try {
-        // Guardar información para el log antes de eliminar
-        $info = [
-            'numero_comprobante' => $liquidacion->numero_comprobante,
-            'empleado' => $liquidacion->empleado->user->nombre . ' ' . $liquidacion->empleado->user->apellido,
-            'estado' => $liquidacion->estado,
-            'monto' => $liquidacion->sueldo_liquido,
-            'eliminado_por' => $user->nombre . ' ' . $user->apellido,
-            'fecha_eliminacion' => now()->format('Y-m-d H:i:s')
-        ];
-
-        $liquidacion->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Liquidación eliminada exitosamente',
-            'info' => $info
-        ]);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'error' => 'Error al eliminar liquidación: ' . $e->getMessage()
-        ], 500);
-    }
-}
-
-    /**
-     * Exportar liquidación a PDF (Admin, Gerente, RRHH)
+     * Exportar liquidación a PDF
      */
     public function exportarPDF($id)
     {
         $user = Auth::user();
-        $rolId = $user->rol_id;
-
-        if (!in_array($rolId, [1, 2, 6])) {
-            return response()->json(['error' => 'No tiene permisos'], 403);
+        if (!in_array($user->rol_id, [1, 2, 6])) {
+            return response()->json(['error' => 'No autorizado'], 403);
         }
 
         $liquidacion = Liquidacion::with(['empleado.user', 'empleado.afp', 'empleado.isapre'])
@@ -298,28 +235,26 @@ public function destroy($id)
     }
 
     /**
-     * Obtener estadísticas de liquidaciones (Dashboard)
+     * Estadísticas de liquidaciones (Dashboard)
      */
     public function estadisticas(Request $request)
     {
         $user = Auth::user();
-        $rolId = $user->rol_id;
-
-        if (!in_array($rolId, [1, 2, 6])) {
-            return response()->json(['error' => 'No tiene permisos'], 403);
+        if (!in_array($user->rol_id, [1, 2, 6])) {
+            return response()->json(['error' => 'No autorizado'], 403);
         }
 
-        $mesActual = now()->month;
+        $mesActual  = now()->month;
         $anioActual = now()->year;
 
         $stats = [
-            'total_liquidaciones' => Liquidacion::count(),
-            'liquidaciones_mes' => Liquidacion::whereMonth('periodo_desde', $mesActual)
+            'total_liquidaciones'      => Liquidacion::count(),
+            'liquidaciones_mes'        => Liquidacion::whereMonth('periodo_desde', $mesActual)
                 ->whereYear('periodo_desde', $anioActual)
                 ->count(),
-            'liquidaciones_pagadas' => Liquidacion::where('estado', 'pagada')->count(),
+            'liquidaciones_pagadas'    => Liquidacion::where('estado', 'pagada')->count(),
             'liquidaciones_pendientes' => Liquidacion::whereIn('estado', ['borrador', 'procesada'])->count(),
-            'monto_total_pagado_mes' => Liquidacion::where('estado', 'pagada')
+            'monto_total_pagado_mes'   => Liquidacion::where('estado', 'pagada')
                 ->whereMonth('fecha_pago', $mesActual)
                 ->whereYear('fecha_pago', $anioActual)
                 ->sum('sueldo_liquido'),
@@ -328,114 +263,178 @@ public function destroy($id)
         return response()->json($stats);
     }
 
-   /**
- * Calcular liquidación automáticamente basada en empleado
- * Este método REEMPLAZA al que tienes en LiquidacionController.php
- * 
- */
-public function calcularLiquidacion(Request $request)
-{
-    $user = Auth::user();
-    $rolId = $user->rol_id;
+    // ==========================================================
+    // 🧠 MOTOR REAL DE CÁLCULO (LÓGICA INGENIERIL, LEGAL Y TRIBUTARIA)
+    // Este método centraliza la inteligencia del negocio.
+    // ==========================================================
+    private function calcularLiquidacionInterno(Empleado $empleado, string $desde, string $hasta): array
+    {
+        $sueldoBase = $empleado->salario_base;
 
-    // Solo Admin (1) y RRHH (6) pueden calcular
-    if (!in_array($rolId, [1, 6])) {
-        return response()->json(['error' => 'No tiene permisos'], 403);
-    }
+        $warnings = [];
+        if ($sueldoBase < self::SUELDO_MINIMO) {
+            $warnings[] = 'El sueldo base está bajo el mínimo legal ($' . number_format(self::SUELDO_MINIMO,0,',','.') . ').';
+        }
 
-    $validated = $request->validate([
-        'empleado_id' => 'required|exists:empleados,id',
-        'periodo_desde' => 'required|date',
-        'periodo_hasta' => 'required|date|after_or_equal:periodo_desde',
-    ]);
+        // ----------------------------------------------------
+        // 1. PRODUCTIVIDAD (Gestión de Flota)
+        // ----------------------------------------------------
+        $bonoProductividad = 0;
+        $viajesRealizados  = 0;
+        $recaudacionTotal  = 0;
+        $detalleProduccion = "Sueldo Fijo / Administrativo";
 
-    // Cargar empleado con relaciones
-    $empleado = Empleado::with(['afp', 'isapre', 'user'])->findOrFail($validated['empleado_id']);
+        if ($empleado->conductor) {
+            $conductorId = $empleado->conductor->id;
 
-    // Sueldo base del empleado
-    $sueldoBase = $empleado->salario_base;
+            // Buscamos viajes completados en el periodo
+            $viajes = Viaje::where('conductor_id', $conductorId)
+                ->whereBetween('fecha_hora_salida', [$desde, $hasta])
+                ->where('estado', 'completado')
+                ->get();
 
-    // ============================================
-    // CÁLCULO DESCUENTO AFP
-    // ============================================
-    $descuentoAfp = 0;
-    $nombreAfp = 'Sin AFP';
-    $porcentajeAfp = 0;
+            $viajesRealizados = $viajes->count();
+            $recaudacionTotal = $viajes->sum('dinero_recaudado'); 
 
-    if ($empleado->afp && $empleado->afp->porcentaje_descuento) {
-        $porcentajeAfp = floatval($empleado->afp->porcentaje_descuento);
-        $descuentoAfp = intval($sueldoBase * ($porcentajeAfp / 100));
-        $nombreAfp = $empleado->afp->nombre;
-    }
+            if ($recaudacionTotal > 0) {
+                // Lógica A: 5% de comisión sobre lo recaudado
+                $bonoProductividad = intval($recaudacionTotal * 0.05);
+                $detalleProduccion = "Comisión 5% sobre $" . number_format($recaudacionTotal, 0, ',', '.');
+            } elseif ($viajesRealizados > 0) {
+                // Lógica B (Fallback): $5.000 por vuelta si no hay monto recaudado registrado
+                $bonoProductividad = $viajesRealizados * 5000;
+                $detalleProduccion = "Bono por vuelta ($5.000 x $viajesRealizados viajes)";
+            } else {
+                $detalleProduccion = "Sin viajes completados en el periodo.";
+            }
+        }
 
-    // ============================================
-    // CÁLCULO DESCUENTO ISAPRE/FONASA
-    // ============================================
-    $descuentoIsapre = 0;
-    $nombreSalud = 'Sin previsión';
+        // ----------------------------------------------------
+        // 2. GRATIFICACIÓN LEGAL (Cumplimiento Normativo Art 50)
+        // ----------------------------------------------------
+        $gratificacion = intval($sueldoBase * 0.25);
+        if ($gratificacion > self::TOPE_GRATIFICACION) {
+            $gratificacion = self::TOPE_GRATIFICACION;
+        }
 
-    if ($empleado->isapre_id) {
-        // Tiene Isapre privada - 7% del sueldo base es el mínimo legal
-        $descuentoIsapre = intval($sueldoBase * 0.07);
-        $nombreSalud = $empleado->isapre ? $empleado->isapre->nombre : 'Isapre';
-    } elseif ($empleado->tipo_fonasa) {
-        // Tiene Fonasa - 7% del sueldo base
-        $descuentoIsapre = intval($sueldoBase * 0.07);
-        $nombreSalud = 'Fonasa ' . $empleado->tipo_fonasa;
-    }
+        // ----------------------------------------------------
+        // 3. SUELDO IMPONIBLE TOTAL
+        // ----------------------------------------------------
+        $sueldoImponible = $sueldoBase + $gratificacion + $bonoProductividad;
 
-    // ============================================
-    // CÁLCULO SUELDO LÍQUIDO
-    // ============================================
-    $totalHaberes = $sueldoBase;
-    $totalDescuentos = $descuentoAfp + $descuentoIsapre;
-    $sueldoLiquido = $totalHaberes - $totalDescuentos;
+        // ----------------------------------------------------
+        // 4. DESCUENTOS PREVISIONALES
+        // ----------------------------------------------------
 
-    // ============================================
-    // RESPUESTA CON DATOS CALCULADOS
-    // ============================================
-    $calculo = [
-        'empleado_info' => [
-            'id' => $empleado->id,
-            'nombre' => $empleado->user->nombre . ' ' . $empleado->user->apellido,
-            'numero_empleado' => $empleado->numero_empleado,
-            'afp' => $nombreAfp,
-            'isapre' => $nombreSalud,
-            'tipo_fonasa' => $empleado->tipo_fonasa
-        ],
-        'sueldo_base' => $sueldoBase,
-        'descuento_afp' => $descuentoAfp,
-        'descuento_isapre' => $descuentoIsapre,
-        'bonificaciones' => 0,
-        'horas_extras_valor' => 0,
-        'total_haberes' => $totalHaberes,
-        'total_descuentos' => $totalDescuentos,
-        'sueldo_liquido' => $sueldoLiquido,
-        'detalles' => [
-            'afp' => [
-                'nombre' => $nombreAfp,
-                'porcentaje' => $porcentajeAfp,
-                'monto' => $descuentoAfp
+        // --- AFP ---
+        $descuentoAfp       = 0;
+        $nombreAfp          = 'Sin AFP';
+        $porcentajeAfpTotal = 0;
+
+        if ($empleado->afp) {
+            $porcentajeComision = floatval($empleado->afp->porcentaje_descuento); 
+            // CORRECCIÓN CRÍTICA: Sumamos el 10% obligatorio a la comisión de la AFP
+            $porcentajeAfpTotal = 10.0 + $porcentajeComision; 
+            $descuentoAfp       = intval($sueldoImponible * ($porcentajeAfpTotal / 100));
+            $nombreAfp          = $empleado->afp->nombre;
+        }
+
+        // --- SALUD (7% Mínimo) ---
+        $descuentoIsapre  = 0;
+        $nombreSalud      = 'Sin previsión';
+        $porcentajeSalud  = 0;
+
+        if ($empleado->isapre_id || $empleado->tipo_fonasa) {
+            $porcentajeSalud = 7.0;
+            $descuentoIsapre = intval($sueldoImponible * 0.07);
+
+            if ($empleado->isapre_id && $empleado->isapre) {
+                $nombreSalud = $empleado->isapre->nombre;
+            } else {
+                $nombreSalud = 'Fonasa ' . ($empleado->tipo_fonasa ?? '');
+            }
+        }
+
+        // --- SEGURO CESANTÍA (0.6%) ---
+        $descuentoCesantia = 0;
+        // Asumimos contrato indefinido (0.6% cargo trabajador)
+        $descuentoCesantia = intval($sueldoImponible * 0.006);
+
+        $totalPrevisional = $descuentoAfp + $descuentoIsapre + $descuentoCesantia;
+
+        // ----------------------------------------------------
+        // 5. CÁLCULO IMPUESTO ÚNICO (SEGÚN TABLA SII)
+        // ----------------------------------------------------
+        $sueldoTributable = $sueldoImponible - $totalPrevisional;
+        $impuestoRenta = 0;
+        
+        // Tabla Simplificada Diciembre 2025 (Tramo 1: Exento hasta 13.5 UTM)
+        $topeExento = 13.5 * self::VALOR_UTM; 
+        
+        if ($sueldoTributable > $topeExento) {
+            // Factor 0.04 para el segundo tramo
+            $montoAfecto = $sueldoTributable - $topeExento;
+            $impuestoRenta = intval($montoAfecto * 0.04);
+        }
+
+        // ----------------------------------------------------
+        // 6. TOTALES FINALES
+        // ----------------------------------------------------
+        $totalHaberes    = $sueldoImponible; // Sumar aquí movilización/colación si los tienes en BD
+        $totalDescuentos = $totalPrevisional + $impuestoRenta;
+        $sueldoLiquido   = $totalHaberes - $totalDescuentos;
+
+        return [
+            'empleado_info' => [
+                'id'     => $empleado->id,
+                'nombre' => $empleado->user->nombre . ' ' . $empleado->user->apellido,
+                'rut'    => $empleado->user->rut,
+                'cargo'  => $empleado->conductor ? 'Conductor' : 'Administrativo',
+                'afp'    => $nombreAfp,
+                'salud'  => $nombreSalud,
             ],
-            'salud' => [
-                'nombre' => $nombreSalud,
-                'porcentaje' => 7.0,
-                'monto' => $descuentoIsapre
-            ]
-        ],
-        'mensaje' => sprintf(
-            'Cálculo realizado: Sueldo Base $%s | AFP %s (%s%%) $%s | Salud %s (7%%) $%s | Líquido $%s',
-            number_format($sueldoBase, 0, ',', '.'),
-            $nombreAfp,
-            number_format($porcentajeAfp, 1),
-            number_format($descuentoAfp, 0, ',', '.'),
-            $nombreSalud,
-            number_format($descuentoIsapre, 0, ',', '.'),
-            number_format($sueldoLiquido, 0, ',', '.')
-        )
-    ];
-
-    return response()->json($calculo);
-}
-    
+            'haberes' => [
+                'sueldo_base'     => $sueldoBase,
+                'gratificacion'   => $gratificacion,
+                'bono_produccion' => $bonoProductividad,
+                'total_imponible' => $totalHaberes,
+            ],
+            'descuentos' => [
+                'afp' => [
+                    'nombre' => $nombreAfp,
+                    'tasa'   => $porcentajeAfpTotal,
+                    'monto'  => $descuentoAfp,
+                ],
+                'salud' => [
+                    'nombre' => $nombreSalud,
+                    'tasa'   => $porcentajeSalud,
+                    'monto'  => $descuentoIsapre,
+                ],
+                'cesantia' => [
+                    'nombre' => 'Seguro Cesantía (AFC)',
+                    'tasa'   => 0.6,
+                    'monto'  => $descuentoCesantia,
+                ],
+                'impuesto' => [
+                    'nombre' => 'Impuesto Único (SII)',
+                    'monto'  => $impuestoRenta
+                ],
+                'total' => $totalDescuentos,
+            ],
+            'totales' => [
+                'sueldo_liquido' => $sueldoLiquido,
+            ],
+            'kpi_produccion' => [
+                'viajes_mes'  => $viajesRealizados,
+                'recaudacion' => $recaudacionTotal,
+                'detalle'     => $detalleProduccion,
+            ],
+            'warnings' => $warnings,
+            'mensaje' => sprintf(
+                'Líquido a Pagar: $%s (Incl. Impuesto $%s)',
+                number_format($sueldoLiquido, 0, ',', '.'),
+                number_format($impuestoRenta, 0, ',', '.')
+            ),
+        ];
+    }
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   LayoutDashboard, Users, UserCog, Wrench, Bus, Map, 
   CalendarClock, Navigation, TrendingUp, Shield, User, Briefcase,
-  X, DollarSign, Calendar, MapPin, FileText, ClipboardList
+  X, DollarSign, Calendar, MapPin, FileText, ClipboardList, BarChart3
 } from 'lucide-react';
 
 const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
@@ -143,6 +143,16 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
           <Bus size={20} className={getIconClasses('buses')} />
           <span className="font-medium truncate">Flota de Buses</span>
         </button>
+
+        {/* NUEVO: Botón de Análisis Buses */}
+        <button
+          onClick={() => handleSelect('analisis-buses')}
+          className={getButtonClasses('analisis-buses')}
+        >
+          <BarChart3 size={20} className={getIconClasses('analisis-buses')} />
+          <span className="font-medium truncate">Análisis Buses</span>
+        </button>
+
         <button
           onClick={() => handleSelect('rutas')}
           className={getButtonClasses('rutas')}

@@ -14,14 +14,34 @@ class BusController extends Controller
     /**
      * Listar todos los buses
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $buses = Bus::get();
+            $query = Bus::query();
+
+            // Filtrar por tipo de servicio si se proporciona
+            if ($request->has('tipo_servicio')) {
+                $query->where('tipo_servicio', $request->tipo_servicio);
+            }
+
+            // Filtrar por estado
+            if ($request->has('estado')) {
+                $query->where('estado', $request->estado);
+            }
+
+            $buses = $query->get();
+
+            // Agregar nombre descriptivo del tipo de servicio
+            $busesConAnalisis = $buses->map(function ($bus) {
+                $busData = $bus->toArray();
+                $busData['nombre_tipo_servicio'] = $bus->nombre_tipo_servicio;
+                $busData['es_servicio_premium'] = $bus->esServicioPremium();
+                return $busData;
+            });
 
             return response()->json([
                 'success' => true,
-                'data' => $buses,
+                'data' => $busesConAnalisis,
                 'total' => $buses->count()
             ]);
         } catch (\Exception $e) {
@@ -40,7 +60,7 @@ class BusController extends Controller
     {
         try {
             $bus = Bus::with(['viajes', 'mantenimientos'])->find($id);
-            
+
             if (!$bus) {
                 return response()->json([
                     'success' => false,
@@ -48,9 +68,15 @@ class BusController extends Controller
                 ], 404);
             }
 
+            // Agregar información adicional del tipo de servicio
+            $busData = $bus->toArray();
+            $busData['nombre_tipo_servicio'] = $bus->nombre_tipo_servicio;
+            $busData['es_servicio_premium'] = $bus->esServicioPremium();
+            $busData['requiere_asistente'] = $bus->requiereAsistente();
+
             return response()->json([
                 'success' => true,
-                'data' => $bus
+                'data' => $busData
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -87,6 +113,7 @@ class BusController extends Controller
                 // Nuevos campos obligatorios
                 'tipo_bus' => ['required', Rule::in(['simple', 'doble_piso'])],
                 'cantidad_ejes' => ['required', Rule::in(['2', '3', '4'])],
+                'tipo_servicio' => ['required', Rule::in(['clasico', 'semicama', 'cama', 'premium'])],
 
                 // Campos opcionales
                 'patente_verificador' => 'nullable|string|max:1',
@@ -171,6 +198,15 @@ class BusController extends Controller
                 ], 422);
             }
 
+            // Asignar factor de tarifa automáticamente según tipo de servicio
+            $factoresTarifa = [
+                'clasico' => 1.0,
+                'semicama' => 1.4,
+                'cama' => 2.0,
+                'premium' => 3.0,
+            ];
+            $factorTarifa = $factoresTarifa[$request->tipo_servicio] ?? 1.0;
+
             // Crear el bus
             $bus = Bus::create([
                 'patente' => strtoupper($request->patente),
@@ -185,10 +221,12 @@ class BusController extends Controller
                 'capacidad_pasajeros' => $request->capacidad_pasajeros,
                 'fecha_adquisicion' => $request->fecha_adquisicion,
                 'estado' => $request->estado,
-                
+
                 // Nuevos campos
                 'tipo_bus' => $request->tipo_bus,
                 'cantidad_ejes' => $request->cantidad_ejes,
+                'tipo_servicio' => $request->tipo_servicio,
+                'factor_tarifa' => $factorTarifa,
                 'marca_motor' => $request->marca_motor,
                 'modelo_motor' => $request->modelo_motor,
                 'ubicacion_motor' => $request->ubicacion_motor ?? 'trasero',

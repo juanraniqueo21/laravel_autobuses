@@ -16,10 +16,19 @@ import { useNotifications } from '../context/NotificationContext';
 const ESTADOS_BUS = ['operativo', 'mantenimiento', 'desmantelado'];
 const TIPOS_COMBUSTIBLE = ['diesel', 'gasolina', 'gas', 'eléctrico', 'híbrido'];
 const TIPOS_COBERTURA = ['ninguna', 'terceros', 'full'];
+
 // corregido: valor que viaja al backend debe ser 'doble_piso'
 const TIPOS_BUS = ['simple', 'doble_piso'];
 const CANTIDAD_EJES = ['2', '3', '4'];
 const UBICACION_MOTOR = ['delantero', 'trasero', 'central'];
+
+// 📄 Agregar constante de tipos de servicio
+const TIPOS_SERVICIO = [
+  { id: 'clasico', label: 'Clásico (1.0x)', factor: 1.0 },
+  { id: 'semicama', label: 'Semicama (1.4x)', factor: 1.4 },
+  { id: 'cama', label: 'Cama (2.0x)', factor: 2.0 },
+  { id: 'premium', label: 'Premium (3.0x)', factor: 3.0 }
+];
 
 // --- UTILIDADES DE FECHAS ---
 
@@ -65,7 +74,9 @@ export default function BusesPage() {
   const [filterAnio, setFilterAnio] = useState('');
   const [filterCombustible, setFilterCombustible] = useState('');
   const [filterPasajeros, setFilterPasajeros] = useState('');
-  const [filterEstado, setFilterEstado] = useState(''); 
+  const [filterEstado, setFilterEstado] = useState('');
+  // Línea 69: Agregar filtro
+  const [filterTipoServicio, setFilterTipoServicio] = useState(''); 
 
   const opcionesMarcas = useMemo(() => {
     return [...new Set(buses.map(b => b.marca).filter(Boolean))].sort();
@@ -97,6 +108,8 @@ export default function BusesPage() {
     estado: 'operativo',
     tipo_bus: 'simple',
     cantidad_ejes: '2',
+    // Línea 100: Agregar al formData inicial
+    tipo_servicio: 'clasico',
     marca_motor: '',
     modelo_motor: '',
     ubicacion_motor: 'trasero',
@@ -147,10 +160,15 @@ export default function BusesPage() {
     if (filterEstado) {
       data = data.filter(b => b.estado === filterEstado);
     }
+    // Líneas 150-152: Agregar al filtro useEffect
+    if (filterTipoServicio) {
+      data = data.filter(b => b.tipo_servicio === filterTipoServicio);
+    }
 
     setFilteredBuses(data);
     setCurrentPage(1); 
-  }, [buses, searchPatente, filterMarca, filterAnio, filterCombustible, filterPasajeros, filterEstado]);
+  // Línea 156: Actualizar dependencias del useEffect
+  }, [buses, searchPatente, filterMarca, filterAnio, filterCombustible, filterPasajeros, filterEstado, filterTipoServicio]);
 
   const sortedData = [...filteredBuses].sort((a, b) => b.id - a.id);
   const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(sortedData, 10);
@@ -199,7 +217,8 @@ export default function BusesPage() {
         patente: '', patente_verificador: '', marca: '', modelo: '', tipo_combustible: 'diesel',
         color: '', anio: '', numero_serie: '', numero_motor: '', numero_chasis: '',
         capacidad_pasajeros: '', fecha_adquisicion: '', estado: 'operativo', tipo_bus: 'simple',
-        cantidad_ejes: '2', marca_motor: '', modelo_motor: '', ubicacion_motor: 'trasero',
+        // Línea 202: Agregar tipo_servicio al reset del form
+        cantidad_ejes: '2', tipo_servicio: 'clasico', marca_motor: '', modelo_motor: '', ubicacion_motor: 'trasero',
         marca_chasis: '', modelo_chasis: '', marca_carroceria: '', modelo_carroceria: '',
         proximo_mantenimiento_km: '', fecha_ultimo_mantenimiento: '', fecha_proximo_mantenimiento: '',
         proxima_revision_tecnica: '', ultima_revision_tecnica: '', documento_revision_tecnica: '',
@@ -255,6 +274,8 @@ export default function BusesPage() {
     setFilterCombustible('');
     setFilterPasajeros('');
     setFilterEstado('');
+    // Línea 258: Agregar al clear filters
+    setFilterTipoServicio('');
   };
 
   const getEstadoColor = (estado) => {
@@ -271,6 +292,17 @@ export default function BusesPage() {
     return labels[tipo] || tipo;
   };
 
+  // Líneas 275-283: Agregar función helper
+  const getTipoServicioInfo = (tipo) => {
+    const info = {
+      'clasico': { label: 'Clásico', color: 'bg-gray-100 text-gray-800', factor: '1.0x' },
+      'semicama': { label: 'Semicama', color: 'bg-blue-100 text-blue-800', factor: '1.4x' },
+      'cama': { label: 'Cama', color: 'bg-purple-100 text-purple-800', factor: '2.0x' },
+      'premium': { label: 'Premium', color: 'bg-amber-100 text-amber-800', factor: '3.0x' }
+    };
+    return info[tipo] || { label: tipo, color: 'bg-gray-100 text-gray-800', factor: '1.0x' };
+  };
+
   const renderBusesTable = () => {
     return (
       <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
@@ -283,15 +315,20 @@ export default function BusesPage() {
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Año</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Combustible</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Capacidad</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Tipo Servicio</th>
               <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
               <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase tracking-wider">Acciones</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {paginatedData.length === 0 ? (
-              <tr><td colSpan="8" className="px-6 py-8 text-center text-gray-500">No se encontraron buses con los filtros seleccionados</td></tr>
+              // Línea 302: Cambiar colspan
+              <tr><td colSpan="9" className="px-6 py-8 text-center text-gray-500">No se encontraron buses con los filtros seleccionados</td></tr>
             ) : (
-              paginatedData.map((bus) => (
+              // Líneas 304-306: Agregar dentro del map
+              paginatedData.map((bus) => {
+                const tipoServicioInfo = getTipoServicioInfo(bus.tipo_servicio);
+                return (
                 <React.Fragment key={bus.id}>
                   <tr 
                     className="hover:bg-gray-100 transition-colors even:bg-gray-50 cursor-pointer"
@@ -305,6 +342,14 @@ export default function BusesPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bus.anio}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 capitalize">{bus.tipo_combustible}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{bus.capacidad_pasajeros} pasajeros</td>
+                    
+                    {/* Líneas 317-321: Agregar celda de tipo servicio */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${tipoServicioInfo.color}`}>
+                        {tipoServicioInfo.label} {tipoServicioInfo.factor}
+                      </span>
+                    </td>
+                    
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(bus.estado)}`}>
                         {bus.estado}
@@ -340,7 +385,8 @@ export default function BusesPage() {
 
                   {expandedRow === bus.id && (
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      <td colSpan="8" className="px-6 py-6 cursor-default">
+                      {/* Línea 343: Cambiar colspan expandido */}
+                      <td colSpan="9" className="px-6 py-6 cursor-default">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm">
                           
                           <div className="space-y-2">
@@ -348,6 +394,12 @@ export default function BusesPage() {
                             <p><span className="text-gray-500">Verificador:</span> {bus.patente_verificador || '-'}</p>
                             <p><span className="text-gray-500">Tipo:</span> {bus.tipo_bus === 'simple' ? 'Simple (1 Piso)' : 'Doble Piso'}</p>
                             <p><span className="text-gray-500">Ejes:</span> {bus.cantidad_ejes}</p>
+                            {/* Líneas 351-355: Agregar en detalles expandidos */}
+                            <p><span className="text-gray-500">Servicio:</span>
+                              <span className={`ml-2 px-2 py-0.5 rounded text-xs font-bold ${tipoServicioInfo.color}`}>
+                                {tipoServicioInfo.label} ({tipoServicioInfo.factor})
+                              </span>
+                            </p>
                             <p><span className="text-gray-500">N° Serie:</span> {bus.numero_serie}</p>
                           </div>
 
@@ -409,7 +461,9 @@ export default function BusesPage() {
                     </tr>
                   )}
                 </React.Fragment>
-              ))
+                // Línea 412: Cerrar map correctamente
+                );
+              })
             )}
           </tbody>
         </table>
@@ -463,7 +517,8 @@ export default function BusesPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Línea 466: Cambiar grid cols */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Marca</label>
@@ -521,8 +576,24 @@ export default function BusesPage() {
               </select>
             </div>
 
+            {/* Líneas 524-536: Agregar filtro dropdown */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tipo Servicio</label>
+              <select 
+                value={filterTipoServicio} 
+                onChange={(e) => setFilterTipoServicio(e.target.value)} 
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700 cursor-pointer"
+              >
+                <option value="">Todos</option>
+                {TIPOS_SERVICIO.map(tipo => (
+                  <option key={tipo.id} value={tipo.id}>{tipo.label}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex items-end">
-              {(searchPatente || filterMarca || filterAnio || filterCombustible || filterPasajeros || filterEstado) && (
+              {/* Línea 539: Actualizar condición clear filters */}
+              {(searchPatente || filterMarca || filterAnio || filterCombustible || filterPasajeros || filterEstado || filterTipoServicio) && (
                 <button 
                   onClick={handleClearAllFilters}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 border border-gray-200 hover:border-red-200 rounded-lg transition-colors text-sm font-medium h-[38px]"
@@ -591,6 +662,15 @@ export default function BusesPage() {
             options={CANTIDAD_EJES.map(e => ({ id: e, label: `${e} ejes` }))}
             value={formData.cantidad_ejes}
             onChange={(e) => setFormData({ ...formData, cantidad_ejes: e.target.value })}
+            required
+          />
+          
+          {/* Líneas 596-602: Agregar selector en formulario */}
+          <Select
+            label="Tipo Servicio *"
+            options={TIPOS_SERVICIO.map(t => ({ id: t.id, label: t.label }))}
+            value={formData.tipo_servicio}
+            onChange={(e) => setFormData({ ...formData, tipo_servicio: e.target.value })}
             required
           />
           

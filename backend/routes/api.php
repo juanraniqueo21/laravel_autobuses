@@ -196,6 +196,12 @@ Route::middleware('jwt.auth')->group(function () {
     Route::prefix('reportes')->group(function () {
         Route::get('/', [ReporteController::class, 'index']);
         Route::get('/mis-reportes', [ReporteController::class, 'misReportes']);
+
+        // Análisis y BI de tipos de servicio
+        Route::get('/rentabilidad-por-tipo-servicio', [ReporteController::class, 'rentabilidadPorTipoServicio']);
+        Route::get('/ocupacion-por-tipo-servicio', [ReporteController::class, 'ocupacionPorTipoServicio']);
+        Route::get('/resumen-ejecutivo', [ReporteController::class, 'resumenEjecutivo']);
+
         Route::get('/{id}', [ReporteController::class, 'show']);
         Route::post('/', [ReporteController::class, 'store']);
         Route::put('/{id}', [ReporteController::class, 'update']);

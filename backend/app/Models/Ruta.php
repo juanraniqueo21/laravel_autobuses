@@ -19,11 +19,19 @@ class Ruta extends Model
         'tiempo_estimado_minutos',
         'descripcion',
         'estado',
+        // === NUEVOS CAMPOS ===
+        'tarifa_base_adulto',
+        'tarifa_base_estudiante',
+        'tarifa_base_tercera_edad',
     ];
 
     protected $casts = [
         'distancia_km' => 'decimal:2',
         'tiempo_estimado_minutos' => 'integer',
+        // === NUEVOS CASTS ===
+        'tarifa_base_adulto' => 'integer',
+        'tarifa_base_estudiante' => 'integer',
+        'tarifa_base_tercera_edad' => 'integer',
     ];
 
     // ============================================

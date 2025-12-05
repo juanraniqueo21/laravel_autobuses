@@ -20,6 +20,17 @@ class Viaje extends Model
         'estado',
         'observaciones',
         'incidentes',
+        // === NUEVOS CAMPOS PARA CONTROL DE RECAUDACIÓN ===
+        'pasajeros',
+        'dinero_recaudado',
+        'dinero_esperado',
+        'diferencia_porcentaje',
+        'requiere_revision',
+        // === NUEVOS CAMPOS OPERATIVOS ===
+        'combustible_litros',
+        'kilometros_recorridos',
+        'costo_combustible',
+        'costo_por_km',
     ];
 
     protected $casts = [
@@ -27,6 +38,17 @@ class Viaje extends Model
         'ruta_id' => 'integer',
         'fecha_hora_salida' => 'datetime',
         'fecha_hora_llegada' => 'datetime',
+        // === NUEVOS CASTS ===
+        'pasajeros' => 'integer',
+        'dinero_recaudado' => 'integer',
+        'dinero_esperado' => 'integer',
+        'diferencia_porcentaje' => 'decimal:2',
+        'requiere_revision' => 'boolean',
+        // === NUEVOS CASTS OPERATIVOS ===
+        'combustible_litros' => 'decimal:2',
+        'kilometros_recorridos' => 'integer',
+        'costo_combustible' => 'integer',
+        'costo_por_km' => 'integer',
     ];
 
     // ============================================
@@ -86,6 +108,37 @@ class Viaje extends Model
         return $this->asignacionTurno?->asistentes;
     }
 
+    /**
+     * Obtener la diferencia en dinero (absoluta)
+     */
+    public function getDiferenciaDineroAttribute()
+    {
+        if (!$this->dinero_esperado || !$this->dinero_recaudado) {
+            return 0;
+        }
+        return $this->dinero_recaudado - $this->dinero_esperado;
+    }
+
+    /**
+     * Obtener el estado de recaudación como texto
+     */
+    public function getEstadoRecaudacionAttribute()
+    {
+        if (!$this->requiere_revision) {
+            return 'ok';
+        }
+        
+        if ($this->diferencia_porcentaje > 20) {
+            return 'critico';
+        }
+        
+        if ($this->diferencia_porcentaje > 10) {
+            return 'advertencia';
+        }
+        
+        return 'ok';
+    }
+
     // ============================================
     // SCOPES
     // ============================================
@@ -130,6 +183,31 @@ class Viaje extends Model
     public function scopeCompletados($query)
     {
         return $query->where('estado', 'completado');
+    }
+
+    /**
+     * Scope para viajes que requieren revisión de recaudación
+     */
+    public function scopeRequiereRevision($query)
+    {
+        return $query->where('requiere_revision', true);
+    }
+
+    /**
+     * Scope para viajes con diferencia crítica (>20%)
+     */
+    public function scopeRecaudacionCritica($query)
+    {
+        return $query->where('diferencia_porcentaje', '>', 20);
+    }
+
+    /**
+     * Scope para viajes con diferencia moderada (>10%)
+     */
+    public function scopeRecaudacionModerada($query)
+    {
+        return $query->where('diferencia_porcentaje', '>', 10)
+            ->where('diferencia_porcentaje', '<=', 20);
     }
 
     // ============================================
@@ -177,5 +255,108 @@ class Viaje extends Model
         $numero = $ultimoViaje ? ((int) substr($ultimoViaje->codigo_viaje, -3)) + 1 : 1;
         
         return 'VJ-' . $fechaFormato . '-' . str_pad($numero, 3, '0', STR_PAD_LEFT);
+    }
+
+    // ============================================
+    // MÉTODOS DE RECAUDACIÓN
+    // ============================================
+
+    /**
+     * Calcular dinero esperado según pasajeros y tarifa promedio de la ruta
+     */
+    public function calcularDineroEsperado()
+    {
+        if (!$this->pasajeros || !$this->ruta) {
+            return 0;
+        }
+
+        // Obtener tarifa promedio de todas las paradas de la ruta
+        $tarifaPromedio = $this->ruta->paradas()
+            ->avg('tarifa_adulto');
+
+        if (!$tarifaPromedio) {
+            return 0;
+        }
+
+        return intval($this->pasajeros * $tarifaPromedio);
+    }
+
+    /**
+     * Validar si requiere revisión (diferencia > 10%)
+     * Retorna true si requiere revisión
+     */
+    public function validarRecaudacion(): bool
+    {
+        if (!$this->dinero_esperado || !$this->dinero_recaudado) {
+            $this->diferencia_porcentaje = 0;
+            $this->requiere_revision = false;
+            return false;
+        }
+
+        $diferencia = abs($this->dinero_esperado - $this->dinero_recaudado);
+        $porcentaje = ($diferencia / $this->dinero_esperado) * 100;
+
+        $this->diferencia_porcentaje = round($porcentaje, 2);
+        $this->requiere_revision = $porcentaje > 10;
+
+        return $this->requiere_revision;
+    }
+
+    /**
+     * Actualizar recaudación automáticamente
+     * Calcula dinero esperado y valida si requiere revisión
+     */
+    public function actualizarRecaudacion()
+    {
+        if ($this->pasajeros && $this->ruta) {
+            $this->dinero_esperado = $this->calcularDineroEsperado();
+        }
+        
+        if ($this->dinero_recaudado && $this->dinero_esperado) {
+            $this->validarRecaudacion();
+        }
+        
+        return $this;
+    }
+
+    /**
+     * Obtener resumen de recaudación para reportes
+     */
+    public function getResumenRecaudacion(): array
+    {
+        return [
+            'pasajeros' => $this->pasajeros ?? 0,
+            'recaudado' => $this->dinero_recaudado ?? 0,
+            'esperado' => $this->dinero_esperado ?? $this->calcularDineroEsperado(),
+            'diferencia_dinero' => $this->diferencia_dinero,
+            'diferencia_porcentaje' => $this->diferencia_porcentaje ?? 0,
+            'requiere_revision' => $this->requiere_revision ?? false,
+            'estado' => $this->estado_recaudacion,
+        ];
+    }
+
+    // ============================================
+    // MÉTODOS OPERATIVOS (NUEVOS)
+    // ============================================
+
+    /**
+     * Calcular costo por kilómetro automáticamente
+     */
+    public function calcularCostoPorKm(): ?int
+    {
+        if (!$this->costo_combustible || !$this->kilometros_recorridos || $this->kilometros_recorridos == 0) {
+            return null;
+        }
+        
+        return intval($this->costo_combustible / $this->kilometros_recorridos);
+    }
+
+    /**
+     * Verificar si el viaje es ineficiente (costo > 1000 CLP/km)
+     */
+    public function esIneficiente(): bool
+    {
+        $costoPorKm = $this->costo_por_km ?? $this->calcularCostoPorKm();
+        return $costoPorKm !== null && $costoPorKm > 1000;
     }
 }

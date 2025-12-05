@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  DollarSign, Plus, Filter, Download, Edit, Trash2, 
-  Calendar, FileText, CheckCircle, Calculator, Check, AlertCircle, Search, X
+  DollarSign, Plus, Download, Edit, Trash2, 
+  Calendar, FileText, CheckCircle, Calculator, Check, AlertCircle, Search, X, RefreshCw
 } from 'lucide-react';
 import {
   fetchLiquidaciones,
@@ -22,7 +22,7 @@ import MetricCard from '../components/cards/MetricCard';
 
 const LiquidacionesPage = ({ user }) => {
   const [liquidaciones, setLiquidaciones] = useState([]);
-  const [filteredLiquidaciones, setFilteredLiquidaciones] = useState([]); // Nuevo estado para datos filtrados
+  const [filteredLiquidaciones, setFilteredLiquidaciones] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
@@ -31,9 +31,8 @@ const LiquidacionesPage = ({ user }) => {
   const [calculando, setCalculando] = useState(false);
 
   // Filtros
-  const [filtroEmpleado, setFiltroEmpleado] = useState(''); // Ahora es texto de búsqueda
+  const [filtroEmpleado, setFiltroEmpleado] = useState('');
   const [filtros, setFiltros] = useState({
-    // empleado_id ya no se usa aquí para el filtro visual
     estado: '',
     anio: new Date().getFullYear(),
     mes: ''
@@ -47,6 +46,8 @@ const LiquidacionesPage = ({ user }) => {
     sueldo_base: '',
     descuento_afp: '',
     descuento_isapre: '',
+    descuento_seguro_desempleo: '',
+    descuento_impuesto_renta: '', // <--- NUEVO CAMPO AGREGADO
     bonificaciones: '',
     horas_extras_valor: '',
     estado: 'procesada',
@@ -62,14 +63,12 @@ const LiquidacionesPage = ({ user }) => {
   const puedeEditar = esAdmin || esRRHH;
   const puedeVer = esAdmin || esRRHH || esGerente;
 
-  // Carga inicial de datos
   useEffect(() => {
     if (puedeVer) {
       cargarDatos();
     }
-  }, [filtros.estado, filtros.anio, filtros.mes]); // Recargar si cambian estos filtros
+  }, [filtros.estado, filtros.anio, filtros.mes]);
 
-  // Efecto para filtrado en cliente (por nombre/RUT)
   useEffect(() => {
     aplicarFiltrosLocales();
   }, [liquidaciones, filtroEmpleado]);
@@ -81,9 +80,6 @@ const LiquidacionesPage = ({ user }) => {
       const empData = await fetchEmpleados();
       setEmpleados(Array.isArray(empData) ? empData : []);
 
-      // Enviamos filtros al backend (excepto empleado, que filtraremos localmente o aparte si el backend lo soporta)
-      // Nota: Si el backend soporta búsqueda parcial por nombre, se podría enviar. 
-      // Aquí asumimos filtrado local para la búsqueda de texto como en LicenciasPage.
       const liqData = await fetchLiquidaciones(filtros);
       setLiquidaciones(Array.isArray(liqData) ? liqData : []);
 
@@ -98,7 +94,6 @@ const LiquidacionesPage = ({ user }) => {
     }
   };
 
-  // Lógica de filtrado local para la búsqueda de texto
   const aplicarFiltrosLocales = () => {
     let resultado = [...liquidaciones];
 
@@ -107,7 +102,9 @@ const LiquidacionesPage = ({ user }) => {
       resultado = resultado.filter((liq) => {
         const nombre = liq.empleado?.user?.nombre?.toLowerCase() || '';
         const apellido = liq.empleado?.user?.apellido?.toLowerCase() || '';
-        const rut = liq.empleado?.user?.rut ? `${liq.empleado.user.rut}-${liq.empleado.user.rut_verificador}` : '';
+        const rut = liq.empleado?.user?.rut
+          ? `${liq.empleado.user.rut}-${liq.empleado.user.rut_verificador}`
+          : '';
         
         return nombre.includes(termino) || apellido.includes(termino) || rut.includes(termino);
       });
@@ -115,7 +112,7 @@ const LiquidacionesPage = ({ user }) => {
     setFilteredLiquidaciones(resultado);
   };
 
-  // --- MISMAS FUNCIONES DE NEGOCIO (Sin cambios) ---
+  // --- Empleado seleccionado => cálculo automático ---
   const handleEmpleadoChange = async (empleadoId) => {
     setFormData(prev => ({ ...prev, empleado_id: empleadoId }));
     if (!empleadoId) return;
@@ -138,16 +135,25 @@ const LiquidacionesPage = ({ user }) => {
     try {
       setCalculando(true);
       const calculo = await calcularLiquidacion(empleadoId, periodoDesde, periodoHasta);
+      
+      console.log('✅ Respuesta del backend:', calculo);
+
       setFormData(prev => ({
         ...prev,
-        sueldo_base: calculo.sueldo_base || '',
-        descuento_afp: calculo.descuento_afp || '',
-        descuento_isapre: calculo.descuento_isapre || '',
-        bonificaciones: calculo.bonificaciones || '',
-        horas_extras_valor: calculo.horas_extras_valor || ''
+        sueldo_base: calculo.haberes?.sueldo_base || '',
+        descuento_afp: calculo.descuentos?.afp?.monto || '',
+        descuento_isapre: calculo.descuentos?.salud?.monto || '',
+        descuento_seguro_desempleo: calculo.descuentos?.cesantia?.monto || '',
+        descuento_impuesto_renta: calculo.descuentos?.impuesto?.monto || 0, // <--- AQUI SE CARGA EL IMPUESTO
+        bonificaciones: (
+          (calculo.haberes?.gratificacion || 0) + 
+          (calculo.haberes?.bono_produccion || 0)
+        ) || '',
+        horas_extras_valor: 0
       }));
     } catch (error) {
       console.error('❌ Error al calcular automáticamente:', error);
+      alert('Error al calcular: ' + (error.response?.data?.mensaje || error.message));
     } finally {
       setCalculando(false);
     }
@@ -167,6 +173,8 @@ const LiquidacionesPage = ({ user }) => {
         sueldo_base: liquidacion.sueldo_base,
         descuento_afp: liquidacion.descuento_afp,
         descuento_isapre: liquidacion.descuento_isapre,
+        descuento_seguro_desempleo: liquidacion.descuento_seguro_desempleo || '',
+        descuento_impuesto_renta: liquidacion.descuento_impuesto_renta || 0, // <--- CARGAR AL EDITAR
         bonificaciones: liquidacion.bonificaciones,
         horas_extras_valor: liquidacion.horas_extras_valor,
         estado: liquidacion.estado,
@@ -193,6 +201,8 @@ const LiquidacionesPage = ({ user }) => {
       sueldo_base: '',
       descuento_afp: '',
       descuento_isapre: '',
+      descuento_seguro_desempleo: '',
+      descuento_impuesto_renta: '', // <--- RESETEAR
       bonificaciones: '',
       horas_extras_valor: '',
       estado: 'procesada',
@@ -201,6 +211,7 @@ const LiquidacionesPage = ({ user }) => {
     });
   };
 
+  // --- Forzar cálculo automático sobre período ya elegido ---
   const handleCalcularAutomatico = async () => {
     if (!formData.empleado_id || !formData.periodo_desde || !formData.periodo_hasta) {
       alert('Debe seleccionar empleado y períodos para calcular');
@@ -213,17 +224,26 @@ const LiquidacionesPage = ({ user }) => {
         formData.periodo_desde,
         formData.periodo_hasta
       );
+      
+      console.log('✅ Cálculo forzado:', calculo);
+      
       setFormData(prev => ({
         ...prev,
-        sueldo_base: calculo.sueldo_base || '',
-        descuento_afp: calculo.descuento_afp || '',
-        descuento_isapre: calculo.descuento_isapre || '',
-        bonificaciones: calculo.bonificaciones || '',
-        horas_extras_valor: calculo.horas_extras_valor || ''
+        sueldo_base: calculo.haberes?.sueldo_base || '',
+        descuento_afp: calculo.descuentos?.afp?.monto || '',
+        descuento_isapre: calculo.descuentos?.salud?.monto || '',
+        descuento_seguro_desempleo: calculo.descuentos?.cesantia?.monto || '',
+        descuento_impuesto_renta: calculo.descuentos?.impuesto?.monto || 0, // <--- CARGAR IMPUESTO
+        bonificaciones: (
+          (calculo.haberes?.gratificacion || 0) + 
+          (calculo.haberes?.bono_produccion || 0)
+        ) || '',
+        horas_extras_valor: 0
       }));
-      alert('✅ Cálculo realizado.');
+      
+      alert(`✅ Cálculo realizado.\n\nLíquido a pagar: ${formatCurrency(calculo.totales?.sueldo_liquido || 0)}`);
     } catch (error) {
-      alert('Error al calcular liquidación: ' + error.message);
+      alert('Error al calcular liquidación: ' + (error.response?.data?.mensaje || error.message));
     } finally {
       setCalculando(false);
     }
@@ -237,15 +257,19 @@ const LiquidacionesPage = ({ user }) => {
     }
 
     try {
+      // Calcular líquido final para enviar
+      const liquido = calcularLiquido();
+
       const dataToSend = {
         ...formData,
         sueldo_base: parseInt(formData.sueldo_base) || 0,
         descuento_afp: parseInt(formData.descuento_afp) || 0,
         descuento_isapre: parseInt(formData.descuento_isapre) || 0,
+        descuento_seguro_desempleo: parseInt(formData.descuento_seguro_desempleo) || 0,
+        descuento_impuesto_renta: parseInt(formData.descuento_impuesto_renta) || 0, // <--- ENVIAR DATO REAL
         bonificaciones: parseInt(formData.bonificaciones) || 0,
         horas_extras_valor: parseInt(formData.horas_extras_valor) || 0,
-        descuento_impuesto_renta: 0,
-        descuento_seguro_desempleo: 0,
+        sueldo_liquido: liquido, // Enviar el líquido calculado
         otros_descuentos: 0
       };
 
@@ -303,12 +327,17 @@ const LiquidacionesPage = ({ user }) => {
     }
   };
 
+  // --- CÁLCULO EN TIEMPO REAL DEL LÍQUIDO EN FORMULARIO ---
   const calcularLiquido = () => {
     const haberes = (parseInt(formData.sueldo_base) || 0) +
-                   (parseInt(formData.bonificaciones) || 0) +
-                   (parseInt(formData.horas_extras_valor) || 0);
+                    (parseInt(formData.bonificaciones) || 0) +
+                    (parseInt(formData.horas_extras_valor) || 0);
+
     const descuentos = (parseInt(formData.descuento_afp) || 0) +
-                      (parseInt(formData.descuento_isapre) || 0);
+                       (parseInt(formData.descuento_isapre) || 0) +
+                       (parseInt(formData.descuento_seguro_desempleo) || 0) +
+                       (parseInt(formData.descuento_impuesto_renta) || 0); // <--- RESTAR IMPUESTO
+
     return haberes - descuentos;
   };
 
@@ -488,7 +517,7 @@ const LiquidacionesPage = ({ user }) => {
         <div className="flex flex-col space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             
-            {/* 🟢 MODIFICADO: Input de búsqueda en lugar de Select para Empleado */}
+            {/* Búsqueda por empleado */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Buscar Empleado</label>
               <div className="relative">
@@ -555,7 +584,7 @@ const LiquidacionesPage = ({ user }) => {
         </div>
       </div>
 
-      {/* Tabla con datos filtrados */}
+      {/* Tabla */}
       <Table
         columns={columns}
         data={filteredLiquidaciones}
@@ -563,7 +592,7 @@ const LiquidacionesPage = ({ user }) => {
         emptyMessage="No se encontraron liquidaciones con los filtros seleccionados"
       />
 
-      {/* Dialog Formulario (Sin cambios visuales) */}
+      {/* Dialog Formulario */}
       {showDialog && (
         <FormDialog
           title={editingLiquidacion ? 'Editar Liquidación' : 'Nueva Liquidación'}
@@ -574,11 +603,10 @@ const LiquidacionesPage = ({ user }) => {
         >
           <div className="space-y-6">
             
-            {/* Sección: Datos Básicos */}
+            {/* Datos Básicos */}
             <div>
               <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Datos Básicos</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Select de Empleado (EN MODAL SÍ SE MANTIENE EL SELECT PARA ELEGIR) */}
                 <div className="space-y-1">
                   <Select
                     label="Empleado *"
@@ -656,7 +684,7 @@ const LiquidacionesPage = ({ user }) => {
               )}
             </div>
 
-            {/* Sección: Haberes */}
+            {/* Haberes */}
             <div>
               <h3 className="text-lg font-semibold text-green-700 border-b border-green-200 pb-2 mb-4">Haberes</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -669,7 +697,7 @@ const LiquidacionesPage = ({ user }) => {
                 />
 
                 <Input
-                  label="Bonificaciones (CLP)"
+                  label="Bonificaciones (Gratificación + Bonos) (CLP)"
                   type="number"
                   value={formData.bonificaciones}
                   onChange={(e) => setFormData({ ...formData, bonificaciones: e.target.value })}
@@ -686,7 +714,7 @@ const LiquidacionesPage = ({ user }) => {
               </div>
             </div>
 
-            {/* Sección: Descuentos */}
+            {/* Descuentos */}
             <div>
               <h3 className="text-lg font-semibold text-red-700 border-b border-red-200 pb-2 mb-4">Descuentos Legales</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -695,7 +723,7 @@ const LiquidacionesPage = ({ user }) => {
                   type="number"
                   value={formData.descuento_afp}
                   onChange={(e) => setFormData({ ...formData, descuento_afp: e.target.value })}
-                  placeholder="Se calcula automáticamente"
+                  placeholder="Automático"
                 />
 
                 <Input
@@ -703,15 +731,122 @@ const LiquidacionesPage = ({ user }) => {
                   type="number"
                   value={formData.descuento_isapre}
                   onChange={(e) => setFormData({ ...formData, descuento_isapre: e.target.value })}
-                  placeholder="Se calcula automáticamente"
+                  placeholder="Automático"
+                />
+
+                <Input
+                  label="Descuento Seguro Cesantía (CLP)"
+                  type="number"
+                  value={formData.descuento_seguro_desempleo}
+                  onChange={(e) => setFormData({ ...formData, descuento_seguro_desempleo: e.target.value })}
+                  placeholder="Automático"
+                />
+
+                <Input
+                  label="Impuesto Único 2da Categoría (CLP)"
+                  type="number"
+                  value={formData.descuento_impuesto_renta}
+                  onChange={(e) => setFormData({ ...formData, descuento_impuesto_renta: e.target.value })}
+                  placeholder="Automático (Si aplica)"
+                  className="bg-red-50 border-red-200 text-red-700"
                 />
               </div>
               <div className="mt-2 text-xs text-gray-500 italic">
-                * Al seleccionar un empleado, los descuentos de AFP e Isapre/Fonasa se calculan automáticamente.
+                * Al seleccionar un empleado, todos los descuentos (incluido el Impuesto Único) se calculan automáticamente.
               </div>
             </div>
 
-            {/* Resumen Líquido */}
+            {/* Panel de desglose */}
+            {formData.sueldo_base && (
+              <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
+                  <Calculator size={16} />
+                  Desglose del Cálculo Automático
+                </h4>
+                
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  {/* Haberes */}
+                  <div className="bg-white rounded p-3 border border-blue-100">
+                    <p className="text-xs text-gray-500 font-bold uppercase mb-2">Haberes</p>
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Sueldo Base:</span>
+                        <span className="font-semibold">{formatCurrency(formData.sueldo_base)}</span>
+                      </div>
+                      
+                      {formData.bonificaciones > 0 && (
+                        <>
+                          <div className="flex justify-between text-green-600 text-xs">
+                            <span>• Gratificación (25%):</span>
+                            <span className="font-medium">
+                              +{formatCurrency(Math.min(parseInt(formData.sueldo_base) * 0.25, 209396))}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-green-600 text-xs">
+                            <span>• Bono Productividad:</span>
+                            <span className="font-medium">
+                              +{formatCurrency(
+                                Math.max(0, parseInt(formData.bonificaciones) - Math.min(parseInt(formData.sueldo_base) * 0.25, 209396))
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-green-700 font-bold border-t pt-1">
+                            <span>Total Bonos:</span>
+                            <span>+{formatCurrency(formData.bonificaciones)}</span>
+                          </div>
+                        </>
+                      )}
+                      
+                      {formData.horas_extras_valor > 0 && (
+                        <div className="flex justify-between text-green-600">
+                          <span>Horas Extras:</span>
+                          <span className="font-semibold">+{formatCurrency(formData.horas_extras_valor)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Descuentos */}
+                  <div className="bg-white rounded p-3 border border-blue-100">
+                    <p className="text-xs text-gray-500 font-bold uppercase mb-2">Descuentos</p>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-red-600">
+                        <span>AFP:</span>
+                        <span className="font-semibold">-{formatCurrency(formData.descuento_afp)}</span>
+                      </div>
+                      <div className="flex justify-between text-red-600">
+                        <span>Salud:</span>
+                        <span className="font-semibold">-{formatCurrency(formData.descuento_isapre)}</span>
+                      </div>
+                      <div className="flex justify-between text-red-600">
+                        <span>Cesantía:</span>
+                        <span className="font-semibold">-{formatCurrency(formData.descuento_seguro_desempleo)}</span>
+                      </div>
+                      {parseInt(formData.descuento_impuesto_renta) > 0 && (
+                        <div className="flex justify-between text-red-800 font-bold border-t border-red-100 pt-1 mt-1">
+                          <span>Impuesto:</span>
+                          <span>-{formatCurrency(formData.descuento_impuesto_renta)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Total líquido */}
+                  <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded p-3 text-white">
+                    <p className="text-xs font-bold uppercase mb-2 opacity-90">Líquido a Pagar</p>
+                    <p className="text-2xl font-bold">
+                      {formatCurrency(calcularLiquido())}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-blue-200 text-xs text-blue-800">
+                  💡 <strong>Nota:</strong> Los descuentos incluyen AFP (10% + Comisión), Salud (7%), Cesantía (0.6%) e <strong>Impuesto Único</strong> según tabla SII.
+                </div>
+              </div>
+            )}
+
+            {/* Resumen líquido */}
             <div className="bg-gray-100 p-4 rounded-lg flex justify-between items-center border border-gray-300">
               <span className="text-lg font-bold text-gray-700">LÍQUIDO A PAGAR:</span>
               <span className="text-2xl font-bold text-blue-600">

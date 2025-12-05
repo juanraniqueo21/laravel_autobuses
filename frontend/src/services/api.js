@@ -1322,3 +1322,52 @@ export const descargarDocumentoReporte = async (id) => {
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 };
+
+// ============================================
+// ANÁLISIS Y BI - TIPOS DE SERVICIO
+// ============================================
+
+/**
+ * Obtener análisis de rentabilidad por tipo de servicio
+ */
+export const fetchRentabilidadPorTipoServicio = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+
+  const url = `${API_URL}/reportes/rentabilidad-por-tipo-servicio?${queryParams.toString()}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result.data;
+};
+
+/**
+ * Obtener análisis de ocupación por tipo de servicio
+ */
+export const fetchOcupacionPorTipoServicio = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+
+  const url = `${API_URL}/reportes/ocupacion-por-tipo-servicio?${queryParams.toString()}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result.data;
+};
+
+/**
+ * Obtener resumen ejecutivo
+ */
+export const fetchResumenEjecutivo = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+
+  const url = `${API_URL}/reportes/resumen-ejecutivo?${queryParams.toString()}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result.data;
+};

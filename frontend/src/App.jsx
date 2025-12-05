@@ -20,12 +20,13 @@ import ViajesPage from "./pages/ViajesPage";
 import MantencionesPage from './pages/MantencionesPage';
 import LogisticPage from './pages/LogisticPage';
 import TurnosPage from './pages/TurnosPage';
-import LicenciasPage from './pages/LicenciasPage';           // Licencias (Admin / Gerente / RRHH)
-import LiquidacionesPage from './pages/LiquidacionesPage';   // Liquidaciones
+import LicenciasPage from './pages/LicenciasPage';
+import LiquidacionesPage from './pages/LiquidacionesPage';
 
 // REPORTES (Módulo nuevo)
 import ReportesPage from './pages/ReportesPage';
 import MisReportesPage from './pages/MisReportesPage';
+import AnalisisBusesPage from './pages/AnalisisBusesPage';
 
 // ==========================================
 // PANEL CONDUCTOR
@@ -62,23 +63,18 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState('dashboard');
 
-  // Helper para asegurar que siempre trabajamos con un número
   const getRoleId = (userData) => {
     if (!userData) return 0;
     const rawId = userData.rol_id || userData.rol?.id;
     return Number(rawId) || 0;
   };
 
-  // ================================
-  // VERIFICAR AUTENTICACIÓN
-  // ================================
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('token');
       const savedUserStr = localStorage.getItem('user');
       let localUser = null;
 
-      // 1. Cargar usuario local primero para velocidad
       if (savedUserStr) {
         try {
           localUser = JSON.parse(savedUserStr);
@@ -91,7 +87,6 @@ function App() {
         }
       }
 
-      // 2. Verificar token con API
       if (token) {
         try {
           const response = await me();
@@ -116,23 +111,20 @@ function App() {
       setLoading(false);
     };
     checkAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getInitialPage = (rolId) => {
     const id = Number(rolId);
-    console.log("Calculando página inicial para Rol ID:", id);
-
     switch (id) {
-      case 1: // Admin
-      case 2: // Gerente
-      case 6: // RRHH
+      case 1:
+      case 2:
+      case 6:
         return 'dashboard';
-      case 3: // Conductor
+      case 3:
         return 'conductor-dashboard';
-      case 4: // Mecánico
+      case 4:
         return 'mecanico-dashboard';
-      case 5: // Asistente
+      case 5:
         return 'asistente-dashboard';
       default:
         return 'dashboard';
@@ -140,11 +132,9 @@ function App() {
   };
 
   const handleLoginSuccess = (userData) => {
-    console.log("Login exitoso, usuario:", userData);
     setIsAuthenticated(true);
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
-
     const rolId = getRoleId(userData);
     setCurrentPage(getInitialPage(rolId));
   };
@@ -163,15 +153,9 @@ function App() {
     }
   };
 
-  // ==========================================
-  // RENDERIZAR PÁGINA SEGÚN ROL Y PERMISOS
-  // ==========================================
   const renderCurrentPage = () => {
     const rolId = getRoleId(user);
 
-    // ==========================================
-    // PANEL CONDUCTOR (rol_id = 3)
-    // ==========================================
     if (rolId === 3) {
       switch (currentPage) {
         case 'conductor-dashboard':
@@ -191,34 +175,23 @@ function App() {
       }
     }
 
-    // ==========================================
-    // PANEL MECÁNICO (rol_id = 4)
-    // ==========================================
     if (rolId === 4) {
       switch (currentPage) {
         case 'mecanico-dashboard':
           return <MecanicoDashboardPage onNavigate={setCurrentPage} />;
-
         case 'mecanico-mantenimientos':
           return <MisMantencionesPage />;
-
         case 'licencias':
           return <MisLicenciasMecanicoPage />;
-
         case 'mis-reportes':
           return <MisReportesPage user={user} />;
-
         case 'perfil':
           return <MecanicoProfilePage onBack={setCurrentPage} />;
-
         default:
           return <MecanicoDashboardPage onNavigate={setCurrentPage} />;
       }
     }
 
-    // ==========================================
-    // PANEL ASISTENTE (rol_id = 5)
-    // ==========================================
     if (rolId === 5) {
       switch (currentPage) {
         case 'asistente-dashboard':
@@ -238,73 +211,49 @@ function App() {
       }
     }
 
-    // ==========================================
-    // ADMIN / GERENTE / RRHH (rol_id = 1, 2, 6)
-    // ==========================================
     switch (currentPage) {
       case 'dashboard':
         return <DashboardPage onNavigate={setCurrentPage} />;
-
       case 'roles':
         return <RolesPage />;
-
       case 'usuarios':
         return <UsersPage />;
-
       case 'empleados':
         return <EmployeesPage />;
-
       case 'conductores':
         return <ConductoresPage />;
-
       case 'asistentes':
         return <AsistentesPage />;
-
       case 'mecanicos':
         return <MecanicosPage />;
-
       case 'buses':
         return <BusesPage />;
-
       case 'rutas':
         return <RoutesPage />;
-
       case 'viajes':
         return <ViajesPage />;
-
       case 'mantenimientos':
         return <MantencionesPage />;
-
       case 'logistica':
         return <LogisticPage />;
-
       case 'turnos':
         return <TurnosPage />;
-
       case 'licencias':
         return <LicenciasPage />;
-
       case 'liquidaciones':
         return <LiquidacionesPage user={user} />;
-
-      // REPORTES: Admin (1), Gerente (2), RRHH (6)
       case 'reportes':
         return <ReportesPage user={user} />;
-
-      // MIS REPORTES: Todos los roles
       case 'mis-reportes':
         return <MisReportesPage user={user} />;
-
+      case 'analisis-buses':
+        return <AnalisisBusesPage />;
       default:
-        // Si por error cae aquí siendo mecánico, forzamos su dashboard
         if (rolId === 4) return <MecanicoDashboardPage onNavigate={setCurrentPage} />;
         return <DashboardPage onNavigate={setCurrentPage} />;
     }
   };
 
-  // ==========================================
-  // ESTADOS DE CARGA Y AUTENTICACIÓN
-  // ==========================================
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -324,9 +273,6 @@ function App() {
     );
   }
 
-  // ==========================================
-  // APLICACIÓN PRINCIPAL
-  // ==========================================
   return (
     <NotificationProvider>
       <MainLayout

@@ -45,8 +45,10 @@ class Bus extends Model
         'marca_carroceria',
         'modelo_carroceria',
         'proximo_mantenimiento_km',
-        'fecha_ultimo_mantenimiento',
         'fecha_proximo_mantenimiento',
+        // campos de tipo de servicio
+        'tipo_servicio',
+        'factor_tarifa',
     ];
 
     protected $casts = [
@@ -58,10 +60,11 @@ class Bus extends Model
         'anio' => 'integer',
         'capacidad_pasajeros' => 'integer',
         'kilometraje_original' => 'integer',
-        // nuevos cats
+        // nuevos casts
         'proximo_mantenimiento_km' => 'integer',
         'fecha_ultimo_mantenimiento' => 'date',
         'fecha_proximo_mantenimiento' => 'date',
+        'factor_tarifa' => 'decimal:1',
     ];
 
 
@@ -197,6 +200,7 @@ class Bus extends Model
             && !$this->revision_tecnica_vencida 
             && !$this->seguro_vencido;
     }
+    
     /**
      * verificar si necesita mantenimiento proximo
      */
@@ -229,6 +233,39 @@ class Bus extends Model
     public function requiereAsistente(): bool
     {
         return $this->tipo_bus === 'doble_piso';
+    }
+
+    /**
+     * Verificar si es un servicio premium (cama o premium)
+     */
+    public function esServicioPremium(): bool
+    {
+        return in_array($this->tipo_servicio, ['cama', 'premium']);
+    }
+
+    /**
+     * Obtener nombre descriptivo del tipo de servicio
+     */
+    public function getNombreTipoServicioAttribute(): string
+    {
+        $nombres = [
+            'clasico' => 'Clásico',
+            'semicama' => 'Semi Cama',
+            'cama' => 'Cama',
+            'premium' => 'Premium',
+        ];
+        return $nombres[$this->tipo_servicio] ?? 'Desconocido';
+    }
+
+    /**
+     * Calcular tarifa ajustada según tipo de servicio
+     *
+     * @param int|float $tarifaBase Tarifa base de la ruta
+     * @return int Tarifa final en CLP
+     */
+    public function calcularTarifa($tarifaBase): int
+    {
+        return (int) ($tarifaBase * $this->factor_tarifa);
     }
 
 
@@ -282,5 +319,29 @@ class Bus extends Model
                 $q->whereDate('vencimiento_seguro', '>=', Carbon::now())
                   ->orWhereNull('vencimiento_seguro');
             });
+    }
+
+    /**
+     * Scope para obtener buses por tipo de servicio
+     */
+    public function scopePorTipoServicio($query, $tipoServicio)
+    {
+        return $query->where('tipo_servicio', $tipoServicio);
+    }
+
+    /**
+     * Scope para obtener buses premium (cama y premium)
+     */
+    public function scopePremium($query)
+    {
+        return $query->whereIn('tipo_servicio', ['cama', 'premium']);
+    }
+
+    /**
+     * Scope para obtener buses económicos (clasico y semicama)
+     */
+    public function scopeEconomicos($query)
+    {
+        return $query->whereIn('tipo_servicio', ['clasico', 'semicama']);
     }
 }
