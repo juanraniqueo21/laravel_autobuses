@@ -17,10 +17,24 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // 1. Crear roles primero (si no existen)
-        $adminRol = Rol::firstOrCreate(
-            ['nombre' => 'Admin'],
-            ['descripcion' => 'Administrador del sistema']
-        );
+        $roles = [
+            ['nombre' => 'Admin', 'descripcion' => 'Administrador del sistema'],
+            ['nombre' => 'Gerente', 'descripcion' => 'Gestión y dirección de la operación'],
+            ['nombre' => 'Conductor', 'descripcion' => 'Rol para conductores'],
+            ['nombre' => 'Mecanico', 'descripcion' => 'Mantenimiento y soporte de flota'],
+            ['nombre' => 'Asistente', 'descripcion' => 'Asistente de abordo o apoyo'],
+            ['nombre' => 'RRHH', 'descripcion' => 'Recursos humanos'],
+        ];
+
+        $rolesCreados = [];
+        foreach ($roles as $rolData) {
+            $rolesCreados[$rolData['nombre']] = Rol::firstOrCreate(
+                ['nombre' => $rolData['nombre']],
+                ['descripcion' => $rolData['descripcion']]
+            );
+        }
+
+        $adminRol = $rolesCreados['Admin'];
 
         // 2. Crear usuario de prueba
         User::firstOrCreate(
@@ -37,9 +51,14 @@ class DatabaseSeeder extends Seeder
         );
 
         // 3. Ejecutar otros seeders
+        // Nota: el orden garantiza que los catálogos y buses existan antes de poblar viajes completos.
         $this->call([
             AfpSeeder::class,
             IsapresSeeder::class,
+            PersonalConductorSeeder::class,
+            CatalogosBusesSeeder::class,
+            BusSeeder::class,
+            DatosCompletosSeeder::class,
         ]);
     }
 }

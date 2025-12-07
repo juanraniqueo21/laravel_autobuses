@@ -23,7 +23,7 @@ class RutaController extends Controller
         $rutas = Ruta::with(['paradas'])
             ->orderBy('codigo_ruta')
             ->get();
-        
+
         return response()->json($rutas);
     }
 
@@ -33,11 +33,11 @@ class RutaController extends Controller
     public function show($id)
     {
         $ruta = Ruta::with(['paradas'])->find($id);
-        
+
         if (!$ruta) {
             return response()->json(['error' => 'Ruta no encontrada'], 404);
         }
-        
+
         return response()->json($ruta);
     }
 
@@ -53,6 +53,11 @@ class RutaController extends Controller
             'destino' => 'required|string|max:255',
             'descripcion' => 'nullable|string',
             'estado' => 'nullable|in:activa,inactiva,en_revision',
+            'distancia_km' => 'nullable|numeric|min:0',
+            'tiempo_estimado_minutos' => 'nullable|integer|min:0',
+            'tarifa_base_adulto' => 'nullable|integer|min:0',
+            'tarifa_base_estudiante' => 'nullable|integer|min:0',
+            'tarifa_base_tercera_edad' => 'nullable|integer|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -66,8 +71,11 @@ class RutaController extends Controller
             'destino' => $request->destino,
             'descripcion' => $request->descripcion,
             'estado' => $request->estado ?? 'activa',
-            'distancia_km' => 0, // Se calculará con las paradas
-            'tiempo_estimado_minutos' => 0, // Se calculará con las paradas
+            'distancia_km' => $request->distancia_km ?? 0, // Se recalculará con las paradas
+            'tiempo_estimado_minutos' => $request->tiempo_estimado_minutos ?? 0, // Se recalculará con las paradas
+            'tarifa_base_adulto' => $request->tarifa_base_adulto ?? 0,
+            'tarifa_base_estudiante' => $request->tarifa_base_estudiante ?? 0,
+            'tarifa_base_tercera_edad' => $request->tarifa_base_tercera_edad ?? 0,
         ]);
 
         return response()->json($ruta, 201);
@@ -79,7 +87,7 @@ class RutaController extends Controller
     public function update(Request $request, $id)
     {
         $ruta = Ruta::find($id);
-        
+
         if (!$ruta) {
             return response()->json(['error' => 'Ruta no encontrada'], 404);
         }
@@ -91,6 +99,11 @@ class RutaController extends Controller
             'destino' => 'sometimes|required|string|max:255',
             'descripcion' => 'nullable|string',
             'estado' => 'nullable|in:activa,inactiva,en_revision',
+            'distancia_km' => 'nullable|numeric|min:0',
+            'tiempo_estimado_minutos' => 'nullable|integer|min:0',
+            'tarifa_base_adulto' => 'nullable|integer|min:0',
+            'tarifa_base_estudiante' => 'nullable|integer|min:0',
+            'tarifa_base_tercera_edad' => 'nullable|integer|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -103,7 +116,12 @@ class RutaController extends Controller
             'origen',
             'destino',
             'descripcion',
-            'estado'
+            'estado',
+            'distancia_km',
+            'tiempo_estimado_minutos',
+            'tarifa_base_adulto',
+            'tarifa_base_estudiante',
+            'tarifa_base_tercera_edad'
         ]));
 
         return response()->json($ruta);
@@ -115,7 +133,7 @@ class RutaController extends Controller
     public function destroy($id)
     {
         $ruta = Ruta::find($id);
-        
+
         if (!$ruta) {
             return response()->json(['error' => 'Ruta no encontrada'], 404);
         }
@@ -128,7 +146,7 @@ class RutaController extends Controller
         }
 
         $ruta->delete();
-        
+
         return response()->json(['message' => 'Ruta eliminada exitosamente']);
     }
 
@@ -142,7 +160,7 @@ class RutaController extends Controller
     public function agregarParada(Request $request, $rutaId)
     {
         $ruta = Ruta::find($rutaId);
-        
+
         if (!$ruta) {
             return response()->json(['error' => 'Ruta no encontrada'], 404);
         }
@@ -257,7 +275,7 @@ class RutaController extends Controller
 
         // No permitir eliminar origen o destino si hay otras paradas
         $totalParadas = RutaParada::where('ruta_id', $rutaId)->count();
-        
+
         if ($totalParadas > 2 && ($parada->es_origen || $parada->es_destino)) {
             return response()->json([
                 'error' => 'No se puede eliminar el origen o destino mientras haya paradas intermedias'
@@ -278,7 +296,7 @@ class RutaController extends Controller
     public function guardarParadas(Request $request, $rutaId)
     {
         $ruta = Ruta::find($rutaId);
-        
+
         if (!$ruta) {
             return response()->json(['error' => 'Ruta no encontrada'], 404);
         }
@@ -336,7 +354,7 @@ class RutaController extends Controller
         }
     }
 
-    
+
 
     // ============================================
     // MÉTODOS AUXILIARES
@@ -348,7 +366,7 @@ class RutaController extends Controller
     private function recalcularTotalesRuta($rutaId)
     {
         $ruta = Ruta::find($rutaId);
-        
+
         if ($ruta) {
             $distanciaTotal = $ruta->calcularDistanciaTotal();
             $tiempoTotal = $ruta->calcularTiempoTotal();
@@ -368,7 +386,7 @@ class RutaController extends Controller
         $rutas = Ruta::activas()
             ->with(['paradas'])
             ->get();
-        
+
         return response()->json($rutas);
     }
 }
