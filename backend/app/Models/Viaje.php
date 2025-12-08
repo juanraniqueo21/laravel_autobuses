@@ -359,4 +359,93 @@ class Viaje extends Model
         $costoPorKm = $this->costo_por_km ?? $this->calcularCostoPorKm();
         return $costoPorKm !== null && $costoPorKm > 1000;
     }
+
+    // ============================================
+    // MÉTODOS DE ANÁLISIS GERENCIAL
+    // ============================================
+
+    /**
+     * Obtener tipo de servicio del bus
+     */
+    public function getTipoServicioAttribute()
+    {
+        return $this->bus?->tipo_servicio ?? 'clasico';
+    }
+
+    /**
+     * Obtener nombre del tipo de servicio
+     */
+    public function getNombreTipoServicioAttribute()
+    {
+        $tipos = [
+            'clasico' => 'Clásico',
+            'semicama' => 'Semicama',
+            'cama' => 'Cama',
+            'premium' => 'Premium',
+        ];
+
+        return $tipos[$this->tipo_servicio] ?? 'Clásico';
+    }
+
+    /**
+     * Calcular tasa de ocupación (%)
+     */
+    public function calcularTasaOcupacion(): float
+    {
+        $capacidad = $this->bus?->capacidad_pasajeros ?? 1;
+        $pasajeros = $this->pasajeros_transportados ?? $this->pasajeros ?? 0;
+
+        if ($capacidad == 0) {
+            return 0;
+        }
+
+        return round(($pasajeros / $capacidad) * 100, 2);
+    }
+
+    /**
+     * Calcular margen de ganancia (%)
+     */
+    public function calcularMargenGanancia(): float
+    {
+        $ingresos = $this->dinero_recaudado ?? 0;
+        $gastos = $this->costo_total ?? 0;
+
+        if ($ingresos == 0) {
+            return 0;
+        }
+
+        $ganancia = $ingresos - $gastos;
+        return round(($ganancia / $ingresos) * 100, 2);
+    }
+
+    /**
+     * Calcular diferencia de recaudación (%)
+     */
+    public function calcularDiferencia(): float
+    {
+        return $this->diferencia_porcentaje ?? 0;
+    }
+
+    /**
+     * Obtener kilómetros recorridos
+     */
+    public function calcularKilometrosRecorridos(): int
+    {
+        return $this->kilometros_recorridos ?? $this->ruta?->distancia_km ?? 0;
+    }
+
+    /**
+     * Calcular eficiencia de combustible (km/litro)
+     */
+    public function calcularEficienciaCombustible(): float
+    {
+        $km = $this->kilometros_recorridos ?? 0;
+        $litros = $this->combustible_litros ?? 0;
+
+        if ($litros == 0) {
+            return 0;
+        }
+
+        return round($km / $litros, 2);
+    }
 }
