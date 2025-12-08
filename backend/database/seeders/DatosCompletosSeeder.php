@@ -500,7 +500,12 @@ class DatosCompletosSeeder extends Seeder
                     $viajesCancelados++;
                 } else {
                     // RECAUDACIÓN
-                    $pasajeros = rand(25, 50);
+                    // 🔧 FIX: No exceder capacidad del bus
+                    $capacidadBus = $bus?->capacidad_pasajeros ?? 45;
+                    $tasaOcupacion = rand(55, 95) / 100; // 55% a 95% de ocupación
+                    $pasajeros = intval($capacidadBus * $tasaOcupacion);
+                    $pasajeros = max(1, min($pasajeros, $capacidadBus)); // Entre 1 y capacidad máxima
+
                     $tarifaBase = $ruta->tarifa_base_adulto;
                     $factorTarifa = $bus?->factor_tarifa ?? 1;
                     $tarifaAplicada = intval(round($tarifaBase * $factorTarifa));
@@ -516,7 +521,7 @@ class DatosCompletosSeeder extends Seeder
                         $viajesConAlerta++;
                     }
 
-                    // COSTOS
+                    // COSTOS REALISTAS
                     $distancia = $ruta->distancia_km ?: 10;
                     $consumoKm = $bus?->consumo_km ?? 2.8;
                     $litrosConsumidos = $distancia / $consumoKm;
@@ -524,7 +529,26 @@ class DatosCompletosSeeder extends Seeder
 
                     $costoMantencion = intval($distancia * ($bus?->costo_mantencion_km ?? 120));
                     $costoPeajes = rand(2000, 8000);
-                    $costoTotal = $costoCombustible + $costoMantencion + $costoPeajes;
+
+                    // 💰 NUEVOS COSTOS REALISTAS
+                    // Salarios proporcionales al viaje (considerando que un conductor gana ~$1,200,000/mes)
+                    // Promedio 60 viajes/mes por conductor = ~$20,000 por viaje
+                    $cantidadConductores = $turno->conductores()->count() ?: 1;
+                    $cantidadAsistentes = $turno->asistentes()->count() ?: 0;
+                    $costoSalarios = ($cantidadConductores * 20000) + ($cantidadAsistentes * 15000);
+
+                    // Depreciación del bus (valor ~$80,000,000 / 10 años / 365 días / 2 viajes por día = ~$11,000 por viaje)
+                    $costoDepreciacion = rand(8000, 14000);
+
+                    // Seguros (anual ~$2,400,000 / 365 días / 2 viajes = ~$3,300 por viaje)
+                    $costoSeguros = rand(2500, 4000);
+
+                    // Costos administrativos (oficinas, personal, sistemas, etc.)
+                    $costosAdministrativos = intval($dineroRecaudado * 0.08); // 8% de ingresos
+
+                    $costoTotal = $costoCombustible + $costoMantencion + $costoPeajes
+                                + $costoSalarios + $costoDepreciacion + $costoSeguros
+                                + $costosAdministrativos;
 
                     Viaje::create([
                         'asignacion_turno_id' => $turno->id,
