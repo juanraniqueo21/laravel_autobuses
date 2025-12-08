@@ -202,6 +202,12 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/ocupacion-por-tipo-servicio', [ReporteController::class, 'ocupacionPorTipoServicio']);
         Route::get('/resumen-ejecutivo', [ReporteController::class, 'resumenEjecutivo']);
 
+        // Análisis de mantenimientos
+        Route::get('/buses-con-mas-mantenimientos', [ReporteController::class, 'busesConMasMantenimientos']);
+        Route::get('/tipos-fallas-mas-comunes', [ReporteController::class, 'tiposFallasMasComunes']);
+        Route::get('/costos-mantenimiento-por-bus', [ReporteController::class, 'costosMantenimientoPorBus']);
+        Route::get('/buses-disponibles-emergencia', [ReporteController::class, 'busesDisponiblesEmergencia']);
+
         Route::get('/{id}', [ReporteController::class, 'show']);
         Route::post('/', [ReporteController::class, 'store']);
         Route::put('/{id}', [ReporteController::class, 'update']);
@@ -211,4 +217,4 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/{id}/descargar-documento', [ReporteController::class, 'descargarDocumento']);
     });
 
-}); // <-- aquí cierra el grupo protegido por jwt.auth
+});
