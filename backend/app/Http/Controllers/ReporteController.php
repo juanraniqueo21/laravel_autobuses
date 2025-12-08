@@ -253,4 +253,208 @@ class ReporteController extends Controller
         if(!$reporte->ruta_documento) return response()->json(['error' => 'No hay archivo'], 404);
         return response()->download(storage_path('app/public/' . $reporte->ruta_documento), $reporte->nombre_documento);
     }
+
+    // ============================================
+    // ANÁLISIS GERENCIAL - BUSINESS INTELLIGENCE
+    // ============================================
+
+    /**
+     * Análisis de rentabilidad por tipo de servicio
+     * Calcula ingresos, gastos, ganancia y margen por cada tipo de bus
+     *
+     * Parámetros opcionales:
+     * - fecha_inicio: filtrar desde fecha (YYYY-MM-DD)
+     * - fecha_fin: filtrar hasta fecha (YYYY-MM-DD)
+     */
+    public function rentabilidadPorTipoServicio(Request $request)
+    {
+        $query = DB::table('viajes')
+            ->join('asignaciones_turno', 'viajes.asignacion_turno_id', '=', 'asignaciones_turno.id')
+            ->join('buses', 'asignaciones_turno.bus_id', '=', 'buses.id')
+            ->where('viajes.estado', 'completado');
+
+        // Filtros de fecha
+        if ($request->has('fecha_inicio')) {
+            $query->where('viajes.fecha_hora_salida', '>=', $request->fecha_inicio);
+        }
+        if ($request->has('fecha_fin')) {
+            $query->where('viajes.fecha_hora_salida', '<=', $request->fecha_fin);
+        }
+
+        $resultados = $query
+            ->select(
+                'buses.tipo_servicio',
+                DB::raw('COUNT(viajes.id) as total_viajes'),
+                DB::raw('SUM(viajes.pasajeros) as total_pasajeros'),
+                DB::raw('SUM(viajes.dinero_recaudado) as total_ingresos'),
+                DB::raw('SUM(viajes.costo_total) as total_gastos'),
+                DB::raw('SUM(viajes.dinero_recaudado - viajes.costo_total) as ganancia_neta'),
+                DB::raw('ROUND(AVG((viajes.pasajeros * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_promedio'),
+                DB::raw('AVG(buses.capacidad_pasajeros) as capacidad_promedio')
+            )
+            ->groupBy('buses.tipo_servicio')
+            ->get();
+
+        // Calcular margen de ganancia % y formatear
+        $analisis = $resultados->map(function ($item) {
+            $margen = $item->total_ingresos > 0
+                ? round(($item->ganancia_neta / $item->total_ingresos) * 100, 2)
+                : 0;
+
+            return [
+                'tipo_servicio' => ucfirst($item->tipo_servicio),
+                'total_viajes' => (int) $item->total_viajes,
+                'total_pasajeros' => (int) $item->total_pasajeros,
+                'total_ingresos' => (int) $item->total_ingresos,
+                'total_gastos' => (int) $item->total_gastos,
+                'ganancia_neta' => (int) $item->ganancia_neta,
+                'margen_porcentaje' => $margen,
+                'tasa_ocupacion_promedio' => (float) $item->tasa_ocupacion_promedio,
+                'capacidad_promedio' => (float) $item->capacidad_promedio,
+            ];
+        });
+
+        return response()->json($analisis);
+    }
+
+    /**
+     * Análisis de ocupación por tipo de servicio
+     * Muestra tasas de ocupación (pasajeros vs capacidad)
+     *
+     * Parámetros opcionales:
+     * - fecha_inicio: filtrar desde fecha
+     * - fecha_fin: filtrar hasta fecha
+     */
+    public function ocupacionPorTipoServicio(Request $request)
+    {
+        $query = DB::table('viajes')
+            ->join('asignaciones_turno', 'viajes.asignacion_turno_id', '=', 'asignaciones_turno.id')
+            ->join('buses', 'asignaciones_turno.bus_id', '=', 'buses.id')
+            ->where('viajes.estado', 'completado');
+
+        // Filtros de fecha
+        if ($request->has('fecha_inicio')) {
+            $query->where('viajes.fecha_hora_salida', '>=', $request->fecha_inicio);
+        }
+        if ($request->has('fecha_fin')) {
+            $query->where('viajes.fecha_hora_salida', '<=', $request->fecha_fin);
+        }
+
+        $resultados = $query
+            ->select(
+                'buses.tipo_servicio',
+                DB::raw('COUNT(viajes.id) as total_viajes'),
+                DB::raw('ROUND(AVG((viajes.pasajeros * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_promedio'),
+                DB::raw('ROUND(MAX((viajes.pasajeros * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_maxima'),
+                DB::raw('ROUND(MIN((viajes.pasajeros * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_minima'),
+                DB::raw('ROUND(AVG(viajes.pasajeros), 2) as pasajeros_promedio'),
+                DB::raw('ROUND(AVG(buses.capacidad_pasajeros), 2) as capacidad_promedio')
+            )
+            ->groupBy('buses.tipo_servicio')
+            ->get();
+
+        $analisis = $resultados->map(function ($item) {
+            return [
+                'tipo_servicio' => ucfirst($item->tipo_servicio),
+                'total_viajes' => (int) $item->total_viajes,
+                'tasa_ocupacion_promedio' => (float) $item->tasa_ocupacion_promedio,
+                'tasa_ocupacion_maxima' => (float) $item->tasa_ocupacion_maxima,
+                'tasa_ocupacion_minima' => (float) $item->tasa_ocupacion_minima,
+                'pasajeros_promedio' => (float) $item->pasajeros_promedio,
+                'capacidad_promedio' => (float) $item->capacidad_promedio,
+            ];
+        });
+
+        return response()->json($analisis);
+    }
+
+    /**
+     * Resumen ejecutivo con KPIs principales
+     * Muestra métricas clave del negocio para la gerencia
+     *
+     * Parámetros opcionales:
+     * - fecha_inicio: filtrar desde fecha
+     * - fecha_fin: filtrar hasta fecha
+     */
+    public function resumenEjecutivo(Request $request)
+    {
+        $query = DB::table('viajes')
+            ->where('viajes.estado', 'completado');
+
+        // Filtros de fecha
+        if ($request->has('fecha_inicio')) {
+            $query->where('viajes.fecha_hora_salida', '>=', $request->fecha_inicio);
+        }
+        if ($request->has('fecha_fin')) {
+            $query->where('viajes.fecha_hora_salida', '<=', $request->fecha_fin);
+        }
+
+        // KPIs totales
+        $totales = $query
+            ->select(
+                DB::raw('COUNT(*) as total_viajes'),
+                DB::raw('SUM(pasajeros) as total_pasajeros'),
+                DB::raw('SUM(dinero_recaudado) as total_ingresos'),
+                DB::raw('SUM(costo_total) as total_gastos'),
+                DB::raw('SUM(dinero_recaudado - costo_total) as ganancia_neta'),
+                DB::raw('AVG(dinero_recaudado) as ingreso_promedio_viaje'),
+                DB::raw('AVG(pasajeros) as pasajeros_promedio_viaje')
+            )
+            ->first();
+
+        // Margen de ganancia %
+        $margen = $totales->total_ingresos > 0
+            ? round(($totales->ganancia_neta / $totales->total_ingresos) * 100, 2)
+            : 0;
+
+        // Viajes con alerta (diferencia > 10%)
+        $viajesConAlerta = DB::table('viajes')
+            ->where('viajes.estado', 'completado')
+            ->where('requiere_revision', true);
+
+        if ($request->has('fecha_inicio')) {
+            $viajesConAlerta->where('fecha_hora_salida', '>=', $request->fecha_inicio);
+        }
+        if ($request->has('fecha_fin')) {
+            $viajesConAlerta->where('fecha_hora_salida', '<=', $request->fecha_fin);
+        }
+
+        $totalViajesConAlerta = $viajesConAlerta->count();
+
+        // Viajes deficitarios (costo > ingreso)
+        $viajesDeficitarios = DB::table('viajes')
+            ->where('viajes.estado', 'completado')
+            ->whereRaw('costo_total > dinero_recaudado');
+
+        if ($request->has('fecha_inicio')) {
+            $viajesDeficitarios->where('fecha_hora_salida', '>=', $request->fecha_inicio);
+        }
+        if ($request->has('fecha_fin')) {
+            $viajesDeficitarios->where('fecha_hora_salida', '<=', $request->fecha_fin);
+        }
+
+        $totalViajesDeficitarios = $viajesDeficitarios->count();
+        $perdidaTotalDeficitarios = $viajesDeficitarios->sum(DB::raw('costo_total - dinero_recaudado'));
+
+        $resumen = [
+            // KPIs principales
+            'total_viajes' => (int) $totales->total_viajes,
+            'total_pasajeros' => (int) $totales->total_pasajeros,
+            'total_ingresos' => (int) $totales->total_ingresos,
+            'total_gastos' => (int) $totales->total_gastos,
+            'ganancia_neta' => (int) $totales->ganancia_neta,
+            'margen_porcentaje' => $margen,
+
+            // Promedios
+            'ingreso_promedio_viaje' => round($totales->ingreso_promedio_viaje, 0),
+            'pasajeros_promedio_viaje' => round($totales->pasajeros_promedio_viaje, 2),
+
+            // Alertas
+            'viajes_con_alerta' => $totalViajesConAlerta,
+            'viajes_deficitarios' => $totalViajesDeficitarios,
+            'perdida_total_deficitarios' => (int) $perdidaTotalDeficitarios,
+        ];
+
+        return response()->json($resumen);
+    }
 }
