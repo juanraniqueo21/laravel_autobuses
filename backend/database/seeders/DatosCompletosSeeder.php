@@ -11,8 +11,14 @@ use App\Models\Conductor;
 use App\Models\Asistente;
 use App\Models\Bus;
 use App\Models\Viaje;
+use App\Models\User;
+use App\Models\Empleado;
+use App\Models\Mecanico;
+use App\Models\Mantenimiento;
+use App\Models\Rol;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class DatosCompletosSeeder extends Seeder
 {
@@ -38,24 +44,34 @@ class DatosCompletosSeeder extends Seeder
         DB::beginTransaction();
 
         try {
-            // PASO 1: Rutas
+            // PASO 1: Mecánicos
             $this->command->newLine();
-            $this->command->info('📍 [1/4] Creando rutas del sur de Chile...');
+            $this->command->info('🔧 [1/6] Creando mecánicos con especialidades...');
+            $mecanicos = $this->crearMecanicos();
+
+            // PASO 2: Rutas
+            $this->command->newLine();
+            $this->command->info('📍 [2/6] Creando rutas del sur de Chile...');
             $rutas = $this->crearRutas();
 
-            // PASO 2: Turnos
+            // PASO 3: Turnos
             $this->command->newLine();
-            $this->command->info('📅 [2/4] Generando turnos con asignación de personal...');
+            $this->command->info('📅 [3/6] Generando turnos con asignación de personal...');
             $turnos = $this->crearTurnos($rutas);
 
-            // PASO 3: Viajes
+            // PASO 4: Viajes
             $this->command->newLine();
-            $this->command->info('🚌 [3/4] Creando viajes (algunos cancelados)...');
+            $this->command->info('🚌 [4/6] Creando viajes (algunos cancelados)...');
             $estadisticas = $this->crearViajes($turnos);
 
-            // PASO 4: Resumen
+            // PASO 5: Mantenimientos
             $this->command->newLine();
-            $this->mostrarResumen($rutas, $turnos, $estadisticas);
+            $this->command->info('🛠️  [5/6] Generando historial de mantenimientos...');
+            $estadisticasMantenimientos = $this->crearMantenimientos($mecanicos);
+
+            // PASO 6: Resumen
+            $this->command->newLine();
+            $this->mostrarResumen($rutas, $turnos, $estadisticas, $estadisticasMantenimientos);
 
             DB::commit();
 
@@ -606,7 +622,214 @@ class DatosCompletosSeeder extends Seeder
         return rand(80, 90) / 100; // -10 a -20%
     }
 
-    private function mostrarResumen($rutas, $turnos, $estadisticas): void
+    private function crearMecanicos()
+    {
+        $mecanicoRol = Rol::where('nombre', 'Mecanico')->first();
+
+        $mecanicosData = [
+            ['nombre' => 'Pedro', 'apellido' => 'González', 'rut' => '14502421', 'dv' => '8', 'especialidades' => ['motor_diesel', 'transmision']],
+            ['nombre' => 'Luis', 'apellido' => 'Martínez', 'rut' => '6687585', 'dv' => '7', 'especialidades' => ['sistema_electrico', 'aire_acondicionado']],
+            ['nombre' => 'Roberto', 'apellido' => 'Silva', 'rut' => '7290225', 'dv' => '4', 'especialidades' => ['frenos', 'suspension']],
+            ['nombre' => 'Fernando', 'apellido' => 'Vásquez', 'rut' => '11249647', 'dv' => '5', 'especialidades' => ['motor_diesel', 'sistema_hidraulico']],
+            ['nombre' => 'Mauricio', 'apellido' => 'Rojas', 'rut' => '12565857', 'dv' => '1', 'especialidades' => ['carroceria', 'neumaticos']],
+            ['nombre' => 'Raúl', 'apellido' => 'Fernández', 'rut' => '10002376', 'dv' => '8', 'especialidades' => ['sistema_electrico', 'transmision']],
+            ['nombre' => 'Marcos', 'apellido' => 'Pérez', 'rut' => '12943280', 'dv' => '2', 'especialidades' => ['frenos', 'suspension', 'neumaticos']],
+            ['nombre' => 'Héctor', 'apellido' => 'Campos', 'rut' => '11927186', 'dv' => 'K', 'especialidades' => ['motor_diesel', 'sistema_hidraulico', 'transmision']],
+        ];
+
+        $mecanicos = collect();
+
+        foreach ($mecanicosData as $index => $persona) {
+            $user = User::firstOrCreate(
+                ['email' => strtolower($persona['nombre']) . '.' . strtolower($persona['apellido']) . '@regionalsur.cl'],
+                [
+                    'nombre' => $persona['nombre'],
+                    'apellido' => $persona['apellido'],
+                    'rut' => $persona['rut'],
+                    'rut_verificador' => $persona['dv'],
+                    'password' => Hash::make('123456'),
+                    'rol_id' => $mecanicoRol?->id,
+                    'estado' => 'activo',
+                ]
+            );
+
+            $empleado = Empleado::firstOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'numero_empleado' => Empleado::generarNumeroEmpleado(),
+                    'numero_funcional' => 'M-' . str_pad((string)($index + 1), 4, '0', STR_PAD_LEFT),
+                    'fecha_contratacion' => now()->subMonths(rand(12, 60))->format('Y-m-d'),
+                    'tipo_contrato' => 'indefinido',
+                    'salario_base' => rand(950000, 1400000),
+                    'afp_id' => rand(1, 7),
+                    'tipo_fonasa' => ['A', 'B', 'C', 'D'][rand(0, 3)],
+                    'isapre_id' => rand(1, 7),
+                    'numero_seguro_cesantia' => 'SEC-M-' . str_pad((string)($index + 1), 5, '0', STR_PAD_LEFT),
+                    'estado' => 'activo',
+                    'ciudad' => ['Temuco', 'Valdivia', 'Osorno', 'Puerto Montt'][rand(0, 3)],
+                    'direccion' => 'Taller Mecánico ' . ($index + 1),
+                    'telefono_personal' => '9 ' . rand(5000, 9999) . ' ' . rand(5000, 9999),
+                    'fecha_nacimiento' => now()->subYears(rand(28, 55))->startOfMonth()->format('Y-m-d'),
+                    'genero' => 'masculino',
+                    'contacto_emergencia_nombre' => 'Contacto de ' . $persona['nombre'],
+                    'contacto_emergencia_telefono' => '9 ' . rand(5000, 9999) . ' ' . rand(5000, 9999),
+                    'banco' => ['BancoEstado', 'Banco de Chile', 'Santander', 'BCI'][rand(0, 3)],
+                    'tipo_cuenta' => ['vista', 'corriente'][rand(0, 1)],
+                    'numero_cuenta' => '30' . str_pad((string)($index + 1), 8, '0', STR_PAD_LEFT),
+                ]
+            );
+
+            $mecanico = Mecanico::firstOrCreate(
+                ['empleado_id' => $empleado->id],
+                [
+                    'numero_certificacion' => 'CERT-MEC-' . str_pad((string)($index + 1), 4, '0', STR_PAD_LEFT),
+                    'especialidad' => $persona['especialidades'],
+                    'fecha_certificacion' => now()->subYears(rand(2, 8))->format('Y-m-d'),
+                    'estado' => 'activo',
+                    'fecha_examen_ocupacional' => now()->subMonths(rand(1, 11))->format('Y-m-d'),
+                ]
+            );
+
+            $mecanicos->push($mecanico);
+
+            $especialidadesStr = implode(', ', $persona['especialidades']);
+            $this->command->info("   ✓ {$persona['nombre']} {$persona['apellido']} - Especialidades: {$especialidadesStr}");
+        }
+
+        $this->command->info("   ✅ {$mecanicos->count()} mecánicos creados");
+        return $mecanicos;
+    }
+
+    private function crearMantenimientos($mecanicos)
+    {
+        if ($mecanicos->isEmpty()) {
+            $this->command->warn('   ⚠️  No hay mecánicos. No se pueden crear mantenimientos.');
+            return ['total' => 0, 'preventivos' => 0, 'correctivos' => 0, 'en_proceso' => 0];
+        }
+
+        $buses = Bus::all();
+
+        if ($buses->isEmpty()) {
+            $this->command->warn('   ⚠️  No hay buses. No se pueden crear mantenimientos.');
+            return ['total' => 0, 'preventivos' => 0, 'correctivos' => 0, 'en_proceso' => 0];
+        }
+
+        $tiposMantenimiento = [
+            'preventivo' => [
+                'tipos_falla' => ['Cambio de aceite', 'Revisión general', 'Cambio de filtros', 'Inspección de frenos', 'Alineación y balanceo'],
+                'costo_min' => 80000,
+                'costo_max' => 250000,
+                'duracion_min' => 1,
+                'duracion_max' => 2,
+            ],
+            'correctivo' => [
+                'tipos_falla' => [
+                    'Falla en motor' => ['motor_diesel'],
+                    'Problema eléctrico' => ['sistema_electrico'],
+                    'Falla en transmisión' => ['transmision'],
+                    'Problema de frenos' => ['frenos'],
+                    'Falla en suspensión' => ['suspension'],
+                    'Sistema hidráulico defectuoso' => ['sistema_hidraulico'],
+                    'Aire acondicionado no funciona' => ['aire_acondicionado'],
+                    'Daño en carrocería' => ['carroceria'],
+                    'Neumáticos desgastados' => ['neumaticos'],
+                ],
+                'costo_min' => 150000,
+                'costo_max' => 2500000,
+                'duracion_min' => 1,
+                'duracion_max' => 7,
+            ],
+        ];
+
+        $mantenimientosCreados = 0;
+        $preventivos = 0;
+        $correctivos = 0;
+        $enProceso = 0;
+
+        foreach ($buses as $bus) {
+            // Cada bus tiene entre 2 y 6 mantenimientos en el período
+            $cantidadMantenimientos = rand(2, 6);
+
+            for ($i = 0; $i < $cantidadMantenimientos; $i++) {
+                $tipo = rand(1, 100) <= 60 ? 'preventivo' : 'correctivo'; // 60% preventivo, 40% correctivo
+                $config = $tiposMantenimiento[$tipo];
+
+                // Fecha de inicio aleatoria dentro del período
+                $diasAtras = rand(0, $this->fechaInicio->diffInDays($this->fechaFin));
+                $fechaInicio = $this->fechaInicio->copy()->addDays($diasAtras);
+
+                // Duración del mantenimiento
+                $duracionDias = rand($config['duracion_min'], $config['duracion_max']);
+                $fechaTermino = $fechaInicio->copy()->addDays($duracionDias);
+
+                // Determinar estado
+                $hoy = Carbon::now();
+                if ($fechaInicio->isFuture()) {
+                    $estado = 'pendiente';
+                } elseif ($fechaInicio->isPast() && $fechaTermino->isFuture()) {
+                    $estado = 'en_proceso';
+                    $enProceso++;
+                } else {
+                    $estado = 'completado';
+                }
+
+                // Seleccionar descripción y mecánico apropiado
+                if ($tipo === 'preventivo') {
+                    $descripcion = $config['tipos_falla'][array_rand($config['tipos_falla'])];
+                    $mecanico = $mecanicos->random();
+                    $preventivos++;
+                } else {
+                    $descripcionKey = array_rand($config['tipos_falla']);
+                    $descripcion = $descripcionKey;
+                    $especialidadRequerida = $config['tipos_falla'][$descripcionKey];
+
+                    // Buscar mecánico con la especialidad
+                    $mecanicoEspecializado = $mecanicos->first(function($mec) use ($especialidadRequerida) {
+                        return !empty(array_intersect($mec->especialidad ?? [], $especialidadRequerida));
+                    });
+
+                    $mecanico = $mecanicoEspecializado ?? $mecanicos->random();
+                    $correctivos++;
+                }
+
+                // Costo
+                $costoTotal = rand($config['costo_min'], $config['costo_max']);
+
+                // Repuestos (solo para completados)
+                $repuestos = $estado === 'completado' ? [
+                    ['nombre' => 'Filtro de aceite', 'cantidad' => rand(1, 2), 'costo' => rand(8000, 15000)],
+                    ['nombre' => 'Filtro de aire', 'cantidad' => 1, 'costo' => rand(12000, 20000)],
+                ] : null;
+
+                Mantenimiento::create([
+                    'bus_id' => $bus->id,
+                    'mecanico_id' => $mecanico->id,
+                    'tipo_mantenimiento' => $tipo,
+                    'descripcion' => $descripcion,
+                    'fecha_inicio' => $fechaInicio->format('Y-m-d'),
+                    'fecha_termino' => $estado === 'completado' ? $fechaTermino->format('Y-m-d') : null,
+                    'costo_total' => $estado === 'completado' ? $costoTotal : null,
+                    'estado' => $estado,
+                    'repuestos_utilizados' => $repuestos,
+                    'observaciones' => $estado === 'en_proceso' ? 'Mantenimiento actualmente en curso' : null,
+                ]);
+
+                $mantenimientosCreados++;
+            }
+        }
+
+        $this->command->info("   ✓ {$mantenimientosCreados} mantenimientos creados");
+        $this->command->info("   ✓ {$preventivos} preventivos, {$correctivos} correctivos, {$enProceso} en proceso");
+
+        return [
+            'total' => $mantenimientosCreados,
+            'preventivos' => $preventivos,
+            'correctivos' => $correctivos,
+            'en_proceso' => $enProceso,
+        ];
+    }
+
+    private function mostrarResumen($rutas, $turnos, $estadisticas, $estadisticasMantenimientos = null): void
     {
         $this->command->newLine();
         $this->command->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -619,6 +842,15 @@ class DatosCompletosSeeder extends Seeder
         $this->command->info("   ❌ Viajes cancelados: {$estadisticas['cancelados']}");
         $this->command->info("   ⚠️  Viajes con revisión: {$estadisticas['con_alerta']}");
         $this->command->info("   💰 Viajes con pérdida: {$estadisticas['ineficientes']}");
+
+        if ($estadisticasMantenimientos) {
+            $this->command->newLine();
+            $this->command->info("   🔧 Mantenimientos totales: {$estadisticasMantenimientos['total']}");
+            $this->command->info("   🛡️  Preventivos: {$estadisticasMantenimientos['preventivos']}");
+            $this->command->info("   🔨 Correctivos: {$estadisticasMantenimientos['correctivos']}");
+            $this->command->info("   ⚙️  En proceso: {$estadisticasMantenimientos['en_proceso']}");
+        }
+
         $this->command->newLine();
     }
 }
