@@ -22,17 +22,26 @@ export default function AnalisisBusesPage() {
       if (fechaInicio) params.fecha_inicio = fechaInicio;
       if (fechaFin) params.fecha_fin = fechaFin;
 
+      console.log('🔍 Iniciando carga de datos...'); // ← AGREGADO
+
       const [rentData, ocupData, resData] = await Promise.all([
         fetchRentabilidadPorTipoServicio(params),
         fetchOcupacionPorTipoServicio(params),
         fetchResumenEjecutivo(params)
       ]);
 
+      console.log('📊 Datos recibidos:');          // ← AGREGADO
+      console.log('Rentabilidad:', rentData);      // ← AGREGADO
+      console.log('Ocupación:', ocupData);         // ← AGREGADO
+      console.log('Resumen:', resData);            // ← AGREGADO
+
       setRentabilidad(rentData || []);
       setOcupacion(ocupData || []);
       setResumen(resData);
+
+      console.log('✅ Estados actualizados');      // ← AGREGADO
     } catch (error) {
-      console.error('Error cargando análisis:', error);
+      console.error('❌ Error cargando análisis:', error); // actualizado con el emoji
     } finally {
       setLoading(false);
     }
@@ -120,25 +129,25 @@ export default function AnalisisBusesPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <MetricCard
             title="Total Viajes"
-            value={resumen.totales.viajes.toLocaleString()}
+            value={resumen.total_viajes.toLocaleString()}
             icon={TrendingUp}
             color="blue"
           />
           <MetricCard
             title="Total Pasajeros"
-            value={resumen.totales.pasajeros.toLocaleString()}
+            value={resumen.total_pasajeros.toLocaleString()}
             icon={Users}
             color="green"
           />
           <MetricCard
             title="Ingresos Totales"
-            value={formatCurrency(resumen.totales.ingresos)}
+            value={formatCurrency(resumen.total_ingresos)}
             icon={DollarSign}
             color="indigo"
           />
           <MetricCard
             title="Ganancia Neta"
-            value={formatCurrency(resumen.totales.ganancia_neta)}
+            value={formatCurrency(resumen.ganancia_neta)}
             icon={DollarSign}
             color="emerald"
           />
@@ -170,18 +179,18 @@ export default function AnalisisBusesPage() {
               {rentabilidad.map((item) => (
                 <tr key={item.tipo_servicio} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${getTipoServicioColor(item.tipo_servicio)}`}>
-                      {getTipoServicioLabel(item.tipo_servicio)} ({item.factor_tarifa}x)
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${getTipoServicioColor(item.tipo_servicio.toLowerCase())}`}>
+                      {item.tipo_servicio}
                     </span>
                   </td>
                   <td className="px-4 py-4 text-right font-medium text-gray-900">{item.total_viajes}</td>
                   <td className="px-4 py-4 text-right text-gray-700">{item.total_pasajeros.toLocaleString()}</td>
-                  <td className="px-4 py-4 text-right font-semibold text-green-700">{formatCurrency(item.ingresos_totales)}</td>
-                  <td className="px-4 py-4 text-right text-red-600">{formatCurrency(item.gastos_combustible)}</td>
+                  <td className="px-4 py-4 text-right font-semibold text-green-700">{formatCurrency(item.total_ingresos)}</td>
+                  <td className="px-4 py-4 text-right text-red-600">{formatCurrency(item.total_gastos)}</td>
                   <td className="px-4 py-4 text-right font-bold text-emerald-700">{formatCurrency(item.ganancia_neta)}</td>
                   <td className="px-4 py-4 text-right">
-                    <span className={`px-2 py-1 rounded text-sm font-bold ${item.margen_ganancia >= 50 ? 'bg-green-100 text-green-800' : item.margen_ganancia >= 30 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
-                      {item.margen_ganancia.toFixed(1)}%
+                    <span className={`px-2 py-1 rounded text-sm font-bold ${item.margen_porcentaje >= 50 ? 'bg-green-100 text-green-800' : item.margen_porcentaje >= 30 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                      {item.margen_porcentaje.toFixed(1)}%
                     </span>
                   </td>
                   <td className="px-4 py-4 text-right">
@@ -212,24 +221,24 @@ export default function AnalisisBusesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {ocupacion.map((item) => (
             <div key={item.tipo_servicio} className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow">
-              <div className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase mb-4 border ${getTipoServicioColor(item.tipo_servicio)}`}>
-                {getTipoServicioLabel(item.tipo_servicio)}
+              <div className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase mb-4 border ${getTipoServicioColor(item.tipo_servicio.toLowerCase())}`}>
+                {item.tipo_servicio}
               </div>
 
               <div className="space-y-3">
                 <div>
                   <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Tasa Ocupación</div>
-                  <div className="text-2xl font-bold text-gray-900">{item.tasa_ocupacion.toFixed(1)}%</div>
+                  <div className="text-2xl font-bold text-gray-900">{item.tasa_ocupacion_promedio.toFixed(1)}%</div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
                   <div>
                     <div className="text-xs text-gray-500">Máxima</div>
-                    <div className="text-sm font-semibold text-green-700">{item.ocupacion_maxima.toFixed(1)}%</div>
+                    <div className="text-sm font-semibold text-green-700">{item.tasa_ocupacion_maxima.toFixed(1)}%</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-500">Mínima</div>
-                    <div className="text-sm font-semibold text-red-700">{item.ocupacion_minima.toFixed(1)}%</div>
+                    <div className="text-sm font-semibold text-red-700">{item.tasa_ocupacion_minima.toFixed(1)}%</div>
                   </div>
                 </div>
 

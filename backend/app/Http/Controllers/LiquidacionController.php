@@ -287,8 +287,10 @@ class LiquidacionController extends Controller
         if ($empleado->conductor) {
             $conductorId = $empleado->conductor->id;
 
-            // Buscamos viajes completados en el periodo
-            $viajes = Viaje::where('conductor_id', $conductorId)
+            // ✅ Los conductores están relacionados a través de asignaciones_turno -> turno_conductores
+            $viajes = Viaje::whereHas('asignacionTurno.conductores', function ($query) use ($conductorId) {
+                    $query->where('conductor_id', $conductorId);
+                })
                 ->whereBetween('fecha_hora_salida', [$desde, $hasta])
                 ->where('estado', 'completado')
                 ->get();
