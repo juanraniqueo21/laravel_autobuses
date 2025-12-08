@@ -1339,7 +1339,7 @@ export const fetchRentabilidadPorTipoServicio = async (params = {}) => {
   const response = await fetch(url, fetchOptions());
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
-  return result.data;
+  return result;
 };
 
 /**
@@ -1354,7 +1354,7 @@ export const fetchOcupacionPorTipoServicio = async (params = {}) => {
   const response = await fetch(url, fetchOptions());
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
-  return result.data;
+  return result;
 };
 
 /**
@@ -1369,5 +1369,5 @@ export const fetchResumenEjecutivo = async (params = {}) => {
   const response = await fetch(url, fetchOptions());
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
-  return result.data;
+  return result;
 };
