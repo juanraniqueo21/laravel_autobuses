@@ -457,4 +457,277 @@ class ReporteController extends Controller
 
         return response()->json($resumen);
     }
+
+    // ============================================
+    // ANÁLISIS DE MANTENIMIENTOS
+    // ============================================
+
+    /**
+     * Buses con más mantenimientos
+     * Top 10 buses que han requerido más mantenimientos
+     *
+     * Parámetros opcionales:
+     * - fecha_inicio: filtrar desde fecha
+     * - fecha_fin: filtrar hasta fecha
+     * - tipo_mantenimiento: 'preventivo' o 'correctivo'
+     */
+    public function busesConMasMantenimientos(Request $request)
+    {
+        $query = DB::table('mantenimientos')
+            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+            ->select(
+                'buses.id',
+                'buses.patente',
+                'buses.numero_bus',
+                'buses.marca',
+                'buses.modelo',
+                'buses.tipo_servicio',
+                'buses.estado as estado_bus',
+                DB::raw('COUNT(mantenimientos.id) as total_mantenimientos'),
+                DB::raw('SUM(CASE WHEN mantenimientos.tipo_mantenimiento = "preventivo" THEN 1 ELSE 0 END) as preventivos'),
+                DB::raw('SUM(CASE WHEN mantenimientos.tipo_mantenimiento = "correctivo" THEN 1 ELSE 0 END) as correctivos'),
+                DB::raw('SUM(CASE WHEN mantenimientos.estado = "en_proceso" THEN 1 ELSE 0 END) as en_proceso'),
+                DB::raw('COALESCE(SUM(mantenimientos.costo_total), 0) as costo_total_mantenimientos')
+            );
+
+        // Filtros de fecha
+        if ($request->has('fecha_inicio')) {
+            $query->where('mantenimientos.fecha_inicio', '>=', $request->fecha_inicio);
+        }
+        if ($request->has('fecha_fin')) {
+            $query->where('mantenimientos.fecha_inicio', '<=', $request->fecha_fin);
+        }
+        if ($request->has('tipo_mantenimiento')) {
+            $query->where('mantenimientos.tipo_mantenimiento', $request->tipo_mantenimiento);
+        }
+
+        $resultados = $query
+            ->groupBy('buses.id', 'buses.patente', 'buses.numero_bus', 'buses.marca', 'buses.modelo', 'buses.tipo_servicio', 'buses.estado')
+            ->orderByDesc('total_mantenimientos')
+            ->limit(10)
+            ->get();
+
+        $analisis = $resultados->map(function ($item) {
+            return [
+                'bus_id' => $item->id,
+                'patente' => $item->patente,
+                'numero_bus' => $item->numero_bus,
+                'marca' => $item->marca,
+                'modelo' => $item->modelo,
+                'tipo_servicio' => ucfirst($item->tipo_servicio),
+                'estado_bus' => $item->estado_bus,
+                'total_mantenimientos' => (int) $item->total_mantenimientos,
+                'preventivos' => (int) $item->preventivos,
+                'correctivos' => (int) $item->correctivos,
+                'en_proceso' => (int) $item->en_proceso,
+                'costo_total' => (int) $item->costo_total_mantenimientos,
+            ];
+        });
+
+        return response()->json($analisis);
+    }
+
+    /**
+     * Tipos de fallas más comunes
+     * Análisis de las descripciones de mantenimientos correctivos
+     *
+     * Parámetros opcionales:
+     * - fecha_inicio: filtrar desde fecha
+     * - fecha_fin: filtrar hasta fecha
+     */
+    public function tiposFallasMasComunes(Request $request)
+    {
+        $query = DB::table('mantenimientos')
+            ->where('tipo_mantenimiento', 'correctivo')
+            ->whereNotNull('descripcion');
+
+        // Filtros de fecha
+        if ($request->has('fecha_inicio')) {
+            $query->where('fecha_inicio', '>=', $request->fecha_inicio);
+        }
+        if ($request->has('fecha_fin')) {
+            $query->where('fecha_inicio', '<=', $request->fecha_fin);
+        }
+
+        $resultados = $query
+            ->select(
+                'descripcion',
+                DB::raw('COUNT(*) as cantidad'),
+                DB::raw('COALESCE(AVG(costo_total), 0) as costo_promedio'),
+                DB::raw('COALESCE(MIN(costo_total), 0) as costo_minimo'),
+                DB::raw('COALESCE(MAX(costo_total), 0) as costo_maximo')
+            )
+            ->groupBy('descripcion')
+            ->orderByDesc('cantidad')
+            ->get();
+
+        $analisis = $resultados->map(function ($item) {
+            return [
+                'tipo_falla' => $item->descripcion,
+                'cantidad' => (int) $item->cantidad,
+                'costo_promedio' => (int) $item->costo_promedio,
+                'costo_minimo' => (int) $item->costo_minimo,
+                'costo_maximo' => (int) $item->costo_maximo,
+            ];
+        });
+
+        return response()->json($analisis);
+    }
+
+    /**
+     * Costos de mantenimiento por bus
+     * Análisis detallado de costos de mantenimiento
+     *
+     * Parámetros opcionales:
+     * - fecha_inicio: filtrar desde fecha
+     * - fecha_fin: filtrar hasta fecha
+     */
+    public function costosMantenimientoPorBus(Request $request)
+    {
+        $query = DB::table('mantenimientos')
+            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+            ->whereNotNull('mantenimientos.costo_total')
+            ->where('mantenimientos.estado', 'completado');
+
+        // Filtros de fecha
+        if ($request->has('fecha_inicio')) {
+            $query->where('mantenimientos.fecha_inicio', '>=', $request->fecha_inicio);
+        }
+        if ($request->has('fecha_fin')) {
+            $query->where('mantenimientos.fecha_inicio', '<=', $request->fecha_fin);
+        }
+
+        $resultados = $query
+            ->select(
+                'buses.id',
+                'buses.patente',
+                'buses.numero_bus',
+                'buses.marca',
+                'buses.modelo',
+                'buses.tipo_servicio',
+                'buses.anio_fabricacion',
+                DB::raw('COUNT(mantenimientos.id) as total_mantenimientos'),
+                DB::raw('SUM(mantenimientos.costo_total) as costo_total'),
+                DB::raw('AVG(mantenimientos.costo_total) as costo_promedio'),
+                DB::raw('MAX(mantenimientos.costo_total) as costo_maximo')
+            )
+            ->groupBy('buses.id', 'buses.patente', 'buses.numero_bus', 'buses.marca', 'buses.modelo', 'buses.tipo_servicio', 'buses.anio_fabricacion')
+            ->orderByDesc('costo_total')
+            ->get();
+
+        $analisis = $resultados->map(function ($item) {
+            $edadBus = now()->year - $item->anio_fabricacion;
+
+            return [
+                'bus_id' => $item->id,
+                'patente' => $item->patente,
+                'numero_bus' => $item->numero_bus,
+                'marca' => $item->marca,
+                'modelo' => $item->modelo,
+                'tipo_servicio' => ucfirst($item->tipo_servicio),
+                'edad_anios' => $edadBus,
+                'total_mantenimientos' => (int) $item->total_mantenimientos,
+                'costo_total' => (int) $item->costo_total,
+                'costo_promedio' => (int) $item->costo_promedio,
+                'costo_maximo' => (int) $item->costo_maximo,
+            ];
+        });
+
+        return response()->json($analisis);
+    }
+
+    /**
+     * Buses disponibles para activación de emergencia
+     * Buses en mantenimiento que podrían activarse en caso de urgencia
+     * Se consideran activables los mantenimientos preventivos o correctivos menores
+     */
+    public function busesDisponiblesEmergencia(Request $request)
+    {
+        $hoy = now()->format('Y-m-d');
+
+        // Buses actualmente en mantenimiento
+        $busesEnMantenimiento = DB::table('mantenimientos')
+            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+            ->leftJoin('mecanicos', 'mantenimientos.mecanico_id', '=', 'mecanicos.id')
+            ->leftJoin('empleados', 'mecanicos.empleado_id', '=', 'empleados.id')
+            ->leftJoin('users', 'empleados.user_id', '=', 'users.id')
+            ->where('mantenimientos.estado', 'en_proceso')
+            ->where('mantenimientos.fecha_inicio', '<=', $hoy)
+            ->where(function($query) use ($hoy) {
+                $query->whereNull('mantenimientos.fecha_termino')
+                      ->orWhere('mantenimientos.fecha_termino', '>=', $hoy);
+            })
+            ->select(
+                'buses.id as bus_id',
+                'buses.patente',
+                'buses.numero_bus',
+                'buses.marca',
+                'buses.modelo',
+                'buses.tipo_servicio',
+                'buses.capacidad_pasajeros',
+                'mantenimientos.id as mantenimiento_id',
+                'mantenimientos.tipo_mantenimiento',
+                'mantenimientos.descripcion',
+                'mantenimientos.fecha_inicio',
+                'mantenimientos.fecha_termino',
+                DB::raw('CONCAT(users.nombre, " ", users.apellido) as mecanico_asignado')
+            )
+            ->get();
+
+        // Clasificar por prioridad de activación
+        $analisis = $busesEnMantenimiento->map(function ($item) {
+            $esPreventivo = $item->tipo_mantenimiento === 'preventivo';
+            $descripcionLower = strtolower($item->descripcion ?? '');
+
+            // Determinar si es activable en emergencia
+            $esMantenimientoMenor = $esPreventivo ||
+                str_contains($descripcionLower, 'cambio de aceite') ||
+                str_contains($descripcionLower, 'filtros') ||
+                str_contains($descripcionLower, 'revisión') ||
+                str_contains($descripcionLower, 'inspección') ||
+                str_contains($descripcionLower, 'alineación') ||
+                str_contains($descripcionLower, 'neumáticos');
+
+            // Determinar prioridad
+            if ($esPreventivo) {
+                $prioridad = 'baja';
+                $activable = true;
+            } elseif ($esMantenimientoMenor) {
+                $prioridad = 'media';
+                $activable = true;
+            } else {
+                $prioridad = 'alta';
+                $activable = false;
+            }
+
+            $diasEnMantenimiento = now()->diffInDays($item->fecha_inicio);
+
+            return [
+                'bus_id' => $item->bus_id,
+                'patente' => $item->patente,
+                'numero_bus' => $item->numero_bus,
+                'marca' => $item->marca,
+                'modelo' => $item->modelo,
+                'tipo_servicio' => ucfirst($item->tipo_servicio),
+                'capacidad_pasajeros' => $item->capacidad_pasajeros,
+                'mantenimiento_id' => $item->mantenimiento_id,
+                'tipo_mantenimiento' => ucfirst($item->tipo_mantenimiento),
+                'descripcion' => $item->descripcion,
+                'fecha_inicio' => $item->fecha_inicio,
+                'fecha_termino_estimada' => $item->fecha_termino,
+                'dias_en_mantenimiento' => $diasEnMantenimiento,
+                'mecanico_asignado' => $item->mecanico_asignado,
+                'prioridad_mantenimiento' => $prioridad,
+                'activable_emergencia' => $activable,
+            ];
+        });
+
+        // Ordenar: primero los activables, luego por prioridad
+        $analisis = $analisis->sortBy([
+            ['activable_emergencia', 'desc'],
+            ['prioridad_mantenimiento', 'asc'],
+        ])->values();
+
+        return response()->json($analisis);
+    }
 }
