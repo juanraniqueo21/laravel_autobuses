@@ -285,11 +285,11 @@ class ReporteController extends Controller
             ->select(
                 'buses.tipo_servicio',
                 DB::raw('COUNT(viajes.id) as total_viajes'),
-                DB::raw('SUM(viajes.pasajeros) as total_pasajeros'),
+                DB::raw('SUM(viajes.pasajeros_transportados) as total_pasajeros'),
                 DB::raw('SUM(viajes.dinero_recaudado) as total_ingresos'),
                 DB::raw('SUM(viajes.costo_total) as total_gastos'),
                 DB::raw('SUM(viajes.dinero_recaudado - viajes.costo_total) as ganancia_neta'),
-                DB::raw('ROUND(AVG((viajes.pasajeros * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_promedio'),
+                DB::raw('ROUND(AVG((viajes.pasajeros_transportados * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_promedio'),
                 DB::raw('AVG(buses.capacidad_pasajeros) as capacidad_promedio')
             )
             ->groupBy('buses.tipo_servicio')
@@ -344,10 +344,10 @@ class ReporteController extends Controller
             ->select(
                 'buses.tipo_servicio',
                 DB::raw('COUNT(viajes.id) as total_viajes'),
-                DB::raw('ROUND(AVG((viajes.pasajeros * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_promedio'),
-                DB::raw('ROUND(MAX((viajes.pasajeros * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_maxima'),
-                DB::raw('ROUND(MIN((viajes.pasajeros * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_minima'),
-                DB::raw('ROUND(AVG(viajes.pasajeros), 2) as pasajeros_promedio'),
+                DB::raw('ROUND(AVG((viajes.pasajeros_transportados * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_promedio'),
+                DB::raw('ROUND(MAX((viajes.pasajeros_transportados * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_maxima'),
+                DB::raw('ROUND(MIN((viajes.pasajeros_transportados * 100.0) / buses.capacidad_pasajeros), 2) as tasa_ocupacion_minima'),
+                DB::raw('ROUND(AVG(viajes.pasajeros_transportados), 2) as pasajeros_promedio'),
                 DB::raw('ROUND(AVG(buses.capacidad_pasajeros), 2) as capacidad_promedio')
             )
             ->groupBy('buses.tipo_servicio')
@@ -393,12 +393,12 @@ class ReporteController extends Controller
         $totales = $query
             ->select(
                 DB::raw('COUNT(*) as total_viajes'),
-                DB::raw('SUM(pasajeros) as total_pasajeros'),
+                DB::raw('SUM(pasajeros_transportados) as total_pasajeros'),
                 DB::raw('SUM(dinero_recaudado) as total_ingresos'),
                 DB::raw('SUM(costo_total) as total_gastos'),
                 DB::raw('SUM(dinero_recaudado - costo_total) as ganancia_neta'),
                 DB::raw('AVG(dinero_recaudado) as ingreso_promedio_viaje'),
-                DB::raw('AVG(pasajeros) as pasajeros_promedio_viaje')
+                DB::raw('AVG(pasajeros_transportados) as pasajeros_promedio_viaje')
             )
             ->first();
 
