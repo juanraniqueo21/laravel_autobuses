@@ -153,6 +153,15 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
           <span className="font-medium truncate">Análisis Buses</span>
         </button>
 
+        {/* NUEVO: Botón de Análisis Mantenimientos */}
+        <button
+          onClick={() => handleSelect('analisis-mantenimientos')}
+          className={getButtonClasses('analisis-mantenimientos')}
+        >
+          <Wrench size={20} className={getIconClasses('analisis-mantenimientos')} />
+          <span className="font-medium truncate">Análisis Mantenimientos</span>
+        </button>
+
         <button
           onClick={() => handleSelect('rutas')}
           className={getButtonClasses('rutas')}

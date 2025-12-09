@@ -27,6 +27,7 @@ import LiquidacionesPage from './pages/LiquidacionesPage';
 import ReportesPage from './pages/ReportesPage';
 import MisReportesPage from './pages/MisReportesPage';
 import AnalisisBusesPage from './pages/AnalisisBusesPage';
+import AnalisisMantenimientosPage from './pages/AnalisisMantenimientosPage';
 
 // ==========================================
 // PANEL CONDUCTOR
@@ -248,6 +249,8 @@ function App() {
         return <MisReportesPage user={user} />;
       case 'analisis-buses':
         return <AnalisisBusesPage />;
+      case 'analisis-mantenimientos':
+        return <AnalisisMantenimientosPage />;
       default:
         if (rolId === 4) return <MecanicoDashboardPage onNavigate={setCurrentPage} />;
         return <DashboardPage onNavigate={setCurrentPage} />;
