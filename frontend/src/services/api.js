@@ -1371,3 +1371,78 @@ export const fetchResumenEjecutivo = async (params = {}) => {
   const result = await response.json();
   return result;
 };
+
+// ============================================
+// ANÁLISIS DE MANTENIMIENTOS
+// ============================================
+
+/**
+ * Obtener buses con más mantenimientos
+ */
+export const fetchBusesConMasMantenimientos = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+  if (params.tipo_servicio) queryParams.append('tipo_servicio', params.tipo_servicio);
+  if (params.limit) queryParams.append('limit', params.limit);
+
+  const url = `${API_URL}/reportes/buses-con-mas-mantenimientos?${queryParams.toString()}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener tipos de fallas más comunes
+ */
+export const fetchTiposFallasMasComunes = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+
+  const url = `${API_URL}/reportes/tipos-fallas-mas-comunes?${queryParams.toString()}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener costos de mantenimiento por bus
+ */
+export const fetchCostosMantenimientoPorBus = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+  if (params.tipo_servicio) queryParams.append('tipo_servicio', params.tipo_servicio);
+  if (params.limit) queryParams.append('limit', params.limit);
+
+  const url = `${API_URL}/reportes/costos-mantenimiento-por-bus?${queryParams.toString()}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener buses disponibles para emergencia
+ */
+export const fetchBusesDisponiblesEmergencia = async () => {
+  const url = `${API_URL}/reportes/buses-disponibles-emergencia`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Activar bus en emergencia (cambiar estado de mantenimiento a operativo)
+ */
+export const activarBusEmergencia = async (busId) => {
+  const url = `${API_URL}/buses/${busId}`;
+  const response = await fetch(url, fetchOptions('PUT', { estado: 'operativo' }));
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};

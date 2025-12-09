@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   DollarSign, Plus, Download, Edit, Trash2, 
-  Calendar, FileText, CheckCircle, Calculator, Check, AlertCircle, Search, X, RefreshCw
+  Calendar, FileText, CheckCircle, Calculator, Check, AlertCircle, Search, X, RefreshCw, User
 } from 'lucide-react';
 import {
   fetchLiquidaciones,
@@ -19,6 +19,9 @@ import Select from '../components/common/Select';
 import FormDialog from '../components/forms/FormDialog';
 import Table from '../components/tables/Table';
 import MetricCard from '../components/cards/MetricCard';
+// --- IMPORTS ALERTAS ---
+import AlertDialog from '../components/common/AlertDialog';
+import ConfirmDialog from '../components/common/ConfirmDialog';
 
 const LiquidacionesPage = ({ user }) => {
   const [liquidaciones, setLiquidaciones] = useState([]);
@@ -30,7 +33,27 @@ const LiquidacionesPage = ({ user }) => {
   const [estadisticas, setEstadisticas] = useState(null);
   const [calculando, setCalculando] = useState(false);
 
-  // Filtros
+  // --- ESTADOS PARA BUSCADOR DE EMPLEADO (Formulario) ---
+  const [empleadoSearchTerm, setEmpleadoSearchTerm] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsRef = useRef(null);
+
+  // --- SISTEMA ALERTAS ---
+  const [dialogs, setDialogs] = useState({
+    alert: { isOpen: false, type: 'success', title: '', message: '' },
+    confirm: { isOpen: false, type: 'warning', title: '', message: '', onConfirm: null }
+  });
+  const showAlert = (type, title, message) =>
+    setDialogs(prev => ({ ...prev, alert: { isOpen: true, type, title, message } }));
+  const showConfirm = (type, title, message, onConfirm) =>
+    setDialogs(prev => ({ ...prev, confirm: { isOpen: true, type, title, message, onConfirm } }));
+  const closeAlert = () =>
+    setDialogs(prev => ({ ...prev, alert: { ...prev.alert, isOpen: false } }));
+  const closeConfirm = () =>
+    setDialogs(prev => ({ ...prev, confirm: { ...prev.confirm, isOpen: false } }));
+  // ---------------------
+
+  // Filtros Tabla Principal
   const [filtroEmpleado, setFiltroEmpleado] = useState('');
   const [filtros, setFiltros] = useState({
     estado: '',
@@ -73,6 +96,19 @@ const LiquidacionesPage = ({ user }) => {
     aplicarFiltrosLocales();
   }, [liquidaciones, filtroEmpleado]);
 
+  // Cerrar sugerencias al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   const cargarDatos = async () => {
     try {
       setLoading(true);
@@ -88,7 +124,7 @@ const LiquidacionesPage = ({ user }) => {
 
     } catch (error) {
       console.error('❌ Error al cargar datos:', error);
-      alert('Error al cargar datos: ' + error.message);
+      showAlert('error', 'Error de Carga', error.message);
     } finally {
       setLoading(false);
     }
@@ -110,6 +146,25 @@ const LiquidacionesPage = ({ user }) => {
       });
     }
     setFilteredLiquidaciones(resultado);
+  };
+
+  // --- Lógica del Buscador de Empleados en Formulario ---
+  const getEmpleadosSugeridos = () => {
+    if (!empleadoSearchTerm) return [];
+    const term = empleadoSearchTerm.toLowerCase();
+    return empleados
+      .filter(emp => {
+        const nombreCompleto = `${emp.user?.nombre} ${emp.user?.apellido}`.toLowerCase();
+        const rut = `${emp.user?.rut}-${emp.user?.rut_verificador}`;
+        return nombreCompleto.includes(term) || rut.includes(term);
+      })
+      .slice(0, 5);
+  };
+
+  const seleccionarEmpleado = (empleado) => {
+    setEmpleadoSearchTerm(`${empleado.user.nombre} ${empleado.user.apellido}`);
+    setShowSuggestions(false);
+    handleEmpleadoChange(empleado.id); // Ejecutar la lógica de cálculo original
   };
 
   // --- Empleado seleccionado => cálculo automático ---
@@ -153,7 +208,7 @@ const LiquidacionesPage = ({ user }) => {
       }));
     } catch (error) {
       console.error('❌ Error al calcular automáticamente:', error);
-      alert('Error al calcular: ' + (error.response?.data?.mensaje || error.message));
+      showAlert('error', 'Error cálculo', error.response?.data?.mensaje || error.message);
     } finally {
       setCalculando(false);
     }
@@ -161,11 +216,19 @@ const LiquidacionesPage = ({ user }) => {
 
   const handleOpenDialog = (liquidacion = null) => {
     if (!puedeEditar) {
-      alert('No tiene permisos para crear/editar liquidaciones');
+      showAlert('warning', 'Acceso denegado', 'No tiene permisos para crear/editar liquidaciones');
       return;
     }
     if (liquidacion) {
       setEditingLiquidacion(liquidacion);
+      
+      // Pre-llenar el buscador de empleado
+      if (liquidacion.empleado && liquidacion.empleado.user) {
+        setEmpleadoSearchTerm(`${liquidacion.empleado.user.nombre} ${liquidacion.empleado.user.apellido}`);
+      } else {
+        setEmpleadoSearchTerm('');
+      }
+
       setFormData({
         empleado_id: liquidacion.empleado_id,
         periodo_desde: liquidacion.periodo_desde,
@@ -194,6 +257,7 @@ const LiquidacionesPage = ({ user }) => {
   };
 
   const resetForm = () => {
+    setEmpleadoSearchTerm('');
     setFormData({
       empleado_id: '',
       periodo_desde: '',
@@ -214,7 +278,7 @@ const LiquidacionesPage = ({ user }) => {
   // --- Forzar cálculo automático sobre período ya elegido ---
   const handleCalcularAutomatico = async () => {
     if (!formData.empleado_id || !formData.periodo_desde || !formData.periodo_hasta) {
-      alert('Debe seleccionar empleado y períodos para calcular');
+      showAlert('warning', 'Datos incompletos', 'Debe seleccionar empleado y períodos para calcular');
       return;
     }
     try {
@@ -241,89 +305,115 @@ const LiquidacionesPage = ({ user }) => {
         horas_extras_valor: 0
       }));
       
-      alert(`✅ Cálculo realizado.\n\nLíquido a pagar: ${formatCurrency(calculo.totales?.sueldo_liquido || 0)}`);
+      showAlert(
+        'success',
+        'Cálculo Exitoso',
+        `Líquido a pagar: ${formatCurrency(calculo.totales?.sueldo_liquido || 0)}`
+      );
     } catch (error) {
-      alert('Error al calcular liquidación: ' + (error.response?.data?.mensaje || error.message));
+      showAlert('error', 'Error cálculo', error.response?.data?.mensaje || error.message);
     } finally {
       setCalculando(false);
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!puedeEditar) return alert('No tiene permisos');
-    if (!formData.empleado_id || !formData.periodo_desde || !formData.periodo_hasta || !formData.sueldo_base) {
-      return alert('Complete todos los campos obligatorios');
+  const handleSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (!puedeEditar) return showAlert('warning', 'Sin permiso', 'No tiene permisos');
+    if (
+      !formData.empleado_id ||
+      !formData.periodo_desde ||
+      !formData.periodo_hasta ||
+      !formData.sueldo_base
+    ) {
+      return showAlert('error', 'Faltan datos', 'Complete todos los campos obligatorios');
     }
 
-    try {
-      // Calcular líquido final para enviar
-      const liquido = calcularLiquido();
+    const action = editingLiquidacion ? 'Actualizar' : 'Generar';
+    showConfirm(
+      'info',
+      `¿${action} Liquidación?`,
+      `Estás a punto de ${action.toLowerCase()} esta liquidación.`,
+      async () => {
+        try {
+          const liquido = calcularLiquido();
+          const dataToSend = {
+            ...formData,
+            sueldo_base: parseInt(formData.sueldo_base) || 0,
+            descuento_afp: parseInt(formData.descuento_afp) || 0,
+            descuento_isapre: parseInt(formData.descuento_isapre) || 0,
+            descuento_seguro_desempleo: parseInt(formData.descuento_seguro_desempleo) || 0,
+            descuento_impuesto_renta: parseInt(formData.descuento_impuesto_renta) || 0,
+            bonificaciones: parseInt(formData.bonificaciones) || 0,
+            horas_extras_valor: parseInt(formData.horas_extras_valor) || 0,
+            sueldo_liquido: liquido,
+            otros_descuentos: 0
+          };
 
-      const dataToSend = {
-        ...formData,
-        sueldo_base: parseInt(formData.sueldo_base) || 0,
-        descuento_afp: parseInt(formData.descuento_afp) || 0,
-        descuento_isapre: parseInt(formData.descuento_isapre) || 0,
-        descuento_seguro_desempleo: parseInt(formData.descuento_seguro_desempleo) || 0,
-        descuento_impuesto_renta: parseInt(formData.descuento_impuesto_renta) || 0, // <--- ENVIAR DATO REAL
-        bonificaciones: parseInt(formData.bonificaciones) || 0,
-        horas_extras_valor: parseInt(formData.horas_extras_valor) || 0,
-        sueldo_liquido: liquido, // Enviar el líquido calculado
-        otros_descuentos: 0
-      };
-
-      if (editingLiquidacion) {
-        await updateLiquidacion(editingLiquidacion.id, dataToSend);
-        alert('✅ Liquidación actualizada exitosamente');
-      } else {
-        await createLiquidacion(dataToSend);
-        alert('✅ Liquidación creada exitosamente');
+          if (editingLiquidacion) {
+            await updateLiquidacion(editingLiquidacion.id, dataToSend);
+            showAlert('success', 'Actualizado', 'Liquidación actualizada exitosamente');
+          } else {
+            await createLiquidacion(dataToSend);
+            showAlert('success', 'Creado', 'Liquidación creada exitosamente');
+          }
+          handleCloseDialog();
+          cargarDatos();
+        } catch (error) {
+          showAlert('error', 'Error al guardar', error.message);
+        }
       }
-      handleCloseDialog();
-      cargarDatos();
-    } catch (error) {
-      alert(error.message || 'Error al guardar liquidación');
-    }
+    );
   };
 
-  const handleDelete = async (id) => {
-    if (!puedeEditar) return alert('No tiene permisos');
-    const liquidacion = liquidaciones.find(l => l.id === id);
-    if (!window.confirm('¿Está seguro de eliminar esta liquidación?')) return;
+  const handleDelete = (id) => {
+    if (!puedeEditar) return showAlert('warning', 'Sin permiso', 'No tiene permisos');
     
-    try {
-      await deleteLiquidacion(id);
-      alert('✅ Liquidación eliminada exitosamente');
-      cargarDatos();
-    } catch (error) {
-      alert(error.message || 'Error al eliminar liquidación');
-    }
+    showConfirm(
+      'danger',
+      '¿Eliminar Liquidación?',
+      'Esta acción eliminará permanentemente la liquidación. ¿Seguro?',
+      async () => {
+        try {
+          await deleteLiquidacion(id);
+          showAlert('success', 'Eliminado', 'Liquidación eliminada exitosamente');
+          cargarDatos();
+        } catch (error) {
+          showAlert('error', 'Error al eliminar', error.message);
+        }
+      }
+    );
   };
 
-  const handleMarcarComoPagada = async (liquidacion) => {
-    if (!puedeEditar) return alert('No tiene permisos');
-    if (!window.confirm('¿Marcar esta liquidación como PAGADA?')) return;
-
-    try {
-      const hoy = new Date().toISOString().split('T')[0];
-      await updateLiquidacion(liquidacion.id, {
-        ...liquidacion,
-        estado: 'pagada',
-        fecha_pago: hoy
-      });
-      alert('✅ Liquidación marcada como PAGADA');
-      cargarDatos();
-    } catch (error) {
-      alert(error.message || 'Error al cambiar estado');
-    }
+  const handleMarcarComoPagada = (liquidacion) => {
+    if (!puedeEditar) return showAlert('warning', 'Sin permiso', 'No tiene permisos');
+    
+    showConfirm(
+      'success',
+      '¿Marcar como PAGADA?',
+      'Se cambiará el estado a "Pagada" con fecha de hoy.',
+      async () => {
+        try {
+          const hoy = new Date().toISOString().split('T')[0];
+          await updateLiquidacion(liquidacion.id, {
+            ...liquidacion,
+            estado: 'pagada',
+            fecha_pago: hoy
+          });
+          showAlert('success', 'Pagada', 'Liquidación marcada como PAGADA');
+          cargarDatos();
+        } catch (error) {
+          showAlert('error', 'Error', error.message);
+        }
+      }
+    );
   };
 
   const handleDescargarPDF = async (id) => {
     try {
       await descargarLiquidacionPDF(id);
     } catch (error) {
-      alert('Error al descargar PDF');
+      showAlert('error', 'Error PDF', 'Error al descargar PDF');
     }
   };
 
@@ -376,8 +466,12 @@ const LiquidacionesPage = ({ user }) => {
         if (item.empleado?.user) {
           return (
             <div>
-              <div className="font-medium text-gray-900">{item.empleado.user.nombre} {item.empleado.user.apellido}</div>
-              <div className="text-xs text-gray-500 font-mono">{item.empleado.numero_empleado || '-'}</div>
+              <div className="font-medium text-gray-900">
+                {item.empleado.user.nombre} {item.empleado.user.apellido}
+              </div>
+              <div className="text-xs text-gray-500 font-mono">
+                {item.empleado.numero_empleado || '-'}
+              </div>
             </div>
           );
         }
@@ -398,7 +492,11 @@ const LiquidacionesPage = ({ user }) => {
     { 
       key: 'sueldo_liquido', 
       label: 'Líquido',
-      render: (item) => <span className="font-medium text-gray-900">{formatCurrency(item.sueldo_liquido)}</span>
+      render: (item) => (
+        <span className="font-medium text-gray-900">
+          {formatCurrency(item.sueldo_liquido)}
+        </span>
+      )
     },
     { 
       key: 'estado', 
@@ -411,7 +509,11 @@ const LiquidacionesPage = ({ user }) => {
       render: (item) => {
         if (!item.fecha_pago) return '-';
         try {
-          return <span className="text-sm text-gray-600">{new Date(item.fecha_pago).toLocaleDateString('es-CL')}</span>;
+          return (
+            <span className="text-sm text-gray-600">
+              {new Date(item.fecha_pago).toLocaleDateString('es-CL')}
+            </span>
+          );
         } catch { return '-'; }
       }
     },
@@ -476,7 +578,26 @@ const LiquidacionesPage = ({ user }) => {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      
+      {/* Alertas / Confirmaciones */}
+      <AlertDialog
+        isOpen={dialogs.alert.isOpen}
+        type={dialogs.alert.type}
+        title={dialogs.alert.title}
+        message={dialogs.alert.message}
+        onClose={closeAlert}
+      />
+      <ConfirmDialog
+        isOpen={dialogs.confirm.isOpen}
+        type={dialogs.confirm.type}
+        title={dialogs.confirm.title}
+        message={dialogs.confirm.message}
+        onConfirm={() => {
+          if (dialogs.confirm.onConfirm) dialogs.confirm.onConfirm();
+          closeConfirm();
+        }}
+        onCancel={closeConfirm}
+      />
+
       {/* Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -505,10 +626,30 @@ const LiquidacionesPage = ({ user }) => {
       {/* Estadísticas */}
       {estadisticas && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <MetricCard title="Total Liquidaciones" value={estadisticas.total_liquidaciones || 0} icon={FileText} color="blue" />
-          <MetricCard title="Liquidaciones del Mes" value={estadisticas.liquidaciones_mes || 0} icon={Calendar} color="green" />
-          <MetricCard title="Pagadas" value={estadisticas.liquidaciones_pagadas || 0} icon={CheckCircle} color="emerald" />
-          <MetricCard title="Monto Pagado (Mes)" value={formatCurrency(estadisticas.monto_total_pagado_mes || 0)} icon={DollarSign} color="purple" />
+          <MetricCard
+            title="Total Liquidaciones"
+            value={estadisticas.total_liquidaciones || 0}
+            icon={FileText}
+            color="blue"
+          />
+          <MetricCard
+            title="Liquidaciones del Mes"
+            value={estadisticas.liquidaciones_mes || 0}
+            icon={Calendar}
+            color="green"
+          />
+          <MetricCard
+            title="Pagadas"
+            value={estadisticas.liquidaciones_pagadas || 0}
+            icon={CheckCircle}
+            color="emerald"
+          />
+          <MetricCard
+            title="Monto Pagado (Mes)"
+            value={formatCurrency(estadisticas.monto_total_pagado_mes || 0)}
+            icon={DollarSign}
+            color="purple"
+          />
         </div>
       )}
 
@@ -516,12 +657,16 @@ const LiquidacionesPage = ({ user }) => {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
         <div className="flex flex-col space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            
             {/* Búsqueda por empleado */}
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Buscar Empleado</label>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">
+                Buscar Empleado
+              </label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <Search
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                  size={16}
+                />
                 <input
                   type="text"
                   placeholder="Nombre o RUT..."
@@ -530,12 +675,12 @@ const LiquidacionesPage = ({ user }) => {
                   className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
                 {filtroEmpleado && (
-                   <button 
-                     onClick={() => setFiltroEmpleado('')}
-                     className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                   >
-                     <X size={14} />
-                   </button>
+                  <button 
+                    onClick={() => setFiltroEmpleado('')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X size={14} />
+                  </button>
                 )}
               </div>
             </div>
@@ -602,26 +747,76 @@ const LiquidacionesPage = ({ user }) => {
           size="large"
         >
           <div className="space-y-6">
-            
             {/* Datos Básicos */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Datos Básicos</h3>
+              <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">
+                Datos Básicos
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Select
-                    label="Empleado *"
-                    value={formData.empleado_id}
-                    onChange={(e) => handleEmpleadoChange(e.target.value)}
-                    options={[
-                      { id: '', label: 'Seleccione empleado' },
-                      ...empleados.map(emp => ({
-                        id: emp.id,
-                        label: `${emp.user?.nombre} ${emp.user?.apellido} - ${emp.numero_empleado}`
-                      }))
-                    ]}
-                    required
-                    disabled={editingLiquidacion}
-                  />
+                {/* --- BUSCADOR DE EMPLEADO (AUTOCOMPLETADO) --- */}
+                <div className="space-y-1 relative" ref={suggestionsRef}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Buscar Empleado *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pl-9"
+                      placeholder="Escriba nombre o RUT..."
+                      value={empleadoSearchTerm}
+                      onChange={(e) => {
+                        setEmpleadoSearchTerm(e.target.value);
+                        setShowSuggestions(true);
+                      }}
+                      onFocus={() => setShowSuggestions(true)}
+                      disabled={!!editingLiquidacion} // No cambiar empleado al editar
+                    />
+                    <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                    {empleadoSearchTerm && !editingLiquidacion && (
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setEmpleadoSearchTerm('');
+                          setFormData(prev => ({ ...prev, empleado_id: '' }));
+                        }}
+                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Lista de sugerencias */}
+                  {showSuggestions && !editingLiquidacion && empleadoSearchTerm && (
+                    <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto mt-1">
+                      {getEmpleadosSugeridos().length > 0 ? (
+                        getEmpleadosSugeridos().map(emp => (
+                          <li 
+                            key={emp.id}
+                            onClick={() => seleccionarEmpleado(emp)}
+                            className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0 flex items-center gap-3"
+                          >
+                            <div className="bg-blue-100 p-1.5 rounded-full text-blue-600">
+                              <User size={16} />
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-800">
+                                {emp.user?.nombre} {emp.user?.apellido}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                RUT: {emp.user?.rut}-{emp.user?.rut_verificador}
+                              </div>
+                            </div>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="px-4 py-3 text-sm text-gray-400 text-center">
+                          No se encontraron empleados
+                        </li>
+                      )}
+                    </ul>
+                  )}
+
                   {calculando && (
                     <p className="text-xs text-blue-600 mt-1 animate-pulse">
                       ⏳ Calculando automáticamente...
@@ -674,7 +869,12 @@ const LiquidacionesPage = ({ user }) => {
                     type="button" 
                     onClick={handleCalcularAutomatico}
                     variant="secondary"
-                    disabled={calculando || !formData.empleado_id || !formData.periodo_desde || !formData.periodo_hasta}
+                    disabled={
+                      calculando ||
+                      !formData.empleado_id ||
+                      !formData.periodo_desde ||
+                      !formData.periodo_hasta
+                    }
                     className="w-full flex items-center justify-center gap-2 border-dashed border-2"
                   >
                     <Calculator size={18} />
@@ -686,7 +886,9 @@ const LiquidacionesPage = ({ user }) => {
 
             {/* Haberes */}
             <div>
-              <h3 className="text-lg font-semibold text-green-700 border-b border-green-200 pb-2 mb-4">Haberes</h3>
+              <h3 className="text-lg font-semibold text-green-700 border-b border-green-200 pb-2 mb-4">
+                Haberes
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Input
                   label="Sueldo Base (CLP) *"
@@ -716,7 +918,9 @@ const LiquidacionesPage = ({ user }) => {
 
             {/* Descuentos */}
             <div>
-              <h3 className="text-lg font-semibold text-red-700 border-b border-red-200 pb-2 mb-4">Descuentos Legales</h3>
+              <h3 className="text-lg font-semibold text-red-700 border-b border-red-200 pb-2 mb-4">
+                Descuentos Legales
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="Descuento AFP (CLP)"
@@ -786,7 +990,11 @@ const LiquidacionesPage = ({ user }) => {
                             <span>• Bono Productividad:</span>
                             <span className="font-medium">
                               +{formatCurrency(
-                                Math.max(0, parseInt(formData.bonificaciones) - Math.min(parseInt(formData.sueldo_base) * 0.25, 209396))
+                                Math.max(
+                                  0,
+                                  parseInt(formData.bonificaciones) -
+                                  Math.min(parseInt(formData.sueldo_base) * 0.25, 209396)
+                                )
                               )}
                             </span>
                           </div>
@@ -800,7 +1008,9 @@ const LiquidacionesPage = ({ user }) => {
                       {formData.horas_extras_valor > 0 && (
                         <div className="flex justify-between text-green-600">
                           <span>Horas Extras:</span>
-                          <span className="font-semibold">+{formatCurrency(formData.horas_extras_valor)}</span>
+                          <span className="font-semibold">
+                            +{formatCurrency(formData.horas_extras_valor)}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -812,15 +1022,21 @@ const LiquidacionesPage = ({ user }) => {
                     <div className="space-y-1">
                       <div className="flex justify-between text-red-600">
                         <span>AFP:</span>
-                        <span className="font-semibold">-{formatCurrency(formData.descuento_afp)}</span>
+                        <span className="font-semibold">
+                          -{formatCurrency(formData.descuento_afp)}
+                        </span>
                       </div>
                       <div className="flex justify-between text-red-600">
                         <span>Salud:</span>
-                        <span className="font-semibold">-{formatCurrency(formData.descuento_isapre)}</span>
+                        <span className="font-semibold">
+                          -{formatCurrency(formData.descuento_isapre)}
+                        </span>
                       </div>
                       <div className="flex justify-between text-red-600">
                         <span>Cesantía:</span>
-                        <span className="font-semibold">-{formatCurrency(formData.descuento_seguro_desempleo)}</span>
+                        <span className="font-semibold">
+                          -{formatCurrency(formData.descuento_seguro_desempleo)}
+                        </span>
                       </div>
                       {parseInt(formData.descuento_impuesto_renta) > 0 && (
                         <div className="flex justify-between text-red-800 font-bold border-t border-red-100 pt-1 mt-1">
@@ -833,7 +1049,9 @@ const LiquidacionesPage = ({ user }) => {
 
                   {/* Total líquido */}
                   <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded p-3 text-white">
-                    <p className="text-xs font-bold uppercase mb-2 opacity-90">Líquido a Pagar</p>
+                    <p className="text-xs font-bold uppercase mb-2 opacity-90">
+                      Líquido a Pagar
+                    </p>
                     <p className="text-2xl font-bold">
                       {formatCurrency(calcularLiquido())}
                     </p>
@@ -841,7 +1059,8 @@ const LiquidacionesPage = ({ user }) => {
                 </div>
 
                 <div className="mt-3 pt-3 border-t border-blue-200 text-xs text-blue-800">
-                  💡 <strong>Nota:</strong> Los descuentos incluyen AFP (10% + Comisión), Salud (7%), Cesantía (0.6%) e <strong>Impuesto Único</strong> según tabla SII.
+                  💡 <strong>Nota:</strong> Los descuentos incluyen AFP (10% + Comisión),
+                  Salud (7%), Cesantía (0.6%) e <strong>Impuesto Único</strong> según tabla SII.
                 </div>
               </div>
             )}

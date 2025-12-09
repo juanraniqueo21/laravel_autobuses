@@ -44,7 +44,7 @@ class Mantenimiento extends Model
 
     public function mecanico(): BelongsTo
     {
-        return $this->belongsTo(Empleado::class, 'mecanico_id');
+        return $this->belongsTo(Mecanico::class, 'mecanico_id');
     }
 
     // ============================================

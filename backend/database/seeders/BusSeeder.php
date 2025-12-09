@@ -13,7 +13,8 @@ class BusSeeder extends Seeder
      */
     public function run(): void
     {
-        $fechaReferencia = Carbon::create(2024, 12, 1);
+        // 📅 REFERENCIA: 8 de Diciembre de 2025 (Hoy simulado)
+        $fechaReferencia = Carbon::create(2025, 12, 8);
 
         $buses = [
             // ============================================
@@ -489,10 +490,102 @@ class BusSeeder extends Seeder
             ],
         ];
 
+        // Crear los 12 buses estáticos
         foreach ($buses as $busData) {
             Bus::create($busData);
         }
 
-        $this->command->info('✅ 12 buses creados con tipos de servicio: 4 Clásicos, 4 Semicama, 2 Cama, 2 Premium');
+        // ============================================
+        // 2. GENERACIÓN AUTOMÁTICA DE 28 BUSES MÁS
+        // ============================================
+        $totalBusesDeseados = 40;
+        $busesCreados = count($buses);
+
+        $marcas = [
+            ['marca' => 'Mercedes-Benz', 'modelo' => 'O-500R', 'motor' => 'OM-457', 'chasis' => 'Mercedes-Benz'],
+            ['marca' => 'Volvo', 'modelo' => 'B450R', 'motor' => 'D13C', 'chasis' => 'Volvo'],
+            ['marca' => 'Scania', 'modelo' => 'K440', 'motor' => 'DC13', 'chasis' => 'Scania'],
+            ['marca' => 'MAN', 'modelo' => 'Lion’s Coach', 'motor' => 'D2676', 'chasis' => 'MAN'],
+        ];
+
+        $carrocerias = [
+            ['marca' => 'Marcopolo', 'modelo' => 'Paradiso 1800 DD'],
+            ['marca' => 'Irizar', 'modelo' => 'i6'],
+            ['marca' => 'Busscar', 'modelo' => 'Vissta Buss DD'],
+        ];
+
+        // CONFIGURACIÓN DE CAPACIDADES VARIADAS
+        $tiposServicio = [
+            ['tipo' => 'clasico', 'capacidad' => 46, 'factor' => 1.0, 'tipo_bus' => 'simple'],       // Simple -> 46
+            ['tipo' => 'semicama', 'capacidad' => 60, 'factor' => 1.4, 'tipo_bus' => 'doble_piso'],  // Doble (Alto) -> 60
+            ['tipo' => 'cama', 'capacidad' => 42, 'factor' => 2.0, 'tipo_bus' => 'doble_piso'],      // Doble (Medio) -> 42
+            ['tipo' => 'premium', 'capacidad' => 24, 'factor' => 3.0, 'tipo_bus' => 'doble_piso'],   // Doble (Bajo) -> 24
+        ];
+
+        $letras = range('A', 'Z');
+
+        for ($i = $busesCreados + 1; $i <= $totalBusesDeseados; $i++) {
+            // Generar patente aleatoria 4 letras 2 numeros (formato nuevo CL)
+            $patente = $letras[array_rand($letras)] . $letras[array_rand($letras)] .
+                       $letras[array_rand($letras)] . $letras[array_rand($letras)] .
+                       rand(10, 99);
+
+            $dv = rand(0, 9);
+            if (rand(0, 10) > 8) {
+                $dv = 'K'; // A veces K
+            }
+
+            // Selección aleatoria de configuración
+            $marcaData = $marcas[array_rand($marcas)];
+            $carroceriaData = $carrocerias[array_rand($carrocerias)];
+            $servicioData = $tiposServicio[array_rand($tiposServicio)];
+
+            // Fechas seguras (siempre futuras para vencimientos)
+            $vencimientoSoap = $fechaReferencia->copy()->addMonths(rand(3, 12));
+            $vencimientoRev = $fechaReferencia->copy()->addMonths(rand(2, 8));
+
+            Bus::create([
+                'patente' => $patente,
+                'patente_verificador' => (string)$dv,
+                'marca' => $marcaData['marca'],
+                'modelo' => $marcaData['modelo'],
+                'anio' => rand(2018, 2024),
+                'tipo_combustible' => 'diesel',
+                'numero_serie' => strtoupper(substr($marcaData['marca'], 0, 3)) . rand(1000, 9999),
+                'numero_motor' => $marcaData['motor'] . rand(10000, 99999),
+                'numero_chasis' => 'CH' . rand(100000, 999999),
+                'capacidad_pasajeros' => $servicioData['capacidad'],
+                'tipo_bus' => $servicioData['tipo_bus'],
+                'tipo_servicio' => $servicioData['tipo'],
+                'factor_tarifa' => $servicioData['factor'],
+                'cantidad_ejes' => $servicioData['tipo_bus'] === 'doble_piso' ? '3' : '2',
+                'marca_motor' => $marcaData['marca'],
+                'modelo_motor' => $marcaData['motor'],
+                'ubicacion_motor' => 'trasero',
+                'marca_chasis' => $marcaData['chasis'],
+                'marca_carroceria' => $carroceriaData['marca'],
+                'modelo_carroceria' => $carroceriaData['modelo'],
+                'fecha_adquisicion' => $fechaReferencia->copy()->subMonths(rand(6, 48))->format('Y-m-d'),
+                'estado' => 'operativo',
+
+                // Fechas
+                'proxima_revision_tecnica' => $vencimientoRev,
+                'ultima_revision_tecnica' => $vencimientoRev->copy()->subYear(),
+                'vencimiento_soap' => $vencimientoSoap,
+                'numero_soap' => 'SOAP2025-' . str_pad($i, 3, '0', STR_PAD_LEFT),
+                'compania_seguro' => ['HDI', 'Mapfre', 'Liberty', 'Sura'][rand(0, 3)],
+                'numero_poliza' => 'POL-' . rand(100000, 999999),
+                'tipo_cobertura_adicional' => rand(0, 1) ? 'full' : 'terceros',
+                'vencimiento_poliza' => $vencimientoSoap->copy()->addMonth(),
+                'numero_permiso_circulacion' => 'PC-' . rand(10000, 99999),
+
+                'kilometraje_original' => rand(10000, 300000),
+                'proximo_mantenimiento_km' => 10000,
+                'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subDays(rand(5, 60)),
+                'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(rand(1, 3)),
+            ]);
+        }
+
+        $this->command->info("✅ {$totalBusesDeseados} buses creados (12 estáticos + 28 generados) con documentos vigentes al 08/12/2025.");
     }
 }

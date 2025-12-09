@@ -478,15 +478,14 @@ class ReporteController extends Controller
             ->select(
                 'buses.id',
                 'buses.patente',
-                'buses.numero_bus',
                 'buses.marca',
                 'buses.modelo',
                 'buses.tipo_servicio',
                 'buses.estado as estado_bus',
                 DB::raw('COUNT(mantenimientos.id) as total_mantenimientos'),
-                DB::raw('SUM(CASE WHEN mantenimientos.tipo_mantenimiento = "preventivo" THEN 1 ELSE 0 END) as preventivos'),
-                DB::raw('SUM(CASE WHEN mantenimientos.tipo_mantenimiento = "correctivo" THEN 1 ELSE 0 END) as correctivos'),
-                DB::raw('SUM(CASE WHEN mantenimientos.estado = "en_proceso" THEN 1 ELSE 0 END) as en_proceso'),
+                DB::raw("SUM(CASE WHEN mantenimientos.tipo_mantenimiento = 'preventivo' THEN 1 ELSE 0 END) as preventivos"),
+                DB::raw("SUM(CASE WHEN mantenimientos.tipo_mantenimiento = 'correctivo' THEN 1 ELSE 0 END) as correctivos"),
+                DB::raw("SUM(CASE WHEN mantenimientos.estado = 'en_proceso' THEN 1 ELSE 0 END) as en_proceso"),
                 DB::raw('COALESCE(SUM(mantenimientos.costo_total), 0) as costo_total_mantenimientos')
             );
 
@@ -502,7 +501,7 @@ class ReporteController extends Controller
         }
 
         $resultados = $query
-            ->groupBy('buses.id', 'buses.patente', 'buses.numero_bus', 'buses.marca', 'buses.modelo', 'buses.tipo_servicio', 'buses.estado')
+            ->groupBy('buses.id', 'buses.patente', 'buses.marca', 'buses.modelo', 'buses.tipo_servicio', 'buses.estado')
             ->orderByDesc('total_mantenimientos')
             ->limit(10)
             ->get();
@@ -511,7 +510,6 @@ class ReporteController extends Controller
             return [
                 'bus_id' => $item->id,
                 'patente' => $item->patente,
-                'numero_bus' => $item->numero_bus,
                 'marca' => $item->marca,
                 'modelo' => $item->modelo,
                 'tipo_servicio' => ucfirst($item->tipo_servicio),
@@ -601,17 +599,16 @@ class ReporteController extends Controller
             ->select(
                 'buses.id',
                 'buses.patente',
-                'buses.numero_bus',
                 'buses.marca',
                 'buses.modelo',
                 'buses.tipo_servicio',
-                'buses.anio_fabricacion',
+                'buses.anio as anio_fabricacion',
                 DB::raw('COUNT(mantenimientos.id) as total_mantenimientos'),
                 DB::raw('SUM(mantenimientos.costo_total) as costo_total'),
                 DB::raw('AVG(mantenimientos.costo_total) as costo_promedio'),
                 DB::raw('MAX(mantenimientos.costo_total) as costo_maximo')
             )
-            ->groupBy('buses.id', 'buses.patente', 'buses.numero_bus', 'buses.marca', 'buses.modelo', 'buses.tipo_servicio', 'buses.anio_fabricacion')
+            ->groupBy('buses.id', 'buses.patente', 'buses.marca', 'buses.modelo', 'buses.tipo_servicio', 'buses.anio')
             ->orderByDesc('costo_total')
             ->get();
 
@@ -621,7 +618,6 @@ class ReporteController extends Controller
             return [
                 'bus_id' => $item->id,
                 'patente' => $item->patente,
-                'numero_bus' => $item->numero_bus,
                 'marca' => $item->marca,
                 'modelo' => $item->modelo,
                 'tipo_servicio' => ucfirst($item->tipo_servicio),
@@ -660,7 +656,6 @@ class ReporteController extends Controller
             ->select(
                 'buses.id as bus_id',
                 'buses.patente',
-                'buses.numero_bus',
                 'buses.marca',
                 'buses.modelo',
                 'buses.tipo_servicio',
@@ -670,7 +665,7 @@ class ReporteController extends Controller
                 'mantenimientos.descripcion',
                 'mantenimientos.fecha_inicio',
                 'mantenimientos.fecha_termino',
-                DB::raw('CONCAT(users.nombre, " ", users.apellido) as mecanico_asignado')
+                DB::raw("CONCAT(users.nombre, ' ', users.apellido) as mecanico_asignado")
             )
             ->get();
 
@@ -705,7 +700,6 @@ class ReporteController extends Controller
             return [
                 'bus_id' => $item->bus_id,
                 'patente' => $item->patente,
-                'numero_bus' => $item->numero_bus,
                 'marca' => $item->marca,
                 'modelo' => $item->modelo,
                 'tipo_servicio' => ucfirst($item->tipo_servicio),

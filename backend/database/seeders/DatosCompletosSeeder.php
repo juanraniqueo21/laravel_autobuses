@@ -32,9 +32,9 @@ class DatosCompletosSeeder extends Seeder
 
     public function run(): void
     {
-        // Período: Octubre, Noviembre y hasta 6 de Diciembre 2025
+        // 📅 Período: Octubre, Noviembre y hasta 8 de Diciembre 2025 (alineado con BusSeeder)
         $this->fechaInicio = Carbon::create(2025, 10, 1, 6);
-        $this->fechaFin = Carbon::create(2025, 12, 6, 23);
+        $this->fechaFin = Carbon::create(2025, 12, 8, 23);
 
         $this->command->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         $this->command->info('🚀 GENERANDO DATOS COMPLETOS PARA DEFENSA');
@@ -68,6 +68,21 @@ class DatosCompletosSeeder extends Seeder
             $this->command->newLine();
             $this->command->info('🛠️  [5/6] Generando historial de mantenimientos...');
             $estadisticasMantenimientos = $this->crearMantenimientos($mecanicos);
+
+            // === CORRECCIÓN DE ESTADOS DE BUSES ===
+            // Forzamos que los buses con mantenimientos 'en_proceso' queden en estado 'mantenimiento'
+            // ignorando la validación de fechas del modelo.
+            $this->command->newLine();
+            $this->command->info('🔄 Sincronizando estados de flota...');
+
+            $busesEnTaller = Mantenimiento::where('estado', 'en_proceso')
+                ->select('bus_id')
+                ->distinct()
+                ->pluck('bus_id');
+
+            Bus::whereIn('id', $busesEnTaller)->update(['estado' => 'mantenimiento']);
+
+            $this->command->info("   ✅ Se actualizaron {$busesEnTaller->count()} buses a estado 'mantenimiento'.");
 
             // PASO 6: Resumen
             $this->command->newLine();
@@ -762,11 +777,10 @@ class DatosCompletosSeeder extends Seeder
                 $duracionDias = rand($config['duracion_min'], $config['duracion_max']);
                 $fechaTermino = $fechaInicio->copy()->addDays($duracionDias);
 
-                // Determinar estado
-                $hoy = Carbon::now();
-                if ($fechaInicio->isFuture()) {
+                // Determinar estado usando la fecha simulada (fechaFin) como "hoy"
+                if ($fechaInicio->gt($this->fechaFin)) {
                     $estado = 'pendiente';
-                } elseif ($fechaInicio->isPast() && $fechaTermino->isFuture()) {
+                } elseif ($fechaInicio->lte($this->fechaFin) && $fechaTermino->gt($this->fechaFin)) {
                     $estado = 'en_proceso';
                     $enProceso++;
                 } else {
