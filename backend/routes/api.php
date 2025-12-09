@@ -217,4 +217,12 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/{id}/descargar-documento', [ReporteController::class, 'descargarDocumento']);
     });
 
+    // ============================================
+    // ALERTAS INTELIGENTES Y PREDICCIONES
+    // ============================================
+    Route::prefix('alertas')->group(function () {
+        Route::get('/', [App\Http\Controllers\AlertasInteligentesController::class, 'obtenerAlertas']);
+        Route::get('/predicciones', [App\Http\Controllers\AlertasInteligentesController::class, 'predicciones']);
+    });
+
 });

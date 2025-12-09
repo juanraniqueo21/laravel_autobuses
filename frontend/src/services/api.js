@@ -1446,3 +1446,29 @@ export const activarBusEmergencia = async (busId) => {
   const result = await response.json();
   return result;
 };
+
+// ============================================
+// ALERTAS INTELIGENTES Y PREDICCIONES
+// ============================================
+
+/**
+ * Obtener todas las alertas del sistema
+ */
+export const fetchAlertas = async () => {
+  const url = `${API_URL}/alertas`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener predicciones del sistema
+ */
+export const fetchPredicciones = async () => {
+  const url = `${API_URL}/alertas/predicciones`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};

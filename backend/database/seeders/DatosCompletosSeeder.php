@@ -806,14 +806,60 @@ class DatosCompletosSeeder extends Seeder
                     $correctivos++;
                 }
 
-                // Costo
+                // Costo - MEJORADO: SIEMPRE asignar costo (estimado para en_proceso/pendiente, real para completado)
                 $costoTotal = rand($config['costo_min'], $config['costo_max']);
 
-                // Repuestos (solo para completados)
-                $repuestos = $estado === 'completado' ? [
-                    ['nombre' => 'Filtro de aceite', 'cantidad' => rand(1, 2), 'costo' => rand(8000, 15000)],
-                    ['nombre' => 'Filtro de aire', 'cantidad' => 1, 'costo' => rand(12000, 20000)],
-                ] : null;
+                // Repuestos detallados (varía según tipo de mantenimiento)
+                $repuestos = null;
+                if ($estado === 'completado') {
+                    if ($tipo === 'preventivo') {
+                        $repuestos = [
+                            ['nombre' => 'Filtro de aceite', 'cantidad' => rand(1, 2), 'costo' => rand(8000, 15000)],
+                            ['nombre' => 'Filtro de aire', 'cantidad' => 1, 'costo' => rand(12000, 20000)],
+                            ['nombre' => 'Filtro de combustible', 'cantidad' => 1, 'costo' => rand(15000, 25000)],
+                            ['nombre' => 'Aceite motor', 'cantidad' => rand(8, 15), 'costo' => rand(8000, 12000)],
+                        ];
+                    } else {
+                        // Repuestos según el tipo de falla
+                        $repuestosBase = [
+                            'Falla en motor' => [
+                                ['nombre' => 'Pistones', 'cantidad' => rand(2, 6), 'costo' => rand(80000, 150000)],
+                                ['nombre' => 'Juntas', 'cantidad' => rand(3, 5), 'costo' => rand(15000, 30000)],
+                                ['nombre' => 'Correa de distribución', 'cantidad' => 1, 'costo' => rand(45000, 80000)],
+                            ],
+                            'Problema eléctrico' => [
+                                ['nombre' => 'Batería', 'cantidad' => 1, 'costo' => rand(120000, 180000)],
+                                ['nombre' => 'Alternador', 'cantidad' => 1, 'costo' => rand(180000, 280000)],
+                                ['nombre' => 'Cables eléctricos', 'cantidad' => rand(5, 10), 'costo' => rand(5000, 10000)],
+                            ],
+                            'Problema de frenos' => [
+                                ['nombre' => 'Pastillas de freno', 'cantidad' => 4, 'costo' => rand(40000, 70000)],
+                                ['nombre' => 'Discos de freno', 'cantidad' => 2, 'costo' => rand(80000, 120000)],
+                                ['nombre' => 'Líquido de frenos', 'cantidad' => 2, 'costo' => rand(8000, 12000)],
+                            ],
+                            'Neumáticos desgastados' => [
+                                ['nombre' => 'Neumático 295/80R22.5', 'cantidad' => rand(2, 6), 'costo' => rand(180000, 250000)],
+                                ['nombre' => 'Válvulas', 'cantidad' => rand(2, 6), 'costo' => rand(3000, 5000)],
+                            ],
+                        ];
+
+                        $repuestos = $repuestosBase[$descripcion] ?? [
+                            ['nombre' => 'Repuesto genérico', 'cantidad' => rand(1, 3), 'costo' => rand(30000, 80000)],
+                            ['nombre' => 'Mano de obra especializada', 'cantidad' => rand(8, 20), 'costo' => rand(15000, 25000)],
+                        ];
+                    }
+                }
+
+                // Observaciones más detalladas
+                $observaciones = null;
+                if ($estado === 'en_proceso') {
+                    $avance = rand(20, 80);
+                    $observaciones = "Mantenimiento en curso. Avance: {$avance}%. Tiempo estimado restante: " . rand(1, 3) . " días.";
+                } elseif ($estado === 'completado') {
+                    $observaciones = "Mantenimiento finalizado satisfactoriamente. Bus en condiciones óptimas.";
+                } else {
+                    $observaciones = "Mantenimiento programado. Pendiente de inicio.";
+                }
 
                 Mantenimiento::create([
                     'bus_id' => $bus->id,
@@ -821,11 +867,11 @@ class DatosCompletosSeeder extends Seeder
                     'tipo_mantenimiento' => $tipo,
                     'descripcion' => $descripcion,
                     'fecha_inicio' => $fechaInicio->format('Y-m-d'),
-                    'fecha_termino' => $estado === 'completado' ? $fechaTermino->format('Y-m-d') : null,
-                    'costo_total' => $estado === 'completado' ? $costoTotal : null,
+                    'fecha_termino' => $estado === 'completado' ? $fechaTermino->format('Y-m-d') : $fechaTermino->format('Y-m-d'),
+                    'costo_total' => $costoTotal, // ✅ AHORA SIEMPRE TIENE COSTO
                     'estado' => $estado,
                     'repuestos_utilizados' => $repuestos,
-                    'observaciones' => $estado === 'en_proceso' ? 'Mantenimiento actualmente en curso' : null,
+                    'observaciones' => $observaciones,
                 ]);
 
                 $mantenimientosCreados++;

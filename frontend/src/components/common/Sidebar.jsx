@@ -162,6 +162,15 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
           <span className="font-medium truncate">Análisis Mantenimientos</span>
         </button>
 
+        {/* NUEVO: Botón de Alertas Inteligentes */}
+        <button
+          onClick={() => handleSelect('alertas')}
+          className={getButtonClasses('alertas')}
+        >
+          <AlertTriangle size={20} className={getIconClasses('alertas')} />
+          <span className="font-medium truncate">Alertas Inteligentes</span>
+        </button>
+
         <button
           onClick={() => handleSelect('rutas')}
           className={getButtonClasses('rutas')}
