@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use App\Models\User;
+use App\Models\Empleado;
 
 class Mecanico extends Model
 {
@@ -30,5 +33,20 @@ class Mecanico extends Model
     public function empleado(): BelongsTo
     {
         return $this->belongsTo(Empleado::class);
+    }
+
+    /**
+     * Relación directa con User a través de Empleado
+     */
+    public function user(): HasOneThrough
+    {
+        return $this->hasOneThrough(
+            User::class,
+            Empleado::class,
+            'id', // Foreign key on empleados table
+            'id', // Foreign key on users table
+            'empleado_id', // Local key on mecanicos table
+            'user_id' // Local key on empleados table
+        );
     }
 }
