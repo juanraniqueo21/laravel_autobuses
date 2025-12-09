@@ -237,7 +237,7 @@ class Empleado extends Model
         return $prefijos[$rolId] ?? 'E';// E por defecto(empleado general)
     }
     /**
-     * boot method - auto-generar numeros al crear empleado
+     * boot method - auto-generar numeros al crear empleado y sincronizar estados
      */
     protected static function boot()
     {
@@ -254,6 +254,37 @@ class Empleado extends Model
                 if ($user) {
                     $empleado->numero_funcional = self::generarNumeroFuncional($user->rol_id);
                 }
+            }
+        });
+
+        // ============================================
+        // SINCRONIZACIÓN AUTOMÁTICA DE ESTADOS
+        // ============================================
+        /**
+         * Cuando se actualiza el estado de un empleado,
+         * sincronizar automáticamente con Conductor, Asistente y Mecánico
+         */
+        static::updated(function($empleado){
+            // Solo sincronizar si el campo 'estado' fue modificado
+            if ($empleado->wasChanged('estado')) {
+                $nuevoEstado = $empleado->estado;
+
+                // Sincronizar con Conductor (si existe)
+                if ($empleado->conductor) {
+                    $empleado->conductor->update(['estado' => $nuevoEstado]);
+                }
+
+                // Sincronizar con Asistente (si existe)
+                if ($empleado->asistente) {
+                    $empleado->asistente->update(['estado' => $nuevoEstado]);
+                }
+
+                // Sincronizar con Mecánico (si existe)
+                if ($empleado->mecanico) {
+                    $empleado->mecanico->update(['estado' => $nuevoEstado]);
+                }
+
+                \Log::info("Estado sincronizado para empleado #{$empleado->id}: {$nuevoEstado}");
             }
         });
     }
