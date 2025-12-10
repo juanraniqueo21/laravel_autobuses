@@ -734,7 +734,8 @@ class ReporteController extends Controller
             }
 
             // Calcular días transcurridos desde el inicio del mantenimiento
-            $diasEnMantenimiento = \Carbon\Carbon::parse($item->fecha_inicio)->diffInDays(now(), false);
+            $fechaInicio = \Carbon\Carbon::parse($item->fecha_inicio);
+            $diasEnMantenimiento = (int) $fechaInicio->diffInDays(now(), false);
             // Si el resultado es negativo (fecha futura), mostrar 0
             $diasEnMantenimiento = max(0, $diasEnMantenimiento);
 

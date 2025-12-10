@@ -20,6 +20,7 @@ import Pagination from '../components/common/Pagination';
 
 const TIPOS_MANTENIMIENTO = ['preventivo', 'correctivo', 'revision'];
 const ESTADOS_MANTENIMIENTO = ['en_proceso', 'completado', 'cancelado'];
+const PRIORIDADES_MANTENIMIENTO = ['baja', 'media', 'alta', 'critica'];
 
 export default function MantencionesPage() {
   const [mantenimientos, setMantenimientos] = useState([]);
@@ -45,6 +46,7 @@ export default function MantencionesPage() {
     fecha_termino: '',
     costo_total: '',
     estado: 'en_proceso',
+    prioridad: 'media',
     repuestos_utilizados: '',
     observaciones: '',
   });
@@ -157,8 +159,9 @@ export default function MantencionesPage() {
         fecha_termino: mantenimiento.fecha_termino || '',
         costo_total: mantenimiento.costo_total || '',
         estado: mantenimiento.estado,
-        repuestos_utilizados: Array.isArray(mantenimiento.repuestos_utilizados) 
-          ? mantenimiento.repuestos_utilizados.join(', ') 
+        prioridad: mantenimiento.prioridad || 'media',
+        repuestos_utilizados: Array.isArray(mantenimiento.repuestos_utilizados)
+          ? mantenimiento.repuestos_utilizados.join(', ')
           : mantenimiento.repuestos_utilizados || '',
         observaciones: mantenimiento.observaciones || '',
       });
@@ -175,6 +178,7 @@ export default function MantencionesPage() {
         fecha_termino: '',
         costo_total: '',
         estado: 'en_proceso',
+        prioridad: 'media',
         repuestos_utilizados: '',
         observaciones: '',
       });
@@ -505,6 +509,17 @@ export default function MantencionesPage() {
           options={ESTADOS_MANTENIMIENTO.map(e => ({ id: e, label: e }))}
           value={formData.estado}
           onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
+          required
+        />
+
+        <Select
+          label="Prioridad *"
+          options={PRIORIDADES_MANTENIMIENTO.map(p => ({
+            id: p,
+            label: p.charAt(0).toUpperCase() + p.slice(1)
+          }))}
+          value={formData.prioridad}
+          onChange={(e) => setFormData({ ...formData, prioridad: e.target.value })}
           required
         />
 

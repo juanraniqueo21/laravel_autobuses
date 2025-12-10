@@ -92,10 +92,20 @@ export default function AnalisisMantenimientosPage() {
     return meses[m - 1];
   };
 
+  const formatFecha = (fechaString) => {
+    if (!fechaString) return 'N/A';
+    // Si la fecha viene con formato ISO (2025-11-10T03:00:00.000000Z), extraer solo la fecha
+    const fecha = fechaString.split('T')[0];
+    // Convertir de YYYY-MM-DD a DD-MM-YYYY
+    const [anio, mes, dia] = fecha.split('-');
+    return `${dia}-${mes}-${anio}`;
+  };
+
   // Calcular métricas totales
   const totalMantenimientos = busesMantenimientos.reduce((sum, bus) => sum + (bus.total_mantenimientos || 0), 0);
   const totalCostos = costosMantenimiento.reduce((sum, bus) => sum + (bus.costo_total_mantenimiento || 0), 0);
-  const busesEnMantenimiento = busesMantenimientos.filter(bus => bus.estado_bus === 'mantenimiento').length;
+  // Buses en mantenimiento = todos los buses en el endpoint de emergencia (que están en proceso)
+  const busesEnMantenimiento = busesEmergencia.length;
   const busesActivablesEmergencia = busesEmergencia.filter(bus => bus.activable_emergencia).length;
 
   if (loading) {
@@ -210,10 +220,11 @@ export default function AnalisisMantenimientosPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Bus</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Servicio</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Capacidad</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Mant.</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Descripción</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Días</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Fecha Inicio</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Fecha Término</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Días</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Mecánico</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Prioridad</th>
                   <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Acción</th>
@@ -224,20 +235,25 @@ export default function AnalisisMantenimientosPage() {
                   <tr key={bus.bus_id} className={`hover:bg-gray-50 transition-colors ${!bus.activable_emergencia ? 'opacity-50' : ''}`}>
                     <td className="px-4 py-4">
                       <div className="font-bold text-gray-900">{bus.patente}</div>
-                      <div className="text-xs text-gray-500">{bus.marca} {bus.modelo}</div>
+                      <div className="text-xs text-gray-500">{bus.marca} {bus.modelo} ({bus.capacidad_pasajeros} pax)</div>
                     </td>
                     <td className="px-4 py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase border ${getTipoServicioColor(bus.tipo_servicio)}`}>
                         {bus.tipo_servicio}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-gray-700">{bus.capacidad_pasajeros} pax</td>
                     <td className="px-4 py-4">
                       <span className={`px-2 py-1 rounded text-xs font-bold ${bus.tipo_mantenimiento === 'Preventivo' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>
                         {bus.tipo_mantenimiento}
                       </span>
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-700 max-w-xs truncate">{bus.descripcion}</td>
+                    <td className="px-4 py-4 text-center text-sm text-gray-700">
+                      {formatFecha(bus.fecha_inicio)}
+                    </td>
+                    <td className="px-4 py-4 text-center text-sm text-gray-700">
+                      {formatFecha(bus.fecha_termino_estimada)}
+                    </td>
                     <td className="px-4 py-4 text-center">
                       <span className="px-2 py-1 bg-gray-100 rounded text-sm font-semibold text-gray-900">
                         {bus.dias_en_mantenimiento}d
@@ -245,9 +261,10 @@ export default function AnalisisMantenimientosPage() {
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-600">{bus.mecanico_asignado || 'N/A'}</td>
                     <td className="px-4 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${
                         bus.prioridad_mantenimiento === 'baja' ? 'bg-green-100 text-green-800' :
                         bus.prioridad_mantenimiento === 'media' ? 'bg-yellow-100 text-yellow-800' :
+                        bus.prioridad_mantenimiento === 'alta' ? 'bg-orange-100 text-orange-800' :
                         'bg-red-100 text-red-800'
                       }`}>
                         {bus.prioridad_mantenimiento}
