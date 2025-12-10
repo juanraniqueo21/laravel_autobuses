@@ -400,14 +400,14 @@ class BusController extends Controller
                 ], 400);
             }
 
-            // Marcar mantenimientos en proceso como pendientes (para retomar después)
+            // Marcar mantenimientos en proceso como cancelados (suspendidos por emergencia)
             $mantenimientosActivos = Mantenimiento::where('bus_id', $id)
                 ->where('estado', 'en_proceso')
                 ->get();
 
             foreach ($mantenimientosActivos as $mantenimiento) {
                 $mantenimiento->update([
-                    'estado' => 'pendiente',
+                    'estado' => 'cancelado',
                     'observaciones' => ($mantenimiento->observaciones ?? '') .
                         ' [SUSPENDIDO POR EMERGENCIA - ' . now()->format('Y-m-d H:i') . ']'
                 ]);

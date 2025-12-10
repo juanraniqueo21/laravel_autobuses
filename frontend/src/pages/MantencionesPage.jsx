@@ -34,7 +34,15 @@ export default function MantencionesPage() {
   
   // Estados para selección múltiple
   const [selectedBuses, setSelectedBuses] = useState([]);
-  
+
+  // Estados para filtros
+  const [filtros, setFiltros] = useState({
+    busqueda: '',
+    estado: '',
+    tipo_mantenimiento: '',
+    bus_id: ''
+  });
+
   const { addNotification } = useNotifications();
 
   const [formData, setFormData] = useState({
@@ -142,7 +150,41 @@ export default function MantencionesPage() {
     });
   };
 
-  const sortedMantenimientos = [...mantenimientos].sort((a, b) => b.id - a.id);
+  // Filtrar mantenimientos
+  const mantenimientosFiltrados = mantenimientos.filter(mant => {
+    // Filtro por búsqueda general (patente o descripción)
+    if (filtros.busqueda) {
+      const busquedaLower = filtros.busqueda.toLowerCase();
+      const patente = getPatente(mant.bus_id).toLowerCase();
+      const descripcion = (mant.descripcion || '').toLowerCase();
+      const mecanico = getMecanicoNombre(mant.mecanico_id).toLowerCase();
+
+      if (!patente.includes(busquedaLower) &&
+          !descripcion.includes(busquedaLower) &&
+          !mecanico.includes(busquedaLower)) {
+        return false;
+      }
+    }
+
+    // Filtro por estado
+    if (filtros.estado && mant.estado !== filtros.estado) {
+      return false;
+    }
+
+    // Filtro por tipo de mantenimiento
+    if (filtros.tipo_mantenimiento && mant.tipo_mantenimiento !== filtros.tipo_mantenimiento) {
+      return false;
+    }
+
+    // Filtro por bus
+    if (filtros.bus_id && mant.bus_id !== parseInt(filtros.bus_id)) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const sortedMantenimientos = [...mantenimientosFiltrados].sort((a, b) => b.id - a.id);
   const { currentPage, setCurrentPage, totalPages, paginatedData } = usePagination(sortedMantenimientos, 10);
 
   const handleOpenDialog = (mantenimiento = null) => {
@@ -290,6 +332,7 @@ export default function MantencionesPage() {
     { id: 'tipo_mantenimiento', label: 'Tipo' },
     { id: 'descripcion', label: 'Descripción' },
     { id: 'fecha_inicio', label: 'Fecha Inicio' },
+    { id: 'fecha_termino', label: 'Fecha Término', render: (row) => row.fecha_termino || 'N/A' },
     {
       id: 'estado',
       label: 'Estado',
@@ -334,6 +377,66 @@ export default function MantencionesPage() {
           {error}
         </div>
       )}
+
+      {/* Filtros */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Input
+            label="Buscar"
+            type="text"
+            placeholder="Buscar por patente, descripción, mecánico..."
+            value={filtros.busqueda}
+            onChange={(e) => setFiltros({ ...filtros, busqueda: e.target.value })}
+          />
+
+          <Select
+            label="Bus"
+            options={[
+              { id: '', label: 'Todos los buses' },
+              ...buses.map(bus => ({
+                id: bus.id,
+                label: `${bus.patente} - ${bus.marca} ${bus.modelo}`
+              }))
+            ]}
+            value={filtros.bus_id}
+            onChange={(e) => setFiltros({ ...filtros, bus_id: e.target.value })}
+          />
+
+          <Select
+            label="Estado"
+            options={[
+              { id: '', label: 'Todos los estados' },
+              ...ESTADOS_MANTENIMIENTO.map(e => ({ id: e, label: e }))
+            ]}
+            value={filtros.estado}
+            onChange={(e) => setFiltros({ ...filtros, estado: e.target.value })}
+          />
+
+          <Select
+            label="Tipo de Mantenimiento"
+            options={[
+              { id: '', label: 'Todos los tipos' },
+              ...TIPOS_MANTENIMIENTO.map(t => ({ id: t, label: t }))
+            ]}
+            value={filtros.tipo_mantenimiento}
+            onChange={(e) => setFiltros({ ...filtros, tipo_mantenimiento: e.target.value })}
+          />
+        </div>
+
+        {(filtros.busqueda || filtros.estado || filtros.tipo_mantenimiento || filtros.bus_id) && (
+          <div className="mt-4 flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              Mostrando {sortedMantenimientos.length} de {mantenimientos.length} mantenimientos
+            </div>
+            <button
+              onClick={() => setFiltros({ busqueda: '', estado: '', tipo_mantenimiento: '', bus_id: '' })}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Limpiar filtros
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Tabla */}
       <Table
