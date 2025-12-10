@@ -508,6 +508,7 @@ class ReporteController extends Controller
 
         $analisis = $resultados->map(function ($item) {
             return [
+                'id' => $item->id, // Agregado id
                 'bus_id' => $item->id,
                 'patente' => $item->patente,
                 'marca' => $item->marca,
@@ -518,7 +519,7 @@ class ReporteController extends Controller
                 'preventivos' => (int) $item->preventivos,
                 'correctivos' => (int) $item->correctivos,
                 'en_proceso' => (int) $item->en_proceso,
-                'costo_total' => (int) $item->costo_total_mantenimientos,
+                'costo_total_mantenimientos' => (int) $item->costo_total_mantenimientos, // Corregido nombre del campo
             ];
         });
 
@@ -616,6 +617,7 @@ class ReporteController extends Controller
             $edadBus = now()->year - $item->anio_fabricacion;
 
             return [
+                'id' => $item->id, // Agregado para consistencia
                 'bus_id' => $item->id,
                 'patente' => $item->patente,
                 'marca' => $item->marca,
@@ -623,8 +625,8 @@ class ReporteController extends Controller
                 'tipo_servicio' => ucfirst($item->tipo_servicio),
                 'edad_anios' => $edadBus,
                 'total_mantenimientos' => (int) $item->total_mantenimientos,
-                'costo_total' => (int) $item->costo_total,
-                'costo_promedio' => (int) $item->costo_promedio,
+                'costo_total_mantenimiento' => (int) $item->costo_total, // Nombre corregido para frontend
+                'costo_promedio_mantenimiento' => (int) $item->costo_promedio, // Nombre corregido para frontend
                 'costo_maximo' => (int) $item->costo_maximo,
             ];
         });

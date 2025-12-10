@@ -81,6 +81,7 @@ Route::middleware('jwt.auth')->group(function () {
     Route::get('/buses/{id}', [BusController::class, 'show']);
     Route::post('/buses', [BusController::class, 'store']);
     Route::put('/buses/{id}', [BusController::class, 'update']);
+    Route::post('/buses/{id}/activar-emergencia', [BusController::class, 'activarEmergencia']);
     Route::delete('/buses/{id}', [BusController::class, 'destroy']);
 
     // RUTAS

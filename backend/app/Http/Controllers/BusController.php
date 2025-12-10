@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Bus;
 use App\Models\MarcaBus;
 use App\Models\ModeloBus;
+use App\Models\Mantenimiento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class BusController extends Controller
@@ -373,13 +375,74 @@ class BusController extends Controller
     }
 
     /**
+     * Activar bus en modo emergencia
+     * Cambia el estado del bus a operativo y marca mantenimientos en proceso como pendientes
+     */
+    public function activarEmergencia($id)
+    {
+        try {
+            DB::beginTransaction();
+
+            $bus = Bus::find($id);
+
+            if (!$bus) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Bus no encontrado'
+                ], 404);
+            }
+
+            // Verificar que el bus esté en mantenimiento
+            if ($bus->estado !== 'mantenimiento') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El bus no está en mantenimiento'
+                ], 400);
+            }
+
+            // Marcar mantenimientos en proceso como pendientes (para retomar después)
+            $mantenimientosActivos = Mantenimiento::where('bus_id', $id)
+                ->where('estado', 'en_proceso')
+                ->get();
+
+            foreach ($mantenimientosActivos as $mantenimiento) {
+                $mantenimiento->update([
+                    'estado' => 'pendiente',
+                    'observaciones' => ($mantenimiento->observaciones ?? '') .
+                        ' [SUSPENDIDO POR EMERGENCIA - ' . now()->format('Y-m-d H:i') . ']'
+                ]);
+            }
+
+            // Activar el bus
+            $bus->update(['estado' => 'operativo']);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bus activado en modo emergencia exitosamente',
+                'data' => $bus->fresh(),
+                'mantenimientos_suspendidos' => $mantenimientosActivos->count()
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al activar bus en emergencia',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Eliminar un bus
      */
     public function destroy($id)
     {
         try {
             $bus = Bus::find($id);
-            
+
             if (!$bus) {
                 return response()->json([
                     'success' => false,

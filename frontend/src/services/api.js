@@ -1438,11 +1438,15 @@ export const fetchBusesDisponiblesEmergencia = async () => {
 
 /**
  * Activar bus en emergencia (cambiar estado de mantenimiento a operativo)
+ * Suspende mantenimientos en proceso y activa el bus
  */
 export const activarBusEmergencia = async (busId) => {
-  const url = `${API_URL}/buses/${busId}`;
-  const response = await fetch(url, fetchOptions('PUT', { estado: 'operativo' }));
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const url = `${API_URL}/buses/${busId}/activar-emergencia`;
+  const response = await fetch(url, fetchOptions('POST', {}));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
   const result = await response.json();
   return result;
 };
