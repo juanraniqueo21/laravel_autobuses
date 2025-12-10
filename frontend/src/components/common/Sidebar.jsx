@@ -2,8 +2,7 @@ import React from 'react';
 import {
   LayoutDashboard, Users, UserCog, Wrench, Bus, Map,
   CalendarClock, Navigation, TrendingUp, Shield, User, Briefcase,
-  X, DollarSign, Calendar, MapPin, FileText, ClipboardList, BarChart3,
-  AlertTriangle
+  X, DollarSign, Calendar, MapPin, FileText, ClipboardList, BarChart3
 } from 'lucide-react';
 
 const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
@@ -161,15 +160,6 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
         >
           <Wrench size={20} className={getIconClasses('analisis-mantenimientos')} />
           <span className="font-medium truncate">Análisis Mantenimientos</span>
-        </button>
-
-        {/* NUEVO: Botón de Alertas Inteligentes */}
-        <button
-          onClick={() => handleSelect('alertas')}
-          className={getButtonClasses('alertas')}
-        >
-          <AlertTriangle size={20} className={getIconClasses('alertas')} />
-          <span className="font-medium truncate">Alertas Inteligentes</span>
         </button>
 
         {/* NUEVO: Botón de Análisis RRHH */}
