@@ -16,22 +16,25 @@ export default function AnalisisMantenimientosPage() {
   const [costosMantenimiento, setCostosMantenimiento] = useState([]);
   const [busesEmergencia, setBusesEmergencia] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
+  const [mes, setMes] = useState(new Date().getMonth() + 1);
+  const [anio, setAnio] = useState(new Date().getFullYear());
   const [activandoBus, setActivandoBus] = useState(null);
+  const [filtroActivo, setFiltroActivo] = useState(false);
 
   const { addNotification } = useNotifications();
 
   useEffect(() => {
     loadData();
-  }, [fechaInicio, fechaFin]);
+  }, [mes, anio, filtroActivo]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const params = {};
-      if (fechaInicio) params.fecha_inicio = fechaInicio;
-      if (fechaFin) params.fecha_fin = fechaFin;
+      if (filtroActivo) {
+        params.mes = mes;
+        params.anio = anio;
+      }
 
       const [busesData, fallasData, costosData, emergenciaData] = await Promise.all([
         fetchBusesConMasMantenimientos(params),
@@ -84,6 +87,11 @@ export default function AnalisisMantenimientosPage() {
     return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount || 0);
   };
 
+  const getMesNombre = (m) => {
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    return meses[m - 1];
+  };
+
   // Calcular métricas totales
   const totalMantenimientos = busesMantenimientos.reduce((sum, bus) => sum + (bus.total_mantenimientos || 0), 0);
   const totalCostos = costosMantenimiento.reduce((sum, bus) => sum + (bus.costo_total_mantenimiento || 0), 0);
@@ -108,37 +116,51 @@ export default function AnalisisMantenimientosPage() {
         <Wrench className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Filtros de Fecha */}
+      {/* Filtros de Período */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
         <div className="flex items-center gap-4">
           <Calendar size={20} className="text-gray-500" />
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fecha Inicio</label>
+
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
-                type="date"
-                value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                type="checkbox"
+                checked={filtroActivo}
+                onChange={(e) => setFiltroActivo(e.target.checked)}
+                className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
               />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fecha Fin</label>
-              <input
-                type="date"
-                value={fechaFin}
-                onChange={(e) => setFechaFin(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-              />
-            </div>
+              <span className="text-sm font-semibold text-gray-700">Filtrar por período</span>
+            </label>
           </div>
-          {(fechaInicio || fechaFin) && (
-            <button
-              onClick={() => { setFechaInicio(''); setFechaFin(''); }}
-              className="px-4 py-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
-            >
-              Limpiar
-            </button>
+
+          {filtroActivo && (
+            <>
+              <select
+                value={mes}
+                onChange={(e) => setMes(parseInt(e.target.value))}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
+              >
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                  <option key={m} value={m}>{getMesNombre(m)}</option>
+                ))}
+              </select>
+
+              <select
+                value={anio}
+                onChange={(e) => setAnio(parseInt(e.target.value))}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
+              >
+                {[2024, 2025, 2026].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {filtroActivo && (
+            <div className="ml-auto px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800 font-medium">
+              Mostrando: {getMesNombre(mes)} {anio}
+            </div>
           )}
         </div>
       </div>

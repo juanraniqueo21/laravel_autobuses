@@ -12,6 +12,33 @@ use Illuminate\Support\Facades\DB;
 class ReporteController extends Controller
 {
     /**
+     * Helper para convertir parámetros mes/año a fechas
+     * Si se proporcionan mes/año, convierte a fecha_inicio y fecha_fin del mes
+     */
+    private function procesarFiltrosFecha(Request $request)
+    {
+        $fechaInicio = null;
+        $fechaFin = null;
+
+        // Si se envía mes y año, convertir a rango de fechas
+        if ($request->has('mes') && $request->has('anio')) {
+            $mes = $request->mes;
+            $anio = $request->anio;
+
+            // Primer día del mes
+            $fechaInicio = \Carbon\Carbon::createFromDate($anio, $mes, 1)->startOfDay()->format('Y-m-d');
+            // Último día del mes
+            $fechaFin = \Carbon\Carbon::createFromDate($anio, $mes, 1)->endOfMonth()->endOfDay()->format('Y-m-d');
+        } else {
+            // Si no hay mes/año, usar fecha_inicio y fecha_fin directamente
+            $fechaInicio = $request->input('fecha_inicio');
+            $fechaFin = $request->input('fecha_fin');
+        }
+
+        return ['fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin];
+    }
+
+    /**
      * Listar todos los reportes
      */
     public function index(Request $request)
@@ -473,6 +500,9 @@ class ReporteController extends Controller
      */
     public function busesConMasMantenimientos(Request $request)
     {
+        // Procesar filtros de fecha (mes/año o fecha_inicio/fecha_fin)
+        $fechas = $this->procesarFiltrosFecha($request);
+
         $query = DB::table('mantenimientos')
             ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
             ->select(
@@ -490,11 +520,11 @@ class ReporteController extends Controller
             );
 
         // Filtros de fecha
-        if ($request->has('fecha_inicio')) {
-            $query->where('mantenimientos.fecha_inicio', '>=', $request->fecha_inicio);
+        if ($fechas['fecha_inicio']) {
+            $query->where('mantenimientos.fecha_inicio', '>=', $fechas['fecha_inicio']);
         }
-        if ($request->has('fecha_fin')) {
-            $query->where('mantenimientos.fecha_inicio', '<=', $request->fecha_fin);
+        if ($fechas['fecha_fin']) {
+            $query->where('mantenimientos.fecha_inicio', '<=', $fechas['fecha_fin']);
         }
         if ($request->has('tipo_mantenimiento')) {
             $query->where('mantenimientos.tipo_mantenimiento', $request->tipo_mantenimiento);
@@ -536,16 +566,19 @@ class ReporteController extends Controller
      */
     public function tiposFallasMasComunes(Request $request)
     {
+        // Procesar filtros de fecha (mes/año o fecha_inicio/fecha_fin)
+        $fechas = $this->procesarFiltrosFecha($request);
+
         $query = DB::table('mantenimientos')
             ->where('tipo_mantenimiento', 'correctivo')
             ->whereNotNull('descripcion');
 
         // Filtros de fecha
-        if ($request->has('fecha_inicio')) {
-            $query->where('fecha_inicio', '>=', $request->fecha_inicio);
+        if ($fechas['fecha_inicio']) {
+            $query->where('fecha_inicio', '>=', $fechas['fecha_inicio']);
         }
-        if ($request->has('fecha_fin')) {
-            $query->where('fecha_inicio', '<=', $request->fecha_fin);
+        if ($fechas['fecha_fin']) {
+            $query->where('fecha_inicio', '<=', $fechas['fecha_fin']);
         }
 
         $resultados = $query
@@ -583,17 +616,20 @@ class ReporteController extends Controller
      */
     public function costosMantenimientoPorBus(Request $request)
     {
+        // Procesar filtros de fecha (mes/año o fecha_inicio/fecha_fin)
+        $fechas = $this->procesarFiltrosFecha($request);
+
         $query = DB::table('mantenimientos')
             ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
             ->whereNotNull('mantenimientos.costo_total')
             ->where('mantenimientos.estado', 'completado');
 
         // Filtros de fecha
-        if ($request->has('fecha_inicio')) {
-            $query->where('mantenimientos.fecha_inicio', '>=', $request->fecha_inicio);
+        if ($fechas['fecha_inicio']) {
+            $query->where('mantenimientos.fecha_inicio', '>=', $fechas['fecha_inicio']);
         }
-        if ($request->has('fecha_fin')) {
-            $query->where('mantenimientos.fecha_inicio', '<=', $request->fecha_fin);
+        if ($fechas['fecha_fin']) {
+            $query->where('mantenimientos.fecha_inicio', '<=', $fechas['fecha_fin']);
         }
 
         $resultados = $query
@@ -697,7 +733,10 @@ class ReporteController extends Controller
                 $activable = false;
             }
 
-            $diasEnMantenimiento = now()->diffInDays($item->fecha_inicio);
+            // Calcular días transcurridos desde el inicio del mantenimiento
+            $diasEnMantenimiento = \Carbon\Carbon::parse($item->fecha_inicio)->diffInDays(now(), false);
+            // Si el resultado es negativo (fecha futura), mostrar 0
+            $diasEnMantenimiento = max(0, $diasEnMantenimiento);
 
             return [
                 'bus_id' => $item->bus_id,
