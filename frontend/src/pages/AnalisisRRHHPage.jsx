@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, AlertTriangle, FileText, TrendingDown, Ban } from 'lucide-react';
+import { Users, AlertTriangle, FileText, TrendingDown, Ban, Calendar } from 'lucide-react';
 import {
   fetchAlertasContratos,
   fetchRankingLicencias,
@@ -17,21 +17,30 @@ export default function AnalisisRRHHPage() {
   const [empleadosAltoRiesgo, setEmpleadosAltoRiesgo] = useState([]);
   const [loading, setLoading] = useState(true);
   const [procesandoBaja, setProcesandoBaja] = useState(null);
+  const [mes, setMes] = useState(new Date().getMonth() + 1);
+  const [anio, setAnio] = useState(new Date().getFullYear());
+  const [filtroActivo, setFiltroActivo] = useState(false);
 
   const { addNotification } = useNotifications();
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [mes, anio, filtroActivo]);
 
   const loadData = async () => {
     try {
       setLoading(true);
+      const params = {};
+      if (filtroActivo) {
+        params.mes = mes;
+        params.anio = anio;
+      }
+
       const [alertas, ranking, resumen, altoRiesgo] = await Promise.all([
-        fetchAlertasContratos(),
-        fetchRankingLicencias(),
-        fetchResumenContratos(),
-        fetchEmpleadosAltoRiesgo(),
+        fetchAlertasContratos(params),
+        fetchRankingLicencias(params),
+        fetchResumenContratos(params),
+        fetchEmpleadosAltoRiesgo(params),
       ]);
 
       setAlertasContratos(alertas.data || []);
@@ -83,8 +92,16 @@ export default function AnalisisRRHHPage() {
     return colors[tipo] || 'bg-gray-100 text-gray-800';
   };
 
-  const formatFecha = (fecha) => {
-    if (!fecha) return 'N/A';
+  const getMesNombre = (m) => {
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    return meses[m - 1];
+  };
+
+  const formatFecha = (fechaString) => {
+    if (!fechaString) return 'N/A';
+    // Si la fecha viene con formato ISO (2025-11-10T03:00:00.000000Z), extraer solo la fecha
+    const fecha = fechaString.split('T')[0];
+    // Convertir de YYYY-MM-DD a DD-MM-YYYY
     const [anio, mes, dia] = fecha.split('-');
     return `${dia}-${mes}-${anio}`;
   };
@@ -105,6 +122,53 @@ export default function AnalisisRRHHPage() {
           </p>
         </div>
         <Users className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
+      </div>
+
+      {/* Filtros de Período */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
+        <div className="flex items-center gap-4">
+          <Calendar size={20} className="text-gray-500" />
+
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filtroActivo}
+                onChange={(e) => setFiltroActivo(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm font-semibold text-gray-700">Filtrar por período</span>
+            </label>
+          </div>
+
+          {filtroActivo && (
+            <>
+              <select
+                value={mes}
+                onChange={(e) => setMes(parseInt(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                  <option key={m} value={m}>{getMesNombre(m)}</option>
+                ))}
+              </select>
+
+              <select
+                value={anio}
+                onChange={(e) => setAnio(parseInt(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+              >
+                {[2024, 2025, 2026].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {!filtroActivo && (
+            <span className="text-sm text-gray-500 italic">Mostrando todos los datos disponibles</span>
+          )}
+        </div>
       </div>
 
       {/* Métricas Resumen */}

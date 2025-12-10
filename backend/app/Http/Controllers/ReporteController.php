@@ -674,24 +674,43 @@ class ReporteController extends Controller
      * Buses disponibles para activación de emergencia
      * Buses en mantenimiento que podrían activarse en caso de urgencia
      * Se consideran activables los mantenimientos preventivos o correctivos menores
+     *
+     * Parámetros opcionales:
+     * - mes: filtrar por mes específico
+     * - anio: filtrar por año específico
      */
     public function busesDisponiblesEmergencia(Request $request)
     {
+        // Procesar filtros de fecha (mes/año o fecha_inicio/fecha_fin)
+        $fechas = $this->procesarFiltrosFecha($request);
         $hoy = now()->format('Y-m-d');
 
-        // Buses actualmente en mantenimiento
-        $busesEnMantenimiento = DB::table('mantenimientos')
+        // Query base para buses en mantenimiento
+        $query = DB::table('mantenimientos')
             ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
             ->leftJoin('mecanicos', 'mantenimientos.mecanico_id', '=', 'mecanicos.id')
             ->leftJoin('empleados', 'mecanicos.empleado_id', '=', 'empleados.id')
             ->leftJoin('users', 'empleados.user_id', '=', 'users.id')
-            ->where('mantenimientos.estado', 'en_proceso')
-            ->where('mantenimientos.fecha_inicio', '<=', $hoy)
-            ->where(function($query) use ($hoy) {
-                $query->whereNull('mantenimientos.fecha_termino')
-                      ->orWhere('mantenimientos.fecha_termino', '>=', $hoy);
-            })
-            ->select(
+            ->where('mantenimientos.estado', 'en_proceso');
+
+        // Si hay filtros de fecha, aplicarlos al periodo del mantenimiento
+        if ($fechas['fecha_inicio'] && $fechas['fecha_fin']) {
+            // Buses que estuvieron en mantenimiento durante el periodo filtrado
+            $query->where('mantenimientos.fecha_inicio', '<=', $fechas['fecha_fin'])
+                  ->where(function($q) use ($fechas) {
+                      $q->whereNull('mantenimientos.fecha_termino')
+                        ->orWhere('mantenimientos.fecha_termino', '>=', $fechas['fecha_inicio']);
+                  });
+        } else {
+            // Sin filtros: mostrar estado actual (buses actualmente en mantenimiento)
+            $query->where('mantenimientos.fecha_inicio', '<=', $hoy)
+                  ->where(function($q) use ($hoy) {
+                      $q->whereNull('mantenimientos.fecha_termino')
+                        ->orWhere('mantenimientos.fecha_termino', '>=', $hoy);
+                  });
+        }
+
+        $busesEnMantenimiento = $query->select(
                 'buses.id as bus_id',
                 'buses.patente',
                 'buses.marca',
@@ -733,11 +752,20 @@ class ReporteController extends Controller
                 $activable = false;
             }
 
-            // Calcular días transcurridos desde el inicio del mantenimiento
+            // Calcular días de duración del mantenimiento
             $fechaInicio = \Carbon\Carbon::parse($item->fecha_inicio);
-            $diasEnMantenimiento = (int) $fechaInicio->diffInDays(now(), false);
-            // Si el resultado es negativo (fecha futura), mostrar 0
-            $diasEnMantenimiento = max(0, $diasEnMantenimiento);
+
+            if ($item->fecha_termino) {
+                // Si hay fecha de término, calcular duración total del mantenimiento
+                $fechaTermino = \Carbon\Carbon::parse($item->fecha_termino);
+                $diasEnMantenimiento = (int) $fechaInicio->diffInDays($fechaTermino, false);
+                // Agregar 1 para contar ambos días (inicio y fin inclusive)
+                $diasEnMantenimiento = abs($diasEnMantenimiento) + 1;
+            } else {
+                // Si no hay fecha de término, calcular días desde el inicio hasta hoy
+                $diasEnMantenimiento = (int) $fechaInicio->diffInDays(now(), false);
+                $diasEnMantenimiento = max(0, $diasEnMantenimiento);
+            }
 
             return [
                 'bus_id' => $item->bus_id,

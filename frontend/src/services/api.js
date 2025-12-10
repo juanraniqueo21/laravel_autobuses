@@ -1427,9 +1427,11 @@ export const fetchCostosMantenimientoPorBus = async (params = {}) => {
 
 /**
  * Obtener buses disponibles para emergencia
+ * @param {Object} params - Parámetros opcionales (mes, anio)
  */
-export const fetchBusesDisponiblesEmergencia = async () => {
-  const url = `${API_URL}/reportes/buses-disponibles-emergencia`;
+export const fetchBusesDisponiblesEmergencia = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/reportes/buses-disponibles-emergencia${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
   const response = await fetch(url, fetchOptions());
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
@@ -1483,9 +1485,11 @@ export const fetchPredicciones = async () => {
 
 /**
  * Obtener alertas de contratos próximos a vencer
+ * @param {Object} params - Parámetros opcionales (mes, anio)
  */
-export const fetchAlertasContratos = async () => {
-  const url = `${API_URL}/rrhh/alertas-contratos`;
+export const fetchAlertasContratos = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/rrhh/alertas-contratos${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
   const response = await fetch(url, fetchOptions());
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
@@ -1506,9 +1510,11 @@ export const fetchRankingLicencias = async (params = {}) => {
 
 /**
  * Obtener resumen de contratos por tipo
+ * @param {Object} params - Parámetros opcionales (mes, anio)
  */
-export const fetchResumenContratos = async () => {
-  const url = `${API_URL}/rrhh/resumen-contratos`;
+export const fetchResumenContratos = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/rrhh/resumen-contratos${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
   const response = await fetch(url, fetchOptions());
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
@@ -1517,9 +1523,11 @@ export const fetchResumenContratos = async () => {
 
 /**
  * Obtener empleados con alto riesgo de no renovación
+ * @param {Object} params - Parámetros opcionales (mes, anio)
  */
-export const fetchEmpleadosAltoRiesgo = async () => {
-  const url = `${API_URL}/rrhh/empleados-alto-riesgo`;
+export const fetchEmpleadosAltoRiesgo = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/rrhh/empleados-alto-riesgo${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
   const response = await fetch(url, fetchOptions());
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();

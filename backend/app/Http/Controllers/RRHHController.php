@@ -11,10 +11,41 @@ use Carbon\Carbon;
 class RRHHController extends Controller
 {
     /**
+     * Helper para convertir parámetros mes/año a fechas
+     * Si se proporcionan mes/año, convierte a fecha_inicio y fecha_fin del mes
+     */
+    private function procesarFiltrosFecha(Request $request)
+    {
+        $fechaInicio = null;
+        $fechaFin = null;
+
+        // Si se envía mes y año, convertir a rango de fechas
+        if ($request->has('mes') && $request->has('anio')) {
+            $mes = $request->mes;
+            $anio = $request->anio;
+
+            // Primer día del mes
+            $fechaInicio = Carbon::createFromDate($anio, $mes, 1)->startOfDay()->format('Y-m-d');
+            // Último día del mes
+            $fechaFin = Carbon::createFromDate($anio, $mes, 1)->endOfMonth()->endOfDay()->format('Y-m-d');
+        } else {
+            // Si no hay mes/año, usar fecha_inicio y fecha_fin directamente
+            $fechaInicio = $request->input('fecha_inicio');
+            $fechaFin = $request->input('fecha_fin');
+        }
+
+        return ['fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin];
+    }
+
+    /**
      * Alertas de contratos próximos a vencer
      * Retorna empleados con contrato "plazo_fijo" que vencen en los próximos 30 días
+     *
+     * Parámetros opcionales:
+     * - mes: filtrar por mes específico
+     * - anio: filtrar por año específico
      */
-    public function alertasContratos()
+    public function alertasContratos(Request $request)
     {
         $hoy = Carbon::now();
         $limite = $hoy->copy()->addDays(30);
@@ -56,12 +87,17 @@ class RRHHController extends Controller
     /**
      * Ranking de empleados por cantidad de licencias
      * Ordena empleados por cantidad de licencias/permisos tomados
+     *
+     * Parámetros opcionales:
+     * - mes: filtrar por mes específico
+     * - anio: filtrar por año específico
      */
     public function rankingLicencias(Request $request)
     {
-        // Parámetros opcionales para filtrar por fecha
-        $fechaInicio = $request->input('fecha_inicio');
-        $fechaFin = $request->input('fecha_fin');
+        // Procesar filtros de fecha (mes/año o fecha_inicio/fecha_fin)
+        $fechas = $this->procesarFiltrosFecha($request);
+        $fechaInicio = $fechas['fecha_inicio'];
+        $fechaFin = $fechas['fecha_fin'];
 
         $query = DB::table('empleados')
             ->join('users', 'empleados.user_id', '=', 'users.id')
@@ -193,17 +229,33 @@ class RRHHController extends Controller
     /**
      * Empleados con alto riesgo de no renovación
      * Cruza datos de contratos próximos a vencer + muchas licencias
+     *
+     * Parámetros opcionales:
+     * - mes: filtrar licencias por mes específico
+     * - anio: filtrar licencias por año específico
      */
-    public function empleadosAltoRiesgo()
+    public function empleadosAltoRiesgo(Request $request)
     {
+        // Procesar filtros de fecha para licencias
+        $fechas = $this->procesarFiltrosFecha($request);
+        $fechaInicio = $fechas['fecha_inicio'];
+        $fechaFin = $fechas['fecha_fin'];
+
         $hoy = Carbon::now();
         $limite = $hoy->copy()->addDays(60); // 60 días de anticipación
 
         $empleados = DB::table('empleados')
             ->join('users', 'empleados.user_id', '=', 'users.id')
-            ->leftJoin('permisos_licencias', function($join) {
+            ->leftJoin('permisos_licencias', function($join) use ($fechaInicio, $fechaFin) {
                 $join->on('empleados.id', '=', 'permisos_licencias.empleado_id')
                      ->where('permisos_licencias.estado', '!=', 'rechazado');
+
+                if ($fechaInicio) {
+                    $join->where('permisos_licencias.fecha_inicio', '>=', $fechaInicio);
+                }
+                if ($fechaFin) {
+                    $join->where('permisos_licencias.fecha_inicio', '<=', $fechaFin);
+                }
             })
             ->select(
                 'empleados.id',

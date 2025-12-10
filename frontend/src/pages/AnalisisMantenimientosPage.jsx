@@ -40,7 +40,7 @@ export default function AnalisisMantenimientosPage() {
         fetchBusesConMasMantenimientos(params),
         fetchTiposFallasMasComunes(params),
         fetchCostosMantenimientoPorBus(params),
-        fetchBusesDisponiblesEmergencia()
+        fetchBusesDisponiblesEmergencia(params)
       ]);
 
       setBusesMantenimientos(busesData || []);
