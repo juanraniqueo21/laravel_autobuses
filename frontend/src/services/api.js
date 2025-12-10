@@ -1476,3 +1476,52 @@ export const fetchPredicciones = async () => {
   const result = await response.json();
   return result;
 };
+
+// ============================================
+// RECURSOS HUMANOS - ANÁLISIS Y GESTIÓN
+// ============================================
+
+/**
+ * Obtener alertas de contratos próximos a vencer
+ */
+export const fetchAlertasContratos = async () => {
+  const url = `${API_URL}/rrhh/alertas-contratos`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener ranking de empleados por cantidad de licencias
+ */
+export const fetchRankingLicencias = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/rrhh/ranking-licencias${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener resumen de contratos por tipo
+ */
+export const fetchResumenContratos = async () => {
+  const url = `${API_URL}/rrhh/resumen-contratos`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener empleados con alto riesgo de no renovación
+ */
+export const fetchEmpleadosAltoRiesgo = async () => {
+  const url = `${API_URL}/rrhh/empleados-alto-riesgo`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};

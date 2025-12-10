@@ -20,6 +20,7 @@ use App\Http\Controllers\PermisoLicenciaController;
 use App\Http\Controllers\LiquidacionController;
 use App\Http\Controllers\ReportController; // Controlador de Logística
 use App\Http\Controllers\ReporteController; // Controlador de Reportes (Nuevo)
+use App\Http\Controllers\RRHHController; // Controlador de RRHH
 
 // ============================================
 // RUTAS PÚBLICAS (sin autenticación)
@@ -224,6 +225,23 @@ Route::middleware('jwt.auth')->group(function () {
     Route::prefix('alertas')->group(function () {
         Route::get('/', [App\Http\Controllers\AlertasInteligentesController::class, 'obtenerAlertas']);
         Route::get('/predicciones', [App\Http\Controllers\AlertasInteligentesController::class, 'predicciones']);
+    });
+
+    // ============================================
+    // RECURSOS HUMANOS - ANÁLISIS Y GESTIÓN
+    // ============================================
+    Route::prefix('rrhh')->group(function () {
+        // Alertas de contratos
+        Route::get('/alertas-contratos', [RRHHController::class, 'alertasContratos']);
+
+        // Ranking de licencias
+        Route::get('/ranking-licencias', [RRHHController::class, 'rankingLicencias']);
+
+        // Resumen de contratos
+        Route::get('/resumen-contratos', [RRHHController::class, 'resumenContratos']);
+
+        // Empleados con alto riesgo de no renovación
+        Route::get('/empleados-alto-riesgo', [RRHHController::class, 'empleadosAltoRiesgo']);
     });
 
 });
