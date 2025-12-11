@@ -1,60 +1,56 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { 
-  Users, AlertTriangle, CheckCircle2, Clock3, Briefcase, TrendingUp, 
-  RefreshCcw, PieChart as PieIcon, FileText, TrendingDown, Ban,
-  Home, BarChart3, AlertCircle, UserCheck
-} from 'lucide-react';
-import { 
-  fetchEmpleados, fetchLicencias, 
-  fetchAlertasContratos, fetchRankingLicencias, 
-  fetchResumenContratos, fetchEmpleadosAltoRiesgo, 
-  updateEmpleado 
+import React, { useState, useEffect } from 'react';
+import { Users, AlertTriangle, FileText, TrendingDown, Ban, Calendar, PieChart as PieChartIcon, BarChart3 } from 'lucide-react';
+import {
+  fetchAlertasContratos,
+  fetchRankingLicencias,
+  fetchResumenContratos,
+  fetchEmpleadosAltoRiesgo,
+  updateEmpleado
 } from '../services/api';
-import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from 'recharts';
-import { useNotifications } from '../context/NotificationContext';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import MetricCard from '../components/cards/MetricCard';
+import { useNotifications } from '../context/NotificationContext';
 
-export default function RrhhDashboardUnificado({ onNavigate }) {
-  const [empleados, setEmpleados] = useState([]);
-  const [licencias, setLicencias] = useState([]);
+export default function AnalisisRRHHPage() {
   const [alertasContratos, setAlertasContratos] = useState([]);
   const [rankingLicencias, setRankingLicencias] = useState([]);
   const [resumenContratos, setResumenContratos] = useState({});
   const [empleadosAltoRiesgo, setEmpleadosAltoRiesgo] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [procesandoBaja, setProcesandoBaja] = useState(null);
-  const [activeView, setActiveView] = useState('resumen'); // 'resumen', 'alertas', 'rendimiento', 'riesgo'
+  const [mes, setMes] = useState(new Date().getMonth() + 1);
+  const [anio, setAnio] = useState(new Date().getFullYear());
+  const [filtroActivo, setFiltroActivo] = useState(false);
 
   const { addNotification } = useNotifications();
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [mes, anio, filtroActivo]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [emps, lic, alertas, ranking, resumen, altoRiesgo] = await Promise.all([
-        fetchEmpleados(),
-        fetchLicencias({}),
-        fetchAlertasContratos(),
-        fetchRankingLicencias(),
-        fetchResumenContratos(),
-        fetchEmpleadosAltoRiesgo(),
+      const params = {};
+      if (filtroActivo) {
+        params.mes = mes;
+        params.anio = anio;
+      }
+
+      const [alertas, ranking, resumen, altoRiesgo] = await Promise.all([
+        fetchAlertasContratos(params),
+        fetchRankingLicencias(params),
+        fetchResumenContratos(params),
+        fetchEmpleadosAltoRiesgo(params),
       ]);
 
-      setEmpleados(emps || []);
-      setLicencias(lic || []);
       setAlertasContratos(alertas.data || []);
       setRankingLicencias(ranking.data || []);
       setResumenContratos(resumen.data || {});
       setEmpleadosAltoRiesgo(altoRiesgo.data || []);
-      setError(null);
-    } catch (e) {
-      const errorMsg = e.message || 'Error al cargar datos de RRHH';
-      setError(errorMsg);
-      addNotification('error', 'Error', errorMsg);
+    } catch (error) {
+      console.error('Error cargando datos de RRHH:', error);
+      addNotification('error', 'Error', 'No se pudieron cargar los datos de RRHH.');
     } finally {
       setLoading(false);
     }
@@ -69,7 +65,7 @@ export default function RrhhDashboardUnificado({ onNavigate }) {
       setProcesandoBaja(empleadoId);
       await updateEmpleado(empleadoId, { estado: 'terminado' });
       addNotification('success', 'Empleado dado de baja', `${nombreCompleto} ha sido dado de baja correctamente.`);
-      loadData();
+      loadData(); // Recargar datos
     } catch (error) {
       console.error('Error dando de baja:', error);
       addNotification('error', 'Error', 'No se pudo dar de baja al empleado.');
@@ -78,31 +74,6 @@ export default function RrhhDashboardUnificado({ onNavigate }) {
     }
   };
 
-  // Funciones del primer componente
-  const licenciaPorEmpleado = useMemo(() => {
-    const map = {};
-    licencias.forEach(l => {
-      const id = l.empleado_id || l.empleado?.id;
-      if (!id) return;
-      map[id] = (map[id] || 0) + 1;
-    });
-    return map;
-  }, [licencias]);
-
-  const ahora = new Date();
-  const diasRestantes = (fecha) => {
-    if (!fecha) return null;
-    return Math.round((new Date(fecha) - ahora) / 86400000);
-  };
-
-  const indefinidos = empleados.filter(e => e.tipo_contrato !== 'plazo_fijo');
-  const plazoFijo = empleados.filter(e => e.tipo_contrato === 'plazo_fijo');
-  const vencenPronto = plazoFijo.filter(e => {
-    const d = diasRestantes(e.fecha_fin_contrato);
-    return d !== null && d <= 30 && d >= 0;
-  });
-
-  // Funciones del segundo componente
   const getSeveridadColor = (severidad) => {
     const colors = {
       'critica': 'bg-red-100 text-red-800 border-red-300',
@@ -122,362 +93,345 @@ export default function RrhhDashboardUnificado({ onNavigate }) {
     return colors[tipo] || 'bg-gray-100 text-gray-800';
   };
 
-  const formatFecha = (fecha) => {
-    if (!fecha) return 'N/A';
+  const getMesNombre = (m) => {
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    return meses[m - 1];
+  };
+
+  const formatFecha = (fechaString) => {
+    if (!fechaString) return 'N/A';
+    // Si la fecha viene con formato ISO (2025-11-10T03:00:00.000000Z), extraer solo la fecha
+    const fecha = fechaString.split('T')[0];
+    // Convertir de YYYY-MM-DD a DD-MM-YYYY
     const [anio, mes, dia] = fecha.split('-');
     return `${dia}-${mes}-${anio}`;
   };
 
   if (loading) {
-    return (
-      <div className="p-8 bg-gray-50 min-h-screen flex flex-col items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-        <p className="text-gray-600">Cargando dashboard de RRHH...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-8 bg-gray-50 min-h-screen">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-2xl mx-auto mt-10">
-          <div className="flex items-center gap-3 mb-4">
-            <AlertTriangle className="text-red-500" size={24} />
-            <h2 className="text-xl font-bold text-red-800">Error al cargar datos</h2>
-          </div>
-          <p className="text-red-700 mb-4">{error}</p>
-          <button
-            onClick={loadData}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Reintentar
-          </button>
-        </div>
-      </div>
-    );
+    return <div className="p-10 text-center text-gray-500 animate-pulse">Cargando análisis de RRHH...</div>;
   }
 
   return (
-    <div className="p-4 bg-gray-50 min-h-screen space-y-6">
-      {/* Header */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Users className="text-blue-600" size={24} />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Dashboard de Recursos Humanos</h1>
-                <p className="text-gray-600">Gestión integral de contratos, licencias y rendimiento</p>
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={loadData}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2 text-gray-700 transition-colors"
-            >
-              <RefreshCcw size={18} />
-              Actualizar
-            </button>
-            {onNavigate && (
-              <button
-                onClick={() => onNavigate('dashboard')}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
-              >
-                ← Volver
-              </button>
-            )}
-          </div>
-        </div>
+    <div className="p-8 bg-gray-50 min-h-screen">
 
-        {/* Navegación */}
-        <div className="mt-6 flex flex-wrap gap-2">
-          <NavButton
-            icon={<Home size={18} />}
-            label="Resumen"
-            active={activeView === 'resumen'}
-            onClick={() => setActiveView('resumen')}
-          />
-          <NavButton
-            icon={<AlertCircle size={18} />}
-            label={`Alertas (${alertasContratos.length})`}
-            active={activeView === 'alertas'}
-            onClick={() => setActiveView('alertas')}
-          />
-          <NavButton
-            icon={<BarChart3 size={18} />}
-            label="Rendimiento"
-            active={activeView === 'rendimiento'}
-            onClick={() => setActiveView('rendimiento')}
-          />
-          <NavButton
-            icon={<AlertTriangle size={18} />}
-            label={`Alto Riesgo (${empleadosAltoRiesgo.length})`}
-            active={activeView === 'riesgo'}
-            onClick={() => setActiveView('riesgo')}
-          />
-          <NavButton
-            icon={<UserCheck size={18} />}
-            label="Listas"
-            active={activeView === 'listas'}
-            onClick={() => setActiveView('listas')}
-          />
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-900 to-blue-800 p-8 text-white shadow-lg mb-8">
+        <div className="relative z-10">
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard de Recursos Humanos</h1>
+          <p className="mt-2 text-blue-200 max-w-xl">
+            Gestión de contratos, análisis de rendimiento y alertas de personal
+          </p>
+        </div>
+        <Users className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
+      </div>
+
+      {/* Filtros de Período */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
+        <div className="flex items-center gap-4">
+          <Calendar size={20} className="text-gray-500" />
+
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filtroActivo}
+                onChange={(e) => setFiltroActivo(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm font-semibold text-gray-700">Filtrar por período</span>
+            </label>
+          </div>
+
+          {filtroActivo && (
+            <>
+              <select
+                value={mes}
+                onChange={(e) => setMes(parseInt(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                  <option key={m} value={m}>{getMesNombre(m)}</option>
+                ))}
+              </select>
+
+              <select
+                value={anio}
+                onChange={(e) => setAnio(parseInt(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+              >
+                {[2024, 2025, 2026].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {!filtroActivo && (
+            <span className="text-sm text-gray-500 italic">Mostrando todos los datos disponibles</span>
+          )}
         </div>
       </div>
 
-      {/* Vista: Resumen */}
-      {activeView === 'resumen' && (
-        <>
-          {/* Métricas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard
-              title="Total Empleados"
-              value={empleados.length}
-              icon={Users}
-              color="blue"
-              subtitle="Activos en sistema"
-            />
-            <MetricCard
-              title="Indefinidos"
-              value={indefinidos.length}
-              icon={CheckCircle2}
-              color="green"
-              subtitle="Contratos permanentes"
-            />
-            <MetricCard
-              title="Plazo Fijo"
-              value={plazoFijo.length}
-              icon={Briefcase}
-              color="orange"
-              subtitle="Contratos temporales"
-            />
-            <MetricCard
-              title="Vencen Pronto"
-              value={vencenPronto.length}
-              icon={AlertTriangle}
-              color="red"
-              subtitle="En 30 días o menos"
-            />
-            <MetricCard
-              title="Licencias Totales"
-              value={licencias.length}
-              icon={Clock3}
-              color="purple"
-              subtitle="Solicitudes registradas"
-            />
-            <MetricCard
-              title="Practicantes"
-              value={resumenContratos.practicante || 0}
-              icon={Users}
-              color="cyan"
-              subtitle="En formación"
-            />
-            <MetricCard
-              title="Alto Riesgo"
-              value={empleadosAltoRiesgo.length}
-              icon={AlertTriangle}
-              color="red"
-              subtitle="Renovación crítica"
-            />
-            <MetricCard
-              title="Con Alertas"
-              value={alertasContratos.length}
-              icon={TrendingDown}
-              color="yellow"
-              subtitle="Requieren atención"
-            />
-          </div>
+      {/* Métricas Resumen */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <MetricCard
+          title="Personal Indefinido"
+          value={resumenContratos.indefinido || 0}
+          icon={Users}
+          color="green"
+          subtitle="Contratos permanentes"
+        />
+        <MetricCard
+          title="Personal a Plazo"
+          value={resumenContratos.plazo_fijo || 0}
+          icon={FileText}
+          color="orange"
+          subtitle="Contratos temporales"
+        />
+        <MetricCard
+          title="Practicantes"
+          value={resumenContratos.practicante || 0}
+          icon={Users}
+          color="blue"
+          subtitle="En formación"
+        />
+        <MetricCard
+          title="Vencen Este Mes"
+          value={resumenContratos.vencen_proximo_mes || 0}
+          icon={AlertTriangle}
+          color="red"
+          subtitle="Contratos a renovar"
+        />
+      </div>
 
-          {/* Gráficos y Listas */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Gráfico de Contratos */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <PieIcon className="text-blue-600" size={20} />
-                Distribución de Contratos
-              </h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={[
-                        { name: 'Indefinido', value: indefinidos.length, color: '#10b981' },
-                        { name: 'Plazo Fijo', value: plazoFijo.length, color: '#6366f1' },
-                        { name: 'Practicantes', value: resumenContratos.practicante || 0, color: '#0ea5e9' },
-                      ]}
-                      dataKey="value"
-                      nameKey="name"
-                      outerRadius={80}
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                    >
-                      <Cell fill="#10b981" />
-                      <Cell fill="#6366f1" />
-                      <Cell fill="#0ea5e9" />
-                    </Pie>
-                    <Tooltip formatter={(value) => [value, 'Empleados']} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+      {/* Alertas de Contratos Próximos a Vencer */}
+      {alertasContratos.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <AlertTriangle size={24} className="text-red-600" />
+            Contratos Próximos a Vencer
+            <span className="text-sm font-normal text-gray-500 ml-2">
+              ({alertasContratos.length} contratos)
+            </span>
+          </h2>
 
-            {/* Top Licencias */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <TrendingUp className="text-orange-600" size={20} />
-                Top 5 - Más Licencias
-              </h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={empleados.slice(0,5).map(e => ({
-                    nombre: `${e.user?.nombre?.substring(0,1)}. ${e.user?.apellido}`,
-                    licencias: licenciaPorEmpleado[e.id] || 0
-                  }))}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                    <XAxis dataKey="nombre" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} />
-                    <Tooltip formatter={(value) => [value, 'Licencias']} />
-                    <Bar dataKey="licencias" fill="#f59e0b" radius={[4,4,0,0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Vista: Alertas */}
-      {activeView === 'alertas' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-3">
-              <AlertTriangle className="text-red-600" size={24} />
-              Alertas de Contratos
-              <span className="text-sm font-normal text-gray-500">
-                ({alertasContratos.length} contratos próximos a vencer)
-              </span>
-            </h2>
-          </div>
-          {alertasContratos.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase">Empleado</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase">Fecha Término</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase">Días Restantes</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase">Urgencia</th>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b-2 border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">N° Empleado</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Nombre Completo</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Email</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Contrato</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Fecha Término</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Días Restantes</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Urgencia</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {alertasContratos.map((empleado) => (
+                  <tr
+                    key={empleado.id}
+                    className={`hover:bg-gray-50 transition-colors ${
+                      empleado.severidad === 'critica' ? 'bg-red-50' : ''
+                    }`}
+                  >
+                    <td className="px-4 py-4 font-mono text-sm font-bold text-gray-900">{empleado.numero_empleado}</td>
+                    <td className="px-4 py-4">
+                      <div className="font-semibold text-gray-900">{empleado.nombre} {empleado.apellido}</div>
+                    </td>
+                    <td className="px-4 py-4 text-sm text-gray-600">{empleado.email}</td>
+                    <td className="px-4 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${getTipoContratoColor(empleado.tipo_contrato)}`}>
+                        {empleado.tipo_contrato}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-center text-sm text-gray-700">
+                      {formatFecha(empleado.fecha_termino)}
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        empleado.dias_restantes <= 7 ? 'bg-red-100 text-red-800' :
+                        empleado.dias_restantes <= 15 ? 'bg-orange-100 text-orange-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {empleado.dias_restantes} días
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getSeveridadColor(empleado.severidad)}`}>
+                        {empleado.severidad.toUpperCase()}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {alertasContratos.map((empleado) => (
-                    <tr key={empleado.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div>
-                          <div className="font-semibold text-gray-900">{empleado.nombre} {empleado.apellido}</div>
-                          <div className="text-sm text-gray-500">{empleado.email}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${getTipoContratoColor(empleado.tipo_contrato)}`}>
-                          {empleado.tipo_contrato}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-gray-700">{formatFecha(empleado.fecha_termino)}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          empleado.dias_restantes <= 7 ? 'bg-red-100 text-red-800' :
-                          empleado.dias_restantes <= 15 ? 'bg-orange-100 text-orange-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {empleado.dias_restantes} días
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getSeveridadColor(empleado.severidad)}`}>
-                          {empleado.severidad.toUpperCase()}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-8 text-center text-gray-500">
-              No hay alertas de contratos activas
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Vista: Rendimiento */}
-      {activeView === 'rendimiento' && (
-        <div className="space-y-6">
-          {/* Detector de Rendimiento */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-              <TrendingDown className="text-orange-600" size={24} />
-              Detector de Rendimiento
-            </h3>
-            <TablaRendimiento 
-              empleados={empleados}
-              licenciaPorEmpleado={licenciaPorEmpleado}
-              rankingLicencias={rankingLicencias}
-              onDarDeBaja={handleDarDeBaja}
-              procesandoBaja={procesandoBaja}
-            />
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {/* Vista: Alto Riesgo */}
-      {activeView === 'riesgo' && empleadosAltoRiesgo.length > 0 && (
+      {/* Detector de Rendimiento - Ranking de Licencias */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+          <TrendingDown size={24} className="text-orange-600" />
+          Detector de Rendimiento - Ranking de Licencias
+          <span className="text-sm font-normal text-gray-500 ml-2">
+            (Ordenado por cantidad de licencias)
+          </span>
+        </h2>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b-2 border-gray-200">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Nombre Empleado</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Tipo Contrato</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Total Licencias</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Días Totales</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Médicas</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Administrativas</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Permisos</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Estado</th>
+                <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {rankingLicencias.map((empleado, index) => (
+                <tr
+                  key={empleado.id}
+                  className={`hover:bg-gray-50 transition-colors ${
+                    empleado.alerta_rendimiento ? 'bg-red-50' : ''
+                  }`}
+                >
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-2">
+                      {index < 3 && (
+                        <span className="text-xl">
+                          {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                        </span>
+                      )}
+                      <div>
+                        <div className="font-semibold text-gray-900">{empleado.nombre_completo}</div>
+                        <div className="text-xs text-gray-500">{empleado.numero_empleado}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${getTipoContratoColor(empleado.tipo_contrato)}`}>
+                      {empleado.tipo_contrato}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                      empleado.total_licencias >= 5 ? 'bg-red-100 text-red-800' :
+                      empleado.total_licencias >= 3 ? 'bg-orange-100 text-orange-800' :
+                      'bg-green-100 text-green-800'
+                    }`}>
+                      {empleado.total_licencias}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-center font-semibold text-gray-900">
+                    {empleado.total_dias_licencia} días
+                  </td>
+                  <td className="px-4 py-4 text-center text-gray-700">{empleado.licencias_medicas}</td>
+                  <td className="px-4 py-4 text-center text-gray-700">{empleado.licencias_administrativas}</td>
+                  <td className="px-4 py-4 text-center text-gray-700">{empleado.permisos}</td>
+                  <td className="px-4 py-4 text-center">
+                    {empleado.alerta_rendimiento ? (
+                      <div className="text-center">
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-300">
+                          ⚠️ ALERTA
+                        </span>
+                        {empleado.motivo_alerta && empleado.motivo_alerta.length > 0 && (
+                          <div className="text-xs text-red-600 mt-1">
+                            {empleado.motivo_alerta[0]}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">
+                        ✓ Normal
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    {empleado.alerta_rendimiento && empleado.tipo_contrato === 'plazo_fijo' && (
+                      <button
+                        onClick={() => handleDarDeBaja(empleado.id, empleado.nombre_completo)}
+                        disabled={procesandoBaja === empleado.id}
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 mx-auto"
+                        title="No Renovar / Desvincular"
+                      >
+                        {procesandoBaja === empleado.id ? (
+                          <>
+                            <span className="animate-spin">⏳</span>
+                            Procesando...
+                          </>
+                        ) : (
+                          <>
+                            <Ban size={14} />
+                            No Renovar
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {rankingLicencias.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            No hay datos de licencias disponibles
+          </div>
+        )}
+      </div>
+
+      {/* Empleados de Alto Riesgo */}
+      {empleadosAltoRiesgo.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-red-100 rounded-lg">
-              <AlertTriangle className="text-red-600" size={24} />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Empleados de Alto Riesgo</h2>
-              <p className="text-gray-600">Contrato vence pronto + Alto ausentismo</p>
-            </div>
-          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <AlertTriangle size={24} className="text-red-600" />
+            Empleados de Alto Riesgo
+            <span className="text-sm font-normal text-gray-500 ml-2">
+              (Contrato vence pronto + Muchas licencias)
+            </span>
+          </h2>
 
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
             <p className="text-sm text-red-800">
-              <strong>⚠️ Atención:</strong> Estos empleados combinan dos factores de riesgo.
-              Se recomienda evaluar cuidadosamente su renovación.
+              <strong>⚠️ Atención:</strong> Estos empleados combinan dos factores de riesgo:
+              contrato próximo a vencer y alto ausentismo. Se recomienda evaluar cuidadosamente su renovación.
             </p>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-red-50">
+              <thead className="bg-red-50 border-b-2 border-red-200">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Empleado</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Contrato</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Días Restantes</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Licencias</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Acción</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Fecha Término</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Días Restantes</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Total Licencias</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Días Licencia</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Recomendación</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {empleadosAltoRiesgo.map((empleado) => (
-                  <tr key={empleado.id} className="hover:bg-red-50">
+                  <tr key={empleado.id} className="hover:bg-red-50 transition-colors bg-red-25">
                     <td className="px-4 py-4">
                       <div className="font-semibold text-gray-900">{empleado.nombre_completo}</div>
-                      <div className="text-sm text-gray-500">{empleado.email}</div>
+                      <div className="text-xs text-gray-500">{empleado.numero_empleado} • {empleado.email}</div>
                     </td>
-                    <td className="px-4 py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${getTipoContratoColor(empleado.tipo_contrato)}`}>
-                        {empleado.tipo_contrato}
-                      </span>
-                      <div className="text-xs text-gray-600 mt-1">Vence: {formatFecha(empleado.fecha_termino)}</div>
+                    <td className="px-4 py-4 text-center text-sm text-gray-700">
+                      {formatFecha(empleado.fecha_termino)}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-4 text-center">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                         empleado.dias_restantes <= 15 ? 'bg-red-100 text-red-800' :
                         'bg-orange-100 text-orange-800'
@@ -485,28 +439,33 @@ export default function RrhhDashboardUnificado({ onNavigate }) {
                         {empleado.dias_restantes} días
                       </span>
                     </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-bold">
-                          {empleado.total_licencias}
-                        </span>
-                        <span className="text-sm text-gray-600">({empleado.total_dias_licencia} días)</span>
+                    <td className="px-4 py-4 text-center">
+                      <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-bold">
+                        {empleado.total_licencias}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-center font-semibold text-gray-900">
+                      {empleado.total_dias_licencia} días
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <div className="text-xs font-semibold text-red-700">
+                        {empleado.recomendacion}
                       </div>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-4 text-center">
                       <button
                         onClick={() => handleDarDeBaja(empleado.id, empleado.nombre_completo)}
                         disabled={procesandoBaja === empleado.id}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 mx-auto"
                       >
                         {procesandoBaja === empleado.id ? (
                           <>
-                            <span className="animate-spin">⟳</span>
+                            <span className="animate-spin">⏳</span>
                             Procesando...
                           </>
                         ) : (
                           <>
-                            <Ban size={16} />
+                            <Ban size={14} />
                             No Renovar
                           </>
                         )}
@@ -520,208 +479,194 @@ export default function RrhhDashboardUnificado({ onNavigate }) {
         </div>
       )}
 
-      {/* Vista: Listas */}
-      {activeView === 'listas' && (
+      {/* NUEVAS SECCIONES DE VISUALIZACIÓN */}
+
+      {/* Distribución de Contratos */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8 mt-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+          <PieChartIcon size={24} className="text-blue-600" />
+          Distribución de Contratos por Tipo
+        </h2>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <CheckCircle2 className="text-green-600" size={20} />
-              Personal Indefinido
-              <span className="text-sm font-normal text-gray-500 ml-2">({indefinidos.length})</span>
-            </h3>
-            <ListaEmpleados 
-              empleados={indefinidos} 
-              licenciaPorEmpleado={licenciaPorEmpleado} 
-              alertaVencimiento={false}
-            />
+          {/* Gráfico de torta */}
+          <div className="flex justify-center items-center">
+            {resumenContratos && (resumenContratos.indefinido || resumenContratos.plazo_fijo || resumenContratos.practicante) ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Indefinido', value: resumenContratos.indefinido || 0 },
+                      { name: 'Plazo Fijo', value: resumenContratos.plazo_fijo || 0 },
+                      { name: 'Practicante', value: resumenContratos.practicante || 0 }
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, value }) => value > 0 ? `${name}: ${value}` : null}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    <Cell fill="#10b981" />
+                    <Cell fill="#f59e0b" />
+                    <Cell fill="#3b82f6" />
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center text-gray-500 py-12">No hay datos de contratos</div>
+            )}
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <AlertTriangle className="text-orange-600" size={20} />
-              Personal Plazo Fijo
-              <span className="text-sm font-normal text-gray-500 ml-2">({plazoFijo.length})</span>
-            </h3>
-            <ListaEmpleados 
-              empleados={plazoFijo} 
-              licenciaPorEmpleado={licenciaPorEmpleado} 
-              alertaVencimiento={true}
-              diasCritico={30}
-            />
+
+          {/* Resumen estadístico */}
+          <div className="space-y-4">
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-700">Personal Indefinido</span>
+                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-bold">
+                  Estable
+                </span>
+              </div>
+              <div className="text-2xl font-bold text-green-600">{resumenContratos.indefinido || 0}</div>
+              <div className="text-xs text-gray-500 mt-1">Contratos permanentes</div>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-700">Personal a Plazo Fijo</span>
+                <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-bold">
+                  Temporal
+                </span>
+              </div>
+              <div className="text-2xl font-bold text-orange-600">{resumenContratos.plazo_fijo || 0}</div>
+              <div className="text-xs text-gray-500 mt-1">Requieren renovación periódica</div>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-700">Practicantes</span>
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">
+                  Formación
+                </span>
+              </div>
+              <div className="text-2xl font-bold text-blue-600">{resumenContratos.practicante || 0}</div>
+              <div className="text-xs text-gray-500 mt-1">En proceso de capacitación</div>
+            </div>
+
+            <div className="border border-red-200 rounded-lg p-4 bg-red-50">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-700">Vencen Este Mes</span>
+                <AlertTriangle size={16} className="text-red-600" />
+              </div>
+              <div className="text-2xl font-bold text-red-600">{resumenContratos.vencen_proximo_mes || 0}</div>
+              <div className="text-xs text-red-700 mt-1 font-semibold">Requieren atención inmediata</div>
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* Análisis de Licencias - Top 10 */}
+      {rankingLicencias && rankingLicencias.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <BarChart3 size={24} className="text-orange-600" />
+            Top 10 Empleados con Más Licencias
+          </h2>
+
+          <ResponsiveContainer width="100%" height={350}>
+            <BarChart data={rankingLicencias.slice(0, 10)}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="nombre_completo"
+                angle={-45}
+                textAnchor="end"
+                height={120}
+                interval={0}
+                tick={{ fontSize: 11 }}
+              />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="total_licencias" fill="#f59e0b" name="Total Licencias" />
+              <Bar dataKey="total_dias_licencia" fill="#ef4444" name="Días Totales" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       )}
+
+      {/* Alertas de Contratos con Visualización de Countdown */}
+      {alertasContratos && alertasContratos.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <AlertTriangle size={24} className="text-red-600" />
+            Alertas de Vencimiento - Visualización Rápida
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {alertasContratos.slice(0, 6).map((empleado) => (
+              <div
+                key={empleado.id}
+                className={`border-2 rounded-lg p-4 ${
+                  empleado.severidad === 'critica' ? 'border-red-500 bg-red-50' :
+                  empleado.severidad === 'alta' ? 'border-orange-500 bg-orange-50' :
+                  'border-yellow-500 bg-yellow-50'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <h3 className="font-bold text-gray-900 text-sm">{empleado.nombre} {empleado.apellido}</h3>
+                    <p className="text-xs text-gray-600">{empleado.numero_empleado}</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded text-xs font-bold ${
+                    empleado.severidad === 'critica' ? 'bg-red-600 text-white' :
+                    empleado.severidad === 'alta' ? 'bg-orange-600 text-white' :
+                    'bg-yellow-600 text-white'
+                  }`}>
+                    {empleado.severidad.toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-600">Tipo:</span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTipoContratoColor(empleado.tipo_contrato)}`}>
+                      {empleado.tipo_contrato}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-600">Vence:</span>
+                    <span className="text-xs font-semibold text-gray-900">{formatFecha(empleado.fecha_termino)}</span>
+                  </div>
+
+                  <div className="pt-2 border-t border-gray-300">
+                    <div className="text-center">
+                      <div className={`text-3xl font-bold ${
+                        empleado.dias_restantes <= 7 ? 'text-red-600' :
+                        empleado.dias_restantes <= 15 ? 'text-orange-600' :
+                        'text-yellow-600'
+                      }`}>
+                        {empleado.dias_restantes}
+                      </div>
+                      <div className="text-xs text-gray-600 font-semibold">días restantes</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {alertasContratos.length > 6 && (
+            <div className="text-center text-sm text-gray-500 mt-4">
+              Y {alertasContratos.length - 6} alertas más en la tabla superior...
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
-
-// Componentes auxiliares
-const NavButton = ({ icon, label, active, onClick }) => (
-  <button
-    onClick={onClick}
-    className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-      active 
-        ? 'bg-blue-600 text-white' 
-        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-    }`}
-  >
-    {icon}
-    <span className="font-medium">{label}</span>
-  </button>
-);
-
-const ListaEmpleados = ({ empleados, licenciaPorEmpleado, alertaVencimiento = true, diasCritico = 30 }) => {
-  const ahora = new Date();
-  const diasRestantes = (fecha) => {
-    if (!fecha) return null;
-    return Math.round((new Date(fecha) - ahora) / 86400000);
-  };
-
-  if (!empleados.length) return <p className="text-gray-500 text-center py-4">Sin registros</p>;
-
-  return (
-    <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-      {empleados.map((e) => {
-        const d = diasRestantes(e.fecha_fin_contrato);
-        const lic = licenciaPorEmpleado[e.id] || 0;
-        const isCritico = alertaVencimiento && d !== null && d >= 0 && d <= diasCritico;
-        return (
-          <div 
-            key={e.id} 
-            className={`p-3 rounded-lg border flex justify-between items-center ${
-              isCritico 
-                ? 'border-red-300 bg-red-50' 
-                : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
-            }`}
-          >
-            <div>
-              <p className="font-semibold text-gray-800">{e.user?.nombre} {e.user?.apellido}</p>
-              <p className="text-xs text-gray-500">{e.email || 'Sin email'}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm font-bold text-gray-700">Licencias: {lic}</p>
-              {isCritico && <p className="text-xs text-red-600 font-semibold">Vence en {d} días</p>}
-              {e.fecha_fin_contrato && !isCritico && (
-                <p className="text-xs text-gray-500">Vence: {new Date(e.fecha_fin_contrato).toLocaleDateString()}</p>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
-const TablaRendimiento = ({ empleados, licenciaPorEmpleado, rankingLicencias, onDarDeBaja, procesandoBaja }) => {
-  const ahora = new Date();
-  const diasRestantes = (fecha) => {
-    if (!fecha) return null;
-    return Math.round((new Date(fecha) - ahora) / 86400000);
-  };
-
-  // Usar datos de ranking si están disponibles, si no calcular localmente
-  const rows = rankingLicencias.length > 0 
-    ? rankingLicencias.map(r => ({
-        ...r,
-        lic: r.total_licencias,
-        d: r.dias_restantes,
-        vencimientoCritico: r.dias_restantes <= 30,
-        sugerirNoRenovar: r.total_licencias >= 3
-      }))
-    : empleados.map(e => {
-        const lic = licenciaPorEmpleado[e.id] || 0;
-        const d = diasRestantes(e.fecha_fin_contrato);
-        const vencimientoCritico = e.tipo_contrato === 'plazo_fijo' && d !== null && d <= 30;
-        const sugerirNoRenovar = e.tipo_contrato === 'plazo_fijo' && lic >= 3;
-        return { 
-          id: e.id,
-          nombre_completo: `${e.user?.nombre} ${e.user?.apellido}`,
-          tipo_contrato: e.tipo_contrato,
-          lic, 
-          d, 
-          vencimientoCritico, 
-          sugerirNoRenovar,
-          alerta_rendimiento: sugerirNoRenovar
-        };
-      });
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Empleado</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Contrato</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Licencias</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Estado</th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Acción</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {rows.map((r, index) => (
-            <tr key={r.id || index} className={r.vencimientoCritico ? 'bg-red-50' : 'hover:bg-gray-50'}>
-              <td className="px-4 py-3">
-                <div className="font-semibold text-gray-900">{r.nombre_completo}</div>
-                {index < 3 && rankingLicencias.length > 0 && (
-                  <span className="text-lg">
-                    {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
-                  </span>
-                )}
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <span className="capitalize">{r.tipo_contrato || 'N/A'}</span>
-                  {r.vencimientoCritico && r.d && (
-                    <span className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded-full font-semibold">
-                      Vence en {r.d}d
-                    </span>
-                  )}
-                </div>
-              </td>
-              <td className="px-4 py-3">
-                <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                  r.lic >= 5 ? 'bg-red-100 text-red-800' :
-                  r.lic >= 3 ? 'bg-orange-100 text-orange-800' :
-                  'bg-green-100 text-green-800'
-                }`}>
-                  {r.lic}
-                </span>
-              </td>
-              <td className="px-4 py-3">
-                {r.alerta_rendimiento ? (
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-300">
-                    ⚠️ ALERTA
-                  </span>
-                ) : (
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">
-                    ✓ Normal
-                  </span>
-                )}
-              </td>
-              <td className="px-4 py-3">
-                {r.sugerirNoRenovar && r.tipo_contrato === 'plazo_fijo' && (
-                  <button
-                    onClick={() => onDarDeBaja(r.id, r.nombre_completo)}
-                    disabled={procesandoBaja === r.id}
-                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
-                  >
-                    {procesandoBaja === r.id ? (
-                      <>
-                        <span className="animate-spin">⟳</span>
-                        Procesando...
-                      </>
-                    ) : (
-                      <>
-                        <Ban size={14} />
-                        No Renovar
-                      </>
-                    )}
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};

@@ -209,6 +209,8 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/tipos-fallas-mas-comunes', [ReporteController::class, 'tiposFallasMasComunes']);
         Route::get('/costos-mantenimiento-por-bus', [ReporteController::class, 'costosMantenimientoPorBus']);
         Route::get('/buses-disponibles-emergencia', [ReporteController::class, 'busesDisponiblesEmergencia']);
+        Route::get('/mantenimiento-alertas', [ReporteController::class, 'mantenimientoAlertas']);
+        Route::get('/mantenimiento-tops', [ReporteController::class, 'mantenimientoTops']);
 
         // Dashboard operativo y SLA
         Route::get('/dashboard-operativo', [ReporteController::class, 'dashboardOperativo']);

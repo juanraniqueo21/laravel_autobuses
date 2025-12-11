@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Wrench, AlertTriangle, DollarSign, Calendar, TrendingUp, Power } from 'lucide-react';
+import { Wrench, AlertTriangle, DollarSign, Calendar, TrendingUp, Power, PieChart as PieChartIcon, BarChart3, MapPin } from 'lucide-react';
 import {
   fetchBusesConMasMantenimientos,
   fetchTiposFallasMasComunes,
   fetchCostosMantenimientoPorBus,
   fetchBusesDisponiblesEmergencia,
+  fetchMantenimientoAlertas,
+  fetchMantenimientoTops,
   activarBusEmergencia
 } from '../services/api';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import MetricCard from '../components/cards/MetricCard';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -15,6 +18,8 @@ export default function AnalisisMantenimientosPage() {
   const [tiposFallas, setTiposFallas] = useState([]);
   const [costosMantenimiento, setCostosMantenimiento] = useState([]);
   const [busesEmergencia, setBusesEmergencia] = useState([]);
+  const [alertasData, setAlertasData] = useState({ alertas: [], por_tipo: {} });
+  const [topsData, setTopsData] = useState({ top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] });
   const [loading, setLoading] = useState(true);
   const [mes, setMes] = useState(new Date().getMonth() + 1);
   const [anio, setAnio] = useState(new Date().getFullYear());
@@ -36,17 +41,21 @@ export default function AnalisisMantenimientosPage() {
         params.anio = anio;
       }
 
-      const [busesData, fallasData, costosData, emergenciaData] = await Promise.all([
+      const [busesData, fallasData, costosData, emergenciaData, alertas, tops] = await Promise.all([
         fetchBusesConMasMantenimientos(params),
         fetchTiposFallasMasComunes(params),
         fetchCostosMantenimientoPorBus(params),
-        fetchBusesDisponiblesEmergencia(params)
+        fetchBusesDisponiblesEmergencia(params),
+        fetchMantenimientoAlertas(params),
+        fetchMantenimientoTops(params)
       ]);
 
       setBusesMantenimientos(busesData || []);
       setTiposFallas(fallasData || []);
       setCostosMantenimiento(costosData || []);
       setBusesEmergencia(emergenciaData || []);
+      setAlertasData(alertas || { alertas: [], por_tipo: {} });
+      setTopsData(tops || { top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] });
     } catch (error) {
       console.error('Error cargando análisis de mantenimientos:', error);
       addNotification('error', 'Error', 'No se pudieron cargar los datos de mantenimiento.');
@@ -460,6 +469,168 @@ export default function AnalisisMantenimientosPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* NUEVAS SECCIONES DE ANÁLISIS CON GRÁFICOS */}
+
+      {/* Distribución de Alertas de Mantenimiento */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+          <PieChartIcon size={24} className="text-purple-600" />
+          Distribución de Alertas de Mantenimiento
+        </h2>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Gráfico de torta */}
+          <div className="flex justify-center items-center">
+            {alertasData.por_tipo && Object.keys(alertasData.por_tipo).length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Cambio de Aceite', value: alertasData.por_tipo.cambio_aceite || 0 },
+                      { name: 'Revisión Técnica', value: alertasData.por_tipo.revision_tecnica || 0 },
+                      { name: 'Mantenimiento', value: alertasData.por_tipo.mantenimiento || 0 }
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, value }) => value > 0 ? `${name}: ${value}` : null}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    <Cell fill="#f59e0b" />
+                    <Cell fill="#3b82f6" />
+                    <Cell fill="#ef4444" />
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center text-gray-500 py-12">No hay alertas en este período</div>
+            )}
+          </div>
+
+          {/* Lista de alertas */}
+          <div className="space-y-2 max-h-[300px] overflow-y-auto">
+            {alertasData.alertas && alertasData.alertas.length > 0 ? (
+              alertasData.alertas.slice(0, 5).map((alerta, index) => (
+                <div key={index} className={`border-l-4 p-3 rounded ${
+                  alerta.nivel === 'critico' ? 'border-red-500 bg-red-50' : 'border-yellow-500 bg-yellow-50'
+                }`}>
+                  <div className="font-bold text-sm">{alerta.mensaje}</div>
+                  <div className="text-xs text-gray-600 mt-1">{alerta.detalle}</div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center text-gray-500 py-8">No hay alertas activas</div>
+            )}
+            {alertasData.alertas && alertasData.alertas.length > 5 && (
+              <div className="text-center text-sm text-gray-500 mt-2">
+                Y {alertasData.alertas.length - 5} alertas más...
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Top Buses con Más Fallas */}
+      {topsData.top_buses_fallas && topsData.top_buses_fallas.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <BarChart3 size={24} className="text-red-600" />
+            Top Buses con Más Fallas (Mantenimientos Correctivos)
+          </h2>
+
+          <ResponsiveContainer width="100%" height={350}>
+            <BarChart data={topsData.top_buses_fallas.slice(0, 10)}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="patente" angle={-45} textAnchor="end" height={100} />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="total_fallas" fill="#ef4444" name="Total de Fallas" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Análisis por Modelo y Rutas Críticas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        {/* Fallas por Modelo */}
+        {topsData.top_modelos_fallas && topsData.top_modelos_fallas.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <PieChartIcon size={24} className="text-indigo-600" />
+              Fallas por Modelo de Bus
+            </h2>
+
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={topsData.top_modelos_fallas.slice(0, 5)}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ marca_modelo, total_fallas }) => `${marca_modelo}: ${total_fallas}`}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="total_fallas"
+                >
+                  {topsData.top_modelos_fallas.slice(0, 5).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Rutas Críticas */}
+        {topsData.rutas_criticas && topsData.rutas_criticas.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <MapPin size={24} className="text-rose-600" />
+              Rutas Críticas (Más Incidentes)
+            </h2>
+
+            <div className="space-y-3">
+              {topsData.rutas_criticas.map((ruta, index) => (
+                <div key={ruta.ruta_id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-gray-900">{ruta.nombre}</h3>
+                      <p className="text-sm text-gray-500">{ruta.origen} → {ruta.destino}</p>
+                    </div>
+                    <span className="px-3 py-1 bg-rose-100 text-rose-800 rounded-full text-xs font-bold">
+                      #{index + 1}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-100">
+                    <div>
+                      <div className="text-xs text-gray-500">Total Incidentes</div>
+                      <div className="text-lg font-semibold text-rose-700">{ruta.total_incidentes}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Incidentes Graves</div>
+                      <div className="text-lg font-semibold text-red-700">{ruta.incidentes_graves}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {topsData.rutas_criticas.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                No hay rutas críticas en este período
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
     </div>

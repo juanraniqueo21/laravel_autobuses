@@ -1034,4 +1034,307 @@ class ReporteController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Alertas de Mantenimiento
+     * Retorna alertas para cambios de aceite, revisiones técnicas y mantenimientos prolongados
+     *
+     * Parámetros opcionales:
+     * - mes: filtrar por mes específico
+     * - anio: filtrar por año específico
+     */
+    public function mantenimientoAlertas(Request $request)
+    {
+        $alertas = [];
+        $hoy = now();
+
+        // Obtener todos los buses activos
+        $buses = DB::table('buses')
+            ->select('id', 'patente', 'marca', 'modelo', 'kilometraje_actual', 'kilometraje_ultimo_cambio_aceite', 'fecha_ultima_revision_tecnica')
+            ->where('estado', '!=', 'dado_de_baja')
+            ->get();
+
+        foreach ($buses as $bus) {
+            // ALERTA: Cambio de aceite (cada 5000 km)
+            if ($bus->kilometraje_actual && $bus->kilometraje_ultimo_cambio_aceite !== null) {
+                $kmDesdeUltimoCambio = $bus->kilometraje_actual - $bus->kilometraje_ultimo_cambio_aceite;
+
+                if ($kmDesdeUltimoCambio >= 5000) {
+                    $alertas[] = [
+                        'tipo' => 'cambio_aceite',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'critico',
+                        'mensaje' => "Bus {$bus->patente} necesita cambio de aceite urgente",
+                        'detalle' => "Km desde último cambio: " . number_format($kmDesdeUltimoCambio, 0, ',', '.') . " km (límite: 5,000 km)",
+                        'km_desde_ultimo_cambio' => (int) $kmDesdeUltimoCambio,
+                    ];
+                } elseif ($kmDesdeUltimoCambio >= 4500) {
+                    $alertas[] = [
+                        'tipo' => 'cambio_aceite',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'medio',
+                        'mensaje' => "Bus {$bus->patente} próximo a cambio de aceite",
+                        'detalle' => "Km desde último cambio: " . number_format($kmDesdeUltimoCambio, 0, ',', '.') . " km (límite: 5,000 km)",
+                        'km_desde_ultimo_cambio' => (int) $kmDesdeUltimoCambio,
+                    ];
+                }
+            }
+
+            // ALERTA: Revisión técnica próxima a vencer (cada 6 meses)
+            if ($bus->fecha_ultima_revision_tecnica) {
+                $ultimaRevision = \Carbon\Carbon::parse($bus->fecha_ultima_revision_tecnica);
+                $proximaRevision = $ultimaRevision->copy()->addMonths(6);
+                $diasRestantes = (int) $hoy->diffInDays($proximaRevision, false);
+
+                if ($diasRestantes < 0) {
+                    $alertas[] = [
+                        'tipo' => 'revision_tecnica',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'critico',
+                        'mensaje' => "Bus {$bus->patente} tiene revisión técnica VENCIDA",
+                        'detalle' => "Vencida hace " . abs($diasRestantes) . " días (última revisión: " . $ultimaRevision->format('d-m-Y') . ")",
+                        'dias_restantes' => $diasRestantes,
+                        'fecha_vencimiento' => $proximaRevision->format('d-m-Y'),
+                    ];
+                } elseif ($diasRestantes <= 15) {
+                    $alertas[] = [
+                        'tipo' => 'revision_tecnica',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'medio',
+                        'mensaje' => "Bus {$bus->patente} próximo a vencimiento de revisión técnica",
+                        'detalle' => "Vence en {$diasRestantes} días",
+                        'dias_restantes' => $diasRestantes,
+                        'fecha_vencimiento' => $proximaRevision->format('d-m-Y'),
+                    ];
+                }
+            }
+        }
+
+        // ALERTA: Mantenimientos prolongados
+        $mantenimientosProlongados = DB::table('mantenimientos')
+            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+            ->whereIn('mantenimientos.estado', ['en_proceso', 'pendiente'])
+            ->select(
+                'mantenimientos.id',
+                'mantenimientos.descripcion',
+                'mantenimientos.fecha_inicio',
+                'buses.id as bus_id',
+                'buses.patente',
+                'buses.marca',
+                'buses.modelo'
+            )
+            ->get();
+
+        foreach ($mantenimientosProlongados as $mant) {
+            $diasDesdeInicio = (int) \Carbon\Carbon::parse($mant->fecha_inicio)->diffInDays($hoy);
+
+            if ($diasDesdeInicio >= 7) {
+                $alertas[] = [
+                    'tipo' => 'mantenimiento',
+                    'bus_id' => $mant->bus_id,
+                    'patente' => $mant->patente,
+                    'marca' => $mant->marca,
+                    'modelo' => $mant->modelo,
+                    'nivel' => 'critico',
+                    'mensaje' => "Bus {$mant->patente} lleva {$diasDesdeInicio} días en mantenimiento",
+                    'detalle' => "{$mant->descripcion}",
+                ];
+            } elseif ($diasDesdeInicio >= 3) {
+                $alertas[] = [
+                    'tipo' => 'mantenimiento',
+                    'bus_id' => $mant->bus_id,
+                    'patente' => $mant->patente,
+                    'marca' => $mant->marca,
+                    'modelo' => $mant->modelo,
+                    'nivel' => 'medio',
+                    'mensaje' => "Bus {$mant->patente} en mantenimiento por {$diasDesdeInicio} días",
+                    'detalle' => "{$mant->descripcion}",
+                ];
+            }
+        }
+
+        // Contar por tipo
+        $porTipo = [
+            'cambio_aceite' => count(array_filter($alertas, fn($a) => $a['tipo'] === 'cambio_aceite')),
+            'revision_tecnica' => count(array_filter($alertas, fn($a) => $a['tipo'] === 'revision_tecnica')),
+            'mantenimiento' => count(array_filter($alertas, fn($a) => $a['tipo'] === 'mantenimiento')),
+        ];
+
+        return response()->json([
+            'success' => true,
+            'alertas' => $alertas,
+            'total' => count($alertas),
+            'por_tipo' => $porTipo,
+        ]);
+    }
+
+    /**
+     * Análisis Top de Mantenimientos
+     * Retorna top buses con más fallas, top modelos con fallas, y rutas críticas
+     *
+     * Parámetros opcionales:
+     * - mes: filtrar por mes específico
+     * - anio: filtrar por año específico
+     */
+    public function mantenimientoTops(Request $request)
+    {
+        // Procesar filtros de fecha
+        $fechas = $this->procesarFiltrosFecha($request);
+        $fechaInicio = $fechas['fecha_inicio'];
+        $fechaFin = $fechas['fecha_fin'];
+
+        $topBusesFallas = [];
+        $topModelosFallas = [];
+        $rutasCriticas = [];
+
+        // TOP BUSES CON MÁS FALLAS (mantenimientos correctivos)
+        try {
+            $queryTopBuses = DB::table('mantenimientos')
+                ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+                ->where('mantenimientos.tipo_mantenimiento', 'correctivo');
+
+            if ($fechaInicio) {
+                $queryTopBuses->where('mantenimientos.fecha_inicio', '>=', $fechaInicio);
+            }
+            if ($fechaFin) {
+                $queryTopBuses->where('mantenimientos.fecha_inicio', '<=', $fechaFin);
+            }
+
+            $topBusesFallas = $queryTopBuses
+                ->select(
+                    'buses.id',
+                    'buses.patente',
+                    'buses.marca',
+                    'buses.modelo',
+                    DB::raw('COUNT(mantenimientos.id) as total_fallas'),
+                    DB::raw('COALESCE(SUM(mantenimientos.costo_total), 0) as costo_total')
+                )
+                ->groupBy('buses.id', 'buses.patente', 'buses.marca', 'buses.modelo')
+                ->orderByDesc('total_fallas')
+                ->limit(10)
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'bus_id' => $item->id,
+                        'patente' => $item->patente,
+                        'marca_modelo' => $item->marca . ' ' . $item->modelo,
+                        'total_fallas' => (int) $item->total_fallas,
+                        'costo_total' => (int) $item->costo_total,
+                    ];
+                })
+                ->toArray();
+        } catch (\Exception $e) {
+            \Log::error('Error en top buses fallas: ' . $e->getMessage());
+        }
+
+        // TOP MODELOS CON MÁS FALLAS
+        try {
+            $queryTopModelos = DB::table('mantenimientos')
+                ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+                ->where('mantenimientos.tipo_mantenimiento', 'correctivo');
+
+            if ($fechaInicio) {
+                $queryTopModelos->where('mantenimientos.fecha_inicio', '>=', $fechaInicio);
+            }
+            if ($fechaFin) {
+                $queryTopModelos->where('mantenimientos.fecha_inicio', '<=', $fechaFin);
+            }
+
+            $topModelosFallas = $queryTopModelos
+                ->select(
+                    'buses.marca',
+                    'buses.modelo',
+                    DB::raw('COUNT(mantenimientos.id) as total_fallas'),
+                    DB::raw('COUNT(DISTINCT buses.id) as total_buses')
+                )
+                ->groupBy('buses.marca', 'buses.modelo')
+                ->orderByDesc('total_fallas')
+                ->limit(10)
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'marca_modelo' => $item->marca . ' ' . $item->modelo,
+                        'total_fallas' => (int) $item->total_fallas,
+                        'total_buses' => (int) $item->total_buses,
+                    ];
+                })
+                ->toArray();
+        } catch (\Exception $e) {
+            \Log::error('Error en top modelos fallas: ' . $e->getMessage());
+        }
+
+        // RUTAS CRÍTICAS (rutas con más reportes de incidentes)
+        try {
+            $queryRutasCriticas = DB::table('reportes')
+                ->join('rutas', 'reportes.ruta_id', '=', 'rutas.id')
+                ->whereNotNull('reportes.ruta_id');
+
+            if ($fechaInicio) {
+                $queryRutasCriticas->where('reportes.fecha_incidente', '>=', $fechaInicio);
+            }
+            if ($fechaFin) {
+                $queryRutasCriticas->where('reportes.fecha_incidente', '<=', $fechaFin);
+            }
+
+            // Verificar si existe la columna 'gravedad' antes de usarla
+            $hasGravedad = \Schema::hasColumn('reportes', 'gravedad');
+            $hasTipo = \Schema::hasColumn('reportes', 'tipo');
+
+            if (!$hasTipo) {
+                // Si no hay columna tipo, no filtrar por tipo
+            } else {
+                $queryRutasCriticas->where('reportes.tipo', '!=', 'general');
+            }
+
+            $gravedadSQL = $hasGravedad
+                ? "SUM(CASE WHEN reportes.gravedad = 'alta' THEN 1 ELSE 0 END)"
+                : "0";
+
+            $rutasCriticas = $queryRutasCriticas
+                ->select(
+                    'rutas.id',
+                    'rutas.nombre',
+                    'rutas.origen',
+                    'rutas.destino',
+                    DB::raw('COUNT(reportes.id) as total_incidentes'),
+                    DB::raw("$gravedadSQL as incidentes_graves")
+                )
+                ->groupBy('rutas.id', 'rutas.nombre', 'rutas.origen', 'rutas.destino')
+                ->orderByDesc('total_incidentes')
+                ->limit(5)
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'ruta_id' => $item->id,
+                        'nombre' => $item->nombre,
+                        'origen' => $item->origen,
+                        'destino' => $item->destino,
+                        'total_incidentes' => (int) $item->total_incidentes,
+                        'incidentes_graves' => (int) $item->incidentes_graves,
+                    ];
+                })
+                ->toArray();
+        } catch (\Exception $e) {
+            \Log::error('Error en rutas críticas: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'top_buses_fallas' => $topBusesFallas,
+            'top_modelos_fallas' => $topModelosFallas,
+            'rutas_criticas' => $rutasCriticas,
+        ]);
+    }
 }
