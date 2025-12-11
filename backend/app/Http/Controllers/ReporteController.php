@@ -1034,4 +1034,231 @@ class ReporteController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Alertas de Mantenimiento
+     * Retorna alertas para cambios de aceite y revisiones técnicas
+     *
+     * Parámetros opcionales:
+     * - mes: filtrar por mes específico
+     * - anio: filtrar por año específico
+     */
+    public function mantenimientoAlertas(Request $request)
+    {
+        $alertas = [];
+        $hoy = now();
+
+        // Obtener todos los buses activos
+        $buses = DB::table('buses')
+            ->select('id', 'patente', 'marca', 'modelo', 'kilometraje', 'ultimo_cambio_aceite', 'vencimiento_revision_tecnica')
+            ->where('estado', '!=', 'dado_de_baja')
+            ->get();
+
+        foreach ($buses as $bus) {
+            // ALERTA: Cambio de aceite (cada 5000 km)
+            if ($bus->kilometraje && $bus->ultimo_cambio_aceite !== null) {
+                $kmDesdeUltimoCambio = $bus->kilometraje - $bus->ultimo_cambio_aceite;
+
+                if ($kmDesdeUltimoCambio >= 5000) {
+                    $alertas[] = [
+                        'tipo' => 'cambio_aceite',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'critico',
+                        'mensaje' => "Bus {$bus->patente} necesita cambio de aceite urgente",
+                        'detalle' => "Km desde último cambio: " . number_format($kmDesdeUltimoCambio, 0, ',', '.') . " km (límite: 5,000 km)",
+                        'km_desde_ultimo_cambio' => (int) $kmDesdeUltimoCambio,
+                    ];
+                } elseif ($kmDesdeUltimoCambio >= 4500) {
+                    $alertas[] = [
+                        'tipo' => 'cambio_aceite',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'medio',
+                        'mensaje' => "Bus {$bus->patente} próximo a cambio de aceite",
+                        'detalle' => "Km desde último cambio: " . number_format($kmDesdeUltimoCambio, 0, ',', '.') . " km (límite: 5,000 km)",
+                        'km_desde_ultimo_cambio' => (int) $kmDesdeUltimoCambio,
+                    ];
+                }
+            }
+
+            // ALERTA: Revisión técnica próxima a vencer
+            if ($bus->vencimiento_revision_tecnica) {
+                $vencimiento = \Carbon\Carbon::parse($bus->vencimiento_revision_tecnica);
+                $diasRestantes = (int) $hoy->diffInDays($vencimiento, false);
+
+                if ($diasRestantes < 0) {
+                    $alertas[] = [
+                        'tipo' => 'revision_tecnica',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'critico',
+                        'mensaje' => "Bus {$bus->patente} tiene revisión técnica VENCIDA",
+                        'detalle' => "Vencida hace " . abs($diasRestantes) . " días",
+                        'dias_restantes' => $diasRestantes,
+                        'fecha_vencimiento' => $vencimiento->format('d-m-Y'),
+                    ];
+                } elseif ($diasRestantes <= 15) {
+                    $alertas[] = [
+                        'tipo' => 'revision_tecnica',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'medio',
+                        'mensaje' => "Bus {$bus->patente} próximo a vencimiento de revisión técnica",
+                        'detalle' => "Vence en {$diasRestantes} días",
+                        'dias_restantes' => $diasRestantes,
+                        'fecha_vencimiento' => $vencimiento->format('d-m-Y'),
+                    ];
+                }
+            }
+        }
+
+        // Contar por tipo
+        $porTipo = [
+            'cambio_aceite' => count(array_filter($alertas, fn($a) => $a['tipo'] === 'cambio_aceite')),
+            'revision_tecnica' => count(array_filter($alertas, fn($a) => $a['tipo'] === 'revision_tecnica')),
+            'mantenimiento' => 0, // Para consistencia con el frontend
+        ];
+
+        return response()->json([
+            'success' => true,
+            'alertas' => $alertas,
+            'total' => count($alertas),
+            'por_tipo' => $porTipo,
+        ]);
+    }
+
+    /**
+     * Análisis Top de Mantenimientos
+     * Retorna top buses con más fallas, top modelos con fallas, y rutas críticas
+     *
+     * Parámetros opcionales:
+     * - mes: filtrar por mes específico
+     * - anio: filtrar por año específico
+     */
+    public function mantenimientoTops(Request $request)
+    {
+        // Procesar filtros de fecha
+        $fechas = $this->procesarFiltrosFecha($request);
+        $fechaInicio = $fechas['fecha_inicio'];
+        $fechaFin = $fechas['fecha_fin'];
+
+        // TOP BUSES CON MÁS FALLAS (mantenimientos correctivos)
+        $queryTopBuses = DB::table('mantenimientos')
+            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+            ->where('mantenimientos.tipo_mantenimiento', 'correctivo');
+
+        if ($fechaInicio) {
+            $queryTopBuses->where('mantenimientos.fecha_inicio', '>=', $fechaInicio);
+        }
+        if ($fechaFin) {
+            $queryTopBuses->where('mantenimientos.fecha_inicio', '<=', $fechaFin);
+        }
+
+        $topBusesFallas = $queryTopBuses
+            ->select(
+                'buses.id',
+                'buses.patente',
+                'buses.marca',
+                'buses.modelo',
+                DB::raw('COUNT(mantenimientos.id) as total_fallas'),
+                DB::raw('COALESCE(SUM(mantenimientos.costo_total), 0) as costo_total')
+            )
+            ->groupBy('buses.id', 'buses.patente', 'buses.marca', 'buses.modelo')
+            ->orderByDesc('total_fallas')
+            ->limit(10)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'bus_id' => $item->id,
+                    'patente' => $item->patente,
+                    'marca_modelo' => "{$item->marca} {$item->modelo}",
+                    'total_fallas' => (int) $item->total_fallas,
+                    'costo_total' => (int) $item->costo_total,
+                ];
+            });
+
+        // TOP MODELOS CON MÁS FALLAS
+        $queryTopModelos = DB::table('mantenimientos')
+            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+            ->where('mantenimientos.tipo_mantenimiento', 'correctivo');
+
+        if ($fechaInicio) {
+            $queryTopModelos->where('mantenimientos.fecha_inicio', '>=', $fechaInicio);
+        }
+        if ($fechaFin) {
+            $queryTopModelos->where('mantenimientos.fecha_inicio', '<=', $fechaFin);
+        }
+
+        $topModelosFallas = $queryTopModelos
+            ->select(
+                'buses.marca',
+                'buses.modelo',
+                DB::raw('COUNT(mantenimientos.id) as total_fallas'),
+                DB::raw('COUNT(DISTINCT buses.id) as total_buses')
+            )
+            ->groupBy('buses.marca', 'buses.modelo')
+            ->orderByDesc('total_fallas')
+            ->limit(10)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'marca_modelo' => "{$item->marca} {$item->modelo}",
+                    'total_fallas' => (int) $item->total_fallas,
+                    'total_buses' => (int) $item->total_buses,
+                ];
+            });
+
+        // RUTAS CRÍTICAS (rutas con más reportes de incidentes)
+        $queryRutasCriticas = DB::table('reportes')
+            ->join('rutas', 'reportes.ruta_id', '=', 'rutas.id')
+            ->whereNotNull('reportes.ruta_id')
+            ->where('reportes.tipo', '!=', 'general');
+
+        if ($fechaInicio) {
+            $queryRutasCriticas->where('reportes.fecha_incidente', '>=', $fechaInicio);
+        }
+        if ($fechaFin) {
+            $queryRutasCriticas->where('reportes.fecha_incidente', '<=', $fechaFin);
+        }
+
+        $rutasCriticas = $queryRutasCriticas
+            ->select(
+                'rutas.id',
+                'rutas.nombre',
+                'rutas.origen',
+                'rutas.destino',
+                DB::raw('COUNT(reportes.id) as total_incidentes'),
+                DB::raw("SUM(CASE WHEN reportes.gravedad = 'alta' THEN 1 ELSE 0 END) as incidentes_graves")
+            )
+            ->groupBy('rutas.id', 'rutas.nombre', 'rutas.origen', 'rutas.destino')
+            ->orderByDesc('total_incidentes')
+            ->limit(5)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'ruta_id' => $item->id,
+                    'nombre' => $item->nombre,
+                    'origen' => $item->origen,
+                    'destino' => $item->destino,
+                    'total_incidentes' => (int) $item->total_incidentes,
+                    'incidentes_graves' => (int) $item->incidentes_graves,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'top_buses_fallas' => $topBusesFallas,
+            'top_modelos_fallas' => $topModelosFallas,
+            'rutas_criticas' => $rutasCriticas,
+        ]);
+    }
 }

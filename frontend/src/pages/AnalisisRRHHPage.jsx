@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, AlertTriangle, FileText, TrendingDown, Ban, Calendar } from 'lucide-react';
+import { Users, AlertTriangle, FileText, TrendingDown, Ban, Calendar, PieChart as PieChartIcon, BarChart3 } from 'lucide-react';
 import {
   fetchAlertasContratos,
   fetchRankingLicencias,
@@ -7,6 +7,7 @@ import {
   fetchEmpleadosAltoRiesgo,
   updateEmpleado
 } from '../services/api';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import MetricCard from '../components/cards/MetricCard';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -475,6 +476,194 @@ export default function AnalisisRRHHPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* NUEVAS SECCIONES DE VISUALIZACIÓN */}
+
+      {/* Distribución de Contratos */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8 mt-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+          <PieChartIcon size={24} className="text-blue-600" />
+          Distribución de Contratos por Tipo
+        </h2>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Gráfico de torta */}
+          <div className="flex justify-center items-center">
+            {resumenContratos && (resumenContratos.indefinido || resumenContratos.plazo_fijo || resumenContratos.practicante) ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Indefinido', value: resumenContratos.indefinido || 0 },
+                      { name: 'Plazo Fijo', value: resumenContratos.plazo_fijo || 0 },
+                      { name: 'Practicante', value: resumenContratos.practicante || 0 }
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, value }) => value > 0 ? `${name}: ${value}` : null}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    <Cell fill="#10b981" />
+                    <Cell fill="#f59e0b" />
+                    <Cell fill="#3b82f6" />
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center text-gray-500 py-12">No hay datos de contratos</div>
+            )}
+          </div>
+
+          {/* Resumen estadístico */}
+          <div className="space-y-4">
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-700">Personal Indefinido</span>
+                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-bold">
+                  Estable
+                </span>
+              </div>
+              <div className="text-2xl font-bold text-green-600">{resumenContratos.indefinido || 0}</div>
+              <div className="text-xs text-gray-500 mt-1">Contratos permanentes</div>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-700">Personal a Plazo Fijo</span>
+                <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-bold">
+                  Temporal
+                </span>
+              </div>
+              <div className="text-2xl font-bold text-orange-600">{resumenContratos.plazo_fijo || 0}</div>
+              <div className="text-xs text-gray-500 mt-1">Requieren renovación periódica</div>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-700">Practicantes</span>
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">
+                  Formación
+                </span>
+              </div>
+              <div className="text-2xl font-bold text-blue-600">{resumenContratos.practicante || 0}</div>
+              <div className="text-xs text-gray-500 mt-1">En proceso de capacitación</div>
+            </div>
+
+            <div className="border border-red-200 rounded-lg p-4 bg-red-50">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-700">Vencen Este Mes</span>
+                <AlertTriangle size={16} className="text-red-600" />
+              </div>
+              <div className="text-2xl font-bold text-red-600">{resumenContratos.vencen_proximo_mes || 0}</div>
+              <div className="text-xs text-red-700 mt-1 font-semibold">Requieren atención inmediata</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Análisis de Licencias - Top 10 */}
+      {rankingLicencias && rankingLicencias.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <BarChart3 size={24} className="text-orange-600" />
+            Top 10 Empleados con Más Licencias
+          </h2>
+
+          <ResponsiveContainer width="100%" height={350}>
+            <BarChart data={rankingLicencias.slice(0, 10)}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="nombre_completo"
+                angle={-45}
+                textAnchor="end"
+                height={120}
+                interval={0}
+                tick={{ fontSize: 11 }}
+              />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="total_licencias" fill="#f59e0b" name="Total Licencias" />
+              <Bar dataKey="total_dias_licencia" fill="#ef4444" name="Días Totales" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Alertas de Contratos con Visualización de Countdown */}
+      {alertasContratos && alertasContratos.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <AlertTriangle size={24} className="text-red-600" />
+            Alertas de Vencimiento - Visualización Rápida
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {alertasContratos.slice(0, 6).map((empleado) => (
+              <div
+                key={empleado.id}
+                className={`border-2 rounded-lg p-4 ${
+                  empleado.severidad === 'critica' ? 'border-red-500 bg-red-50' :
+                  empleado.severidad === 'alta' ? 'border-orange-500 bg-orange-50' :
+                  'border-yellow-500 bg-yellow-50'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <h3 className="font-bold text-gray-900 text-sm">{empleado.nombre} {empleado.apellido}</h3>
+                    <p className="text-xs text-gray-600">{empleado.numero_empleado}</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded text-xs font-bold ${
+                    empleado.severidad === 'critica' ? 'bg-red-600 text-white' :
+                    empleado.severidad === 'alta' ? 'bg-orange-600 text-white' :
+                    'bg-yellow-600 text-white'
+                  }`}>
+                    {empleado.severidad.toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-600">Tipo:</span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTipoContratoColor(empleado.tipo_contrato)}`}>
+                      {empleado.tipo_contrato}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-600">Vence:</span>
+                    <span className="text-xs font-semibold text-gray-900">{formatFecha(empleado.fecha_termino)}</span>
+                  </div>
+
+                  <div className="pt-2 border-t border-gray-300">
+                    <div className="text-center">
+                      <div className={`text-3xl font-bold ${
+                        empleado.dias_restantes <= 7 ? 'text-red-600' :
+                        empleado.dias_restantes <= 15 ? 'text-orange-600' :
+                        'text-yellow-600'
+                      }`}>
+                        {empleado.dias_restantes}
+                      </div>
+                      <div className="text-xs text-gray-600 font-semibold">días restantes</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {alertasContratos.length > 6 && (
+            <div className="text-center text-sm text-gray-500 mt-4">
+              Y {alertasContratos.length - 6} alertas más en la tabla superior...
+            </div>
+          )}
         </div>
       )}
 

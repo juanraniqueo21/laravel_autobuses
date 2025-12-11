@@ -1465,6 +1465,34 @@ export const fetchPuntualidadSLA = async (params = {}) => {
 };
 
 /**
+ * Alertas de Mantenimiento
+ * Retorna alertas para cambios de aceite y revisiones técnicas
+ * @param {Object} params - Parámetros opcionales (mes, anio)
+ */
+export const fetchMantenimientoAlertas = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/reportes/mantenimiento-alertas${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Análisis Top de Mantenimientos
+ * Retorna top buses con más fallas, top modelos con fallas, y rutas críticas
+ * @param {Object} params - Parámetros opcionales (mes, anio)
+ */
+export const fetchMantenimientoTops = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/reportes/mantenimiento-tops${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
  * Activar bus en emergencia (cambiar estado de mantenimiento a operativo)
  * Suspende mantenimientos en proceso y activa el bus
  */
