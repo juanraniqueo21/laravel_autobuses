@@ -41,14 +41,23 @@ export default function AnalisisMantenimientosPage() {
         params.anio = anio;
       }
 
-      const [busesData, fallasData, costosData, emergenciaData, alertas, tops] = await Promise.all([
+      // Usar Promise.allSettled para que si algunos endpoints fallan, los otros sigan funcionando
+      const results = await Promise.allSettled([
         fetchBusesConMasMantenimientos(params),
         fetchTiposFallasMasComunes(params),
         fetchCostosMantenimientoPorBus(params),
         fetchBusesDisponiblesEmergencia(params),
-        fetchMantenimientoAlertas(params),
-        fetchMantenimientoTops(params)
+        fetchMantenimientoAlertas(params).catch(() => ({ alertas: [], por_tipo: {} })),
+        fetchMantenimientoTops(params).catch(() => ({ top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] }))
       ]);
+
+      // Extraer los valores, usando valores por defecto si falló alguno
+      const busesData = results[0].status === 'fulfilled' ? results[0].value : [];
+      const fallasData = results[1].status === 'fulfilled' ? results[1].value : [];
+      const costosData = results[2].status === 'fulfilled' ? results[2].value : [];
+      const emergenciaData = results[3].status === 'fulfilled' ? results[3].value : [];
+      const alertas = results[4].status === 'fulfilled' ? results[4].value : { alertas: [], por_tipo: {} };
+      const tops = results[5].status === 'fulfilled' ? results[5].value : { top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] };
 
       setBusesMantenimientos(busesData || []);
       setTiposFallas(fallasData || []);
