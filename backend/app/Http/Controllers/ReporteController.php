@@ -1190,119 +1190,132 @@ class ReporteController extends Controller
      */
     public function mantenimientoTops(Request $request)
     {
-        // Procesar filtros de fecha
-        $fechas = $this->procesarFiltrosFecha($request);
-        $fechaInicio = $fechas['fecha_inicio'];
-        $fechaFin = $fechas['fecha_fin'];
+        try {
+            // Procesar filtros de fecha
+            $fechas = $this->procesarFiltrosFecha($request);
+            $fechaInicio = $fechas['fecha_inicio'];
+            $fechaFin = $fechas['fecha_fin'];
 
-        // TOP BUSES CON MÁS FALLAS (mantenimientos correctivos)
-        $queryTopBuses = DB::table('mantenimientos')
-            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
-            ->where('mantenimientos.tipo_mantenimiento', 'correctivo');
+            // TOP BUSES CON MÁS FALLAS (mantenimientos correctivos)
+            $queryTopBuses = DB::table('mantenimientos')
+                ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+                ->where('mantenimientos.tipo_mantenimiento', 'correctivo');
 
-        if ($fechaInicio) {
-            $queryTopBuses->where('mantenimientos.fecha_inicio', '>=', $fechaInicio);
+            if ($fechaInicio) {
+                $queryTopBuses->where('mantenimientos.fecha_inicio', '>=', $fechaInicio);
+            }
+            if ($fechaFin) {
+                $queryTopBuses->where('mantenimientos.fecha_inicio', '<=', $fechaFin);
+            }
+
+            $topBusesFallas = $queryTopBuses
+                ->select(
+                    'buses.id',
+                    'buses.patente',
+                    'buses.marca',
+                    'buses.modelo',
+                    DB::raw('COUNT(mantenimientos.id) as total_fallas'),
+                    DB::raw('COALESCE(SUM(mantenimientos.costo_total), 0) as costo_total')
+                )
+                ->groupBy('buses.id', 'buses.patente', 'buses.marca', 'buses.modelo')
+                ->orderByDesc('total_fallas')
+                ->limit(10)
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'bus_id' => $item->id,
+                        'patente' => $item->patente,
+                        'marca_modelo' => "{$item->marca} {$item->modelo}",
+                        'total_fallas' => (int) $item->total_fallas,
+                        'costo_total' => (int) $item->costo_total,
+                    ];
+                });
+
+            // TOP MODELOS CON MÁS FALLAS
+            $queryTopModelos = DB::table('mantenimientos')
+                ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+                ->where('mantenimientos.tipo_mantenimiento', 'correctivo');
+
+            if ($fechaInicio) {
+                $queryTopModelos->where('mantenimientos.fecha_inicio', '>=', $fechaInicio);
+            }
+            if ($fechaFin) {
+                $queryTopModelos->where('mantenimientos.fecha_inicio', '<=', $fechaFin);
+            }
+
+            $topModelosFallas = $queryTopModelos
+                ->select(
+                    'buses.marca',
+                    'buses.modelo',
+                    DB::raw('COUNT(mantenimientos.id) as total_fallas'),
+                    DB::raw('COUNT(DISTINCT buses.id) as total_buses')
+                )
+                ->groupBy('buses.marca', 'buses.modelo')
+                ->orderByDesc('total_fallas')
+                ->limit(10)
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'marca_modelo' => "{$item->marca} {$item->modelo}",
+                        'total_fallas' => (int) $item->total_fallas,
+                        'total_buses' => (int) $item->total_buses,
+                    ];
+                });
+
+            // RUTAS CRÍTICAS (rutas con más reportes de incidentes)
+            $queryRutasCriticas = DB::table('reportes')
+                ->join('rutas', 'reportes.ruta_id', '=', 'rutas.id')
+                ->whereNotNull('reportes.ruta_id')
+                ->where('reportes.tipo', '!=', 'general');
+
+            if ($fechaInicio) {
+                $queryRutasCriticas->where('reportes.fecha_incidente', '>=', $fechaInicio);
+            }
+            if ($fechaFin) {
+                $queryRutasCriticas->where('reportes.fecha_incidente', '<=', $fechaFin);
+            }
+
+            $rutasCriticas = $queryRutasCriticas
+                ->select(
+                    'rutas.id',
+                    'rutas.nombre',
+                    'rutas.origen',
+                    'rutas.destino',
+                    DB::raw('COUNT(reportes.id) as total_incidentes'),
+                    DB::raw("SUM(CASE WHEN reportes.gravedad = 'alta' THEN 1 ELSE 0 END) as incidentes_graves")
+                )
+                ->groupBy('rutas.id', 'rutas.nombre', 'rutas.origen', 'rutas.destino')
+                ->orderByDesc('total_incidentes')
+                ->limit(5)
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'ruta_id' => $item->id,
+                        'nombre' => $item->nombre,
+                        'origen' => $item->origen,
+                        'destino' => $item->destino,
+                        'total_incidentes' => (int) $item->total_incidentes,
+                        'incidentes_graves' => (int) $item->incidentes_graves,
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'top_buses_fallas' => $topBusesFallas,
+                'top_modelos_fallas' => $topModelosFallas,
+                'rutas_criticas' => $rutasCriticas,
+            ]);
+        } catch (\Exception $e) {
+            // En caso de error, retornar estructura vacía pero válida
+            \Log::error('Error en mantenimientoTops: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => true,
+                'top_buses_fallas' => [],
+                'top_modelos_fallas' => [],
+                'rutas_criticas' => [],
+                'error' => 'No se pudieron cargar algunos datos de análisis',
+            ]);
         }
-        if ($fechaFin) {
-            $queryTopBuses->where('mantenimientos.fecha_inicio', '<=', $fechaFin);
-        }
-
-        $topBusesFallas = $queryTopBuses
-            ->select(
-                'buses.id',
-                'buses.patente',
-                'buses.marca',
-                'buses.modelo',
-                DB::raw('COUNT(mantenimientos.id) as total_fallas'),
-                DB::raw('COALESCE(SUM(mantenimientos.costo_total), 0) as costo_total')
-            )
-            ->groupBy('buses.id', 'buses.patente', 'buses.marca', 'buses.modelo')
-            ->orderByDesc('total_fallas')
-            ->limit(10)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'bus_id' => $item->id,
-                    'patente' => $item->patente,
-                    'marca_modelo' => "{$item->marca} {$item->modelo}",
-                    'total_fallas' => (int) $item->total_fallas,
-                    'costo_total' => (int) $item->costo_total,
-                ];
-            });
-
-        // TOP MODELOS CON MÁS FALLAS
-        $queryTopModelos = DB::table('mantenimientos')
-            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
-            ->where('mantenimientos.tipo_mantenimiento', 'correctivo');
-
-        if ($fechaInicio) {
-            $queryTopModelos->where('mantenimientos.fecha_inicio', '>=', $fechaInicio);
-        }
-        if ($fechaFin) {
-            $queryTopModelos->where('mantenimientos.fecha_inicio', '<=', $fechaFin);
-        }
-
-        $topModelosFallas = $queryTopModelos
-            ->select(
-                'buses.marca',
-                'buses.modelo',
-                DB::raw('COUNT(mantenimientos.id) as total_fallas'),
-                DB::raw('COUNT(DISTINCT buses.id) as total_buses')
-            )
-            ->groupBy('buses.marca', 'buses.modelo')
-            ->orderByDesc('total_fallas')
-            ->limit(10)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'marca_modelo' => "{$item->marca} {$item->modelo}",
-                    'total_fallas' => (int) $item->total_fallas,
-                    'total_buses' => (int) $item->total_buses,
-                ];
-            });
-
-        // RUTAS CRÍTICAS (rutas con más reportes de incidentes)
-        $queryRutasCriticas = DB::table('reportes')
-            ->join('rutas', 'reportes.ruta_id', '=', 'rutas.id')
-            ->whereNotNull('reportes.ruta_id')
-            ->where('reportes.tipo', '!=', 'general');
-
-        if ($fechaInicio) {
-            $queryRutasCriticas->where('reportes.fecha_incidente', '>=', $fechaInicio);
-        }
-        if ($fechaFin) {
-            $queryRutasCriticas->where('reportes.fecha_incidente', '<=', $fechaFin);
-        }
-
-        $rutasCriticas = $queryRutasCriticas
-            ->select(
-                'rutas.id',
-                'rutas.nombre',
-                'rutas.origen',
-                'rutas.destino',
-                DB::raw('COUNT(reportes.id) as total_incidentes'),
-                DB::raw("SUM(CASE WHEN reportes.gravedad = 'alta' THEN 1 ELSE 0 END) as incidentes_graves")
-            )
-            ->groupBy('rutas.id', 'rutas.nombre', 'rutas.origen', 'rutas.destino')
-            ->orderByDesc('total_incidentes')
-            ->limit(5)
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'ruta_id' => $item->id,
-                    'nombre' => $item->nombre,
-                    'origen' => $item->origen,
-                    'destino' => $item->destino,
-                    'total_incidentes' => (int) $item->total_incidentes,
-                    'incidentes_graves' => (int) $item->incidentes_graves,
-                ];
-            });
-
-        return response()->json([
-            'success' => true,
-            'top_buses_fallas' => $topBusesFallas,
-            'top_modelos_fallas' => $topModelosFallas,
-            'rutas_criticas' => $rutasCriticas,
-        ]);
     }
 }
