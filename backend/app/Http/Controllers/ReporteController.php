@@ -1037,7 +1037,7 @@ class ReporteController extends Controller
 
     /**
      * Alertas de Mantenimiento
-     * Retorna alertas basadas en mantenimientos pendientes y en proceso
+     * Retorna alertas para cambios de aceite, revisiones técnicas y mantenimientos prolongados
      *
      * Parámetros opcionales:
      * - mes: filtrar por mes específico
@@ -1048,13 +1048,86 @@ class ReporteController extends Controller
         $alertas = [];
         $hoy = now();
 
-        // Obtener mantenimientos en proceso o pendientes
-        $mantenimientosPendientes = DB::table('mantenimientos')
+        // Obtener todos los buses activos
+        $buses = DB::table('buses')
+            ->select('id', 'patente', 'marca', 'modelo', 'kilometraje_actual', 'kilometraje_ultimo_cambio_aceite', 'fecha_ultima_revision_tecnica')
+            ->where('estado', '!=', 'dado_de_baja')
+            ->get();
+
+        foreach ($buses as $bus) {
+            // ALERTA: Cambio de aceite (cada 5000 km)
+            if ($bus->kilometraje_actual && $bus->kilometraje_ultimo_cambio_aceite !== null) {
+                $kmDesdeUltimoCambio = $bus->kilometraje_actual - $bus->kilometraje_ultimo_cambio_aceite;
+
+                if ($kmDesdeUltimoCambio >= 5000) {
+                    $alertas[] = [
+                        'tipo' => 'cambio_aceite',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'critico',
+                        'mensaje' => "Bus {$bus->patente} necesita cambio de aceite urgente",
+                        'detalle' => "Km desde último cambio: " . number_format($kmDesdeUltimoCambio, 0, ',', '.') . " km (límite: 5,000 km)",
+                        'km_desde_ultimo_cambio' => (int) $kmDesdeUltimoCambio,
+                    ];
+                } elseif ($kmDesdeUltimoCambio >= 4500) {
+                    $alertas[] = [
+                        'tipo' => 'cambio_aceite',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'medio',
+                        'mensaje' => "Bus {$bus->patente} próximo a cambio de aceite",
+                        'detalle' => "Km desde último cambio: " . number_format($kmDesdeUltimoCambio, 0, ',', '.') . " km (límite: 5,000 km)",
+                        'km_desde_ultimo_cambio' => (int) $kmDesdeUltimoCambio,
+                    ];
+                }
+            }
+
+            // ALERTA: Revisión técnica próxima a vencer (cada 6 meses)
+            if ($bus->fecha_ultima_revision_tecnica) {
+                $ultimaRevision = \Carbon\Carbon::parse($bus->fecha_ultima_revision_tecnica);
+                $proximaRevision = $ultimaRevision->copy()->addMonths(6);
+                $diasRestantes = (int) $hoy->diffInDays($proximaRevision, false);
+
+                if ($diasRestantes < 0) {
+                    $alertas[] = [
+                        'tipo' => 'revision_tecnica',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'critico',
+                        'mensaje' => "Bus {$bus->patente} tiene revisión técnica VENCIDA",
+                        'detalle' => "Vencida hace " . abs($diasRestantes) . " días (última revisión: " . $ultimaRevision->format('d-m-Y') . ")",
+                        'dias_restantes' => $diasRestantes,
+                        'fecha_vencimiento' => $proximaRevision->format('d-m-Y'),
+                    ];
+                } elseif ($diasRestantes <= 15) {
+                    $alertas[] = [
+                        'tipo' => 'revision_tecnica',
+                        'bus_id' => $bus->id,
+                        'patente' => $bus->patente,
+                        'marca' => $bus->marca,
+                        'modelo' => $bus->modelo,
+                        'nivel' => 'medio',
+                        'mensaje' => "Bus {$bus->patente} próximo a vencimiento de revisión técnica",
+                        'detalle' => "Vence en {$diasRestantes} días",
+                        'dias_restantes' => $diasRestantes,
+                        'fecha_vencimiento' => $proximaRevision->format('d-m-Y'),
+                    ];
+                }
+            }
+        }
+
+        // ALERTA: Mantenimientos prolongados
+        $mantenimientosProlongados = DB::table('mantenimientos')
             ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
             ->whereIn('mantenimientos.estado', ['en_proceso', 'pendiente'])
             ->select(
                 'mantenimientos.id',
-                'mantenimientos.tipo_mantenimiento',
                 'mantenimientos.descripcion',
                 'mantenimientos.fecha_inicio',
                 'buses.id as bus_id',
@@ -1064,7 +1137,7 @@ class ReporteController extends Controller
             )
             ->get();
 
-        foreach ($mantenimientosPendientes as $mant) {
+        foreach ($mantenimientosProlongados as $mant) {
             $diasDesdeInicio = (int) \Carbon\Carbon::parse($mant->fecha_inicio)->diffInDays($hoy);
 
             if ($diasDesdeInicio >= 7) {
@@ -1094,9 +1167,9 @@ class ReporteController extends Controller
 
         // Contar por tipo
         $porTipo = [
-            'cambio_aceite' => 0,
-            'revision_tecnica' => 0,
-            'mantenimiento' => count($alertas),
+            'cambio_aceite' => count(array_filter($alertas, fn($a) => $a['tipo'] === 'cambio_aceite')),
+            'revision_tecnica' => count(array_filter($alertas, fn($a) => $a['tipo'] === 'revision_tecnica')),
+            'mantenimiento' => count(array_filter($alertas, fn($a) => $a['tipo'] === 'mantenimiento')),
         ];
 
         return response()->json([
