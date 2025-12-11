@@ -1190,13 +1190,17 @@ class ReporteController extends Controller
      */
     public function mantenimientoTops(Request $request)
     {
-        try {
-            // Procesar filtros de fecha
-            $fechas = $this->procesarFiltrosFecha($request);
-            $fechaInicio = $fechas['fecha_inicio'];
-            $fechaFin = $fechas['fecha_fin'];
+        // Procesar filtros de fecha
+        $fechas = $this->procesarFiltrosFecha($request);
+        $fechaInicio = $fechas['fecha_inicio'];
+        $fechaFin = $fechas['fecha_fin'];
 
-            // TOP BUSES CON MÁS FALLAS (mantenimientos correctivos)
+        $topBusesFallas = [];
+        $topModelosFallas = [];
+        $rutasCriticas = [];
+
+        // TOP BUSES CON MÁS FALLAS (mantenimientos correctivos)
+        try {
             $queryTopBuses = DB::table('mantenimientos')
                 ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
                 ->where('mantenimientos.tipo_mantenimiento', 'correctivo');
@@ -1225,13 +1229,18 @@ class ReporteController extends Controller
                     return [
                         'bus_id' => $item->id,
                         'patente' => $item->patente,
-                        'marca_modelo' => "{$item->marca} {$item->modelo}",
+                        'marca_modelo' => $item->marca . ' ' . $item->modelo,
                         'total_fallas' => (int) $item->total_fallas,
                         'costo_total' => (int) $item->costo_total,
                     ];
-                });
+                })
+                ->toArray();
+        } catch (\Exception $e) {
+            \Log::error('Error en top buses fallas: ' . $e->getMessage());
+        }
 
-            // TOP MODELOS CON MÁS FALLAS
+        // TOP MODELOS CON MÁS FALLAS
+        try {
             $queryTopModelos = DB::table('mantenimientos')
                 ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
                 ->where('mantenimientos.tipo_mantenimiento', 'correctivo');
@@ -1256,17 +1265,21 @@ class ReporteController extends Controller
                 ->get()
                 ->map(function ($item) {
                     return [
-                        'marca_modelo' => "{$item->marca} {$item->modelo}",
+                        'marca_modelo' => $item->marca . ' ' . $item->modelo,
                         'total_fallas' => (int) $item->total_fallas,
                         'total_buses' => (int) $item->total_buses,
                     ];
-                });
+                })
+                ->toArray();
+        } catch (\Exception $e) {
+            \Log::error('Error en top modelos fallas: ' . $e->getMessage());
+        }
 
-            // RUTAS CRÍTICAS (rutas con más reportes de incidentes)
+        // RUTAS CRÍTICAS (rutas con más reportes de incidentes)
+        try {
             $queryRutasCriticas = DB::table('reportes')
                 ->join('rutas', 'reportes.ruta_id', '=', 'rutas.id')
-                ->whereNotNull('reportes.ruta_id')
-                ->where('reportes.tipo', '!=', 'general');
+                ->whereNotNull('reportes.ruta_id');
 
             if ($fechaInicio) {
                 $queryRutasCriticas->where('reportes.fecha_incidente', '>=', $fechaInicio);
@@ -1275,6 +1288,20 @@ class ReporteController extends Controller
                 $queryRutasCriticas->where('reportes.fecha_incidente', '<=', $fechaFin);
             }
 
+            // Verificar si existe la columna 'gravedad' antes de usarla
+            $hasGravedad = \Schema::hasColumn('reportes', 'gravedad');
+            $hasTipo = \Schema::hasColumn('reportes', 'tipo');
+
+            if (!$hasTipo) {
+                // Si no hay columna tipo, no filtrar por tipo
+            } else {
+                $queryRutasCriticas->where('reportes.tipo', '!=', 'general');
+            }
+
+            $gravedadSQL = $hasGravedad
+                ? "SUM(CASE WHEN reportes.gravedad = 'alta' THEN 1 ELSE 0 END)"
+                : "0";
+
             $rutasCriticas = $queryRutasCriticas
                 ->select(
                     'rutas.id',
@@ -1282,7 +1309,7 @@ class ReporteController extends Controller
                     'rutas.origen',
                     'rutas.destino',
                     DB::raw('COUNT(reportes.id) as total_incidentes'),
-                    DB::raw("SUM(CASE WHEN reportes.gravedad = 'alta' THEN 1 ELSE 0 END) as incidentes_graves")
+                    DB::raw("$gravedadSQL as incidentes_graves")
                 )
                 ->groupBy('rutas.id', 'rutas.nombre', 'rutas.origen', 'rutas.destino')
                 ->orderByDesc('total_incidentes')
@@ -1297,25 +1324,17 @@ class ReporteController extends Controller
                         'total_incidentes' => (int) $item->total_incidentes,
                         'incidentes_graves' => (int) $item->incidentes_graves,
                     ];
-                });
-
-            return response()->json([
-                'success' => true,
-                'top_buses_fallas' => $topBusesFallas,
-                'top_modelos_fallas' => $topModelosFallas,
-                'rutas_criticas' => $rutasCriticas,
-            ]);
+                })
+                ->toArray();
         } catch (\Exception $e) {
-            // En caso de error, retornar estructura vacía pero válida
-            \Log::error('Error en mantenimientoTops: ' . $e->getMessage());
-
-            return response()->json([
-                'success' => true,
-                'top_buses_fallas' => [],
-                'top_modelos_fallas' => [],
-                'rutas_criticas' => [],
-                'error' => 'No se pudieron cargar algunos datos de análisis',
-            ]);
+            \Log::error('Error en rutas críticas: ' . $e->getMessage());
         }
+
+        return response()->json([
+            'success' => true,
+            'top_buses_fallas' => $topBusesFallas,
+            'top_modelos_fallas' => $topModelosFallas,
+            'rutas_criticas' => $rutasCriticas,
+        ]);
     }
 }
