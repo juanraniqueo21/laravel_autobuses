@@ -210,6 +210,10 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/costos-mantenimiento-por-bus', [ReporteController::class, 'costosMantenimientoPorBus']);
         Route::get('/buses-disponibles-emergencia', [ReporteController::class, 'busesDisponiblesEmergencia']);
 
+        // Dashboard operativo y SLA
+        Route::get('/dashboard-operativo', [ReporteController::class, 'dashboardOperativo']);
+        Route::get('/puntualidad-sla', [ReporteController::class, 'puntualidadSLA']);
+
         Route::get('/{id}', [ReporteController::class, 'show']);
         Route::post('/', [ReporteController::class, 'store']);
         Route::put('/{id}', [ReporteController::class, 'update']);

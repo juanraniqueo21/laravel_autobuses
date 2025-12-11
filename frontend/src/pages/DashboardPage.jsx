@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Bus, MapPin, Users, Wrench, TrendingUp, AlertCircle, CheckCircle, Clock, 
-  ArrowRight, Activity, Bell, ChevronDown, ChevronUp, FileText, Calendar, AlertTriangle
+import {
+  Bus,
+  Wrench,
+  TrendingUp,
+  AlertTriangle,
+  Clock,
+  Activity,
+  Users,
+  ShieldAlert,
+  PiggyBank,
+  Gauge,
 } from 'lucide-react';
-import { 
-  fetchBuses, 
-  fetchRutas, 
-  fetchTurnos, 
-  fetchViajesPorTurno,
-  fetchMantenimientos, 
-  fetchReportes,       
-  fetchLicencias,      
-  fetchConductores     
-} from '../services/api';
+import { fetchBuses, fetchRutas, fetchTurnos, fetchViajesPorTurno, fetchDashboardOperativo, fetchPuntualidadSLA } from '../services/api';
 
 export default function DashboardPage({ onNavigate }) {
-  // --- ESTADOS ---
+  // Estado Operativo (local)
   const [stats, setStats] = useState({
     busesTotal: 0,
     busesOperativos: 0,
@@ -23,17 +22,19 @@ export default function DashboardPage({ onNavigate }) {
     rutasActivas: 0,
     viajesHoy: 0,
     viajesCompletadosHoy: 0,
-    reportesPendientes: 0,
-    personalEnLicencia: 0,
-    mantenimientosActivos: 0
   });
-
   const [turnosDelDia, setTurnosDelDia] = useState([]);
-  const [alertas, setAlertas] = useState([]); 
+
+  // Estado BI (backend)
+  const [biData, setBiData] = useState(null);
+  const [slaData, setSlaData] = useState(null);
   const [loading, setLoading] = useState(true);
-  
-  // Estado para el acordeón de alertas (Inicia cerrado 'false')
-  const [isAlertasOpen, setIsAlertasOpen] = useState(false);
+
+  // Filtro de fecha para BI (últimos 30 días por defecto)
+  const [filtrosBi] = useState({
+    fecha_inicio: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    fecha_fin: new Date().toISOString().split('T')[0],
+  });
 
   useEffect(() => {
     loadDashboardData();
@@ -41,501 +42,262 @@ export default function DashboardPage({ onNavigate }) {
 
   const loadDashboardData = async () => {
     try {
-      // --- CORRECCIÓN DE FECHA (LOCAL) ---
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      
-      const [
-        buses, 
-        rutas, 
-        turnosHoy, 
-        mantenimientos, 
-        reportes, 
-        licenciasMedicas,
-        conductores
-      ] = await Promise.all([
+      const today = new Date().toISOString().split('T')[0];
+
+      const [buses, rutas, turnos, biRes, slaRes] = await Promise.all([
         fetchBuses(),
         fetchRutas(),
         fetchTurnos({ fecha: today }),
-        fetchMantenimientos(),
-        fetchReportes(),
-        fetchLicencias(),
-        fetchConductores()
+        fetchDashboardOperativo(filtrosBi).catch(() => null),
+        fetchPuntualidadSLA(filtrosBi).catch(() => null),
       ]);
 
-      // 1. PROCESAMIENTO FLOTA
-      const operativos = buses.filter(b => b.estado === 'operativo' || b.estado === 'activo').length;
-      const mantenimientoCount = buses.filter(b => b.estado === 'mantenimiento').length;
+      if (biRes) setBiData(biRes);
+      if (slaRes) setSlaData(slaRes);
 
-      // 2. PROCESAMIENTO VIAJES
+      const operativos = buses.filter((b) => b.estado === 'operativo' || b.estado === 'activo').length;
+      const mantenimiento = buses.filter((b) => b.estado === 'mantenimiento').length;
+
       let totalViajes = 0;
       let completados = 0;
 
-      const turnosEnriquecidos = await Promise.all(turnosHoy.map(async (turno) => {
-        try {
-          const viajes = await fetchViajesPorTurno(turno.id);
-          totalViajes += viajes.length;
-          const completadosTurno = viajes.filter(v => v.estado === 'completado').length;
-          completados += completadosTurno;
-          
-          const progreso = viajes.length > 0 ? Math.round((completadosTurno / viajes.length) * 100) : 0;
+      const turnosEnriquecidos = await Promise.all(
+        turnos.map(async (turno) => {
+          try {
+            const viajes = await fetchViajesPorTurno(turno.id);
+            totalViajes += viajes.length;
+            const completadosTurno = viajes.filter((v) => v.estado === 'completado').length;
+            completados += completadosTurno;
 
-          return { 
-            ...turno, 
-            viajesTotales: viajes.length, 
-            viajesCompletados: completadosTurno, 
-            progreso 
-          };
-        } catch (e) {
-          return { ...turno, viajesTotales: 0, viajesCompletados: 0, progreso: 0 };
-        }
-      }));
+            const progreso = viajes.length > 0 ? Math.round((completadosTurno / viajes.length) * 100) : 0;
 
-      // Ordenar por hora de inicio
+            return { ...turno, viajesTotales: viajes.length, viajesCompletados: completadosTurno, progreso };
+          } catch (e) {
+            return { ...turno, viajesTotales: 0, viajesCompletados: 0, progreso: 0 };
+          }
+        })
+      );
+
       turnosEnriquecidos.sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
-
-      // 3. PROCESAMIENTO GERENCIAL
-      const reportesPendientes = reportes.filter(r => r.estado === 'pendiente').length;
-      const mantActivos = mantenimientos.filter(m => m.estado === 'en_proceso').length;
-      
-      // Normalizar "hoy" a medianoche local
-      now.setHours(0,0,0,0);
-      const personalAusente = licenciasMedicas.filter(l => {
-          const inicio = new Date(l.fecha_inicio);
-          const fin = new Date(l.fecha_termino);
-          inicio.setMinutes(inicio.getMinutes() + inicio.getTimezoneOffset());
-          fin.setMinutes(fin.getMinutes() + fin.getTimezoneOffset());
-          return l.estado === 'aprobado' && now >= inicio && now <= fin;
-      }).length;
-
-      // 4. GENERACIÓN DE ALERTAS
-      const nuevasAlertas = [];
-
-      // --- ALERTAS SOAP (BUSES) ---
-      buses.forEach(bus => {
-        if (bus.vencimiento_soap) {
-           const venc = new Date(bus.vencimiento_soap);
-           venc.setMinutes(venc.getMinutes() + venc.getTimezoneOffset());
-           const diffTime = venc - now;
-           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-           const fechaVenc = venc.toLocaleDateString('es-CL');
-
-           if (diffDays < 0) {
-              nuevasAlertas.push({ 
-                id: bus.id, tipo: 'soap', titulo: 'SOAP VENCIDO', 
-                detalle: `Bus ${bus.patente}`, nivel: 'critical', dias: diffDays, vencimiento: fechaVenc 
-              });
-           } else if (diffDays <= 30) {
-              nuevasAlertas.push({ 
-                id: bus.id, tipo: 'soap', titulo: 'SOAP por vencer', 
-                detalle: `Bus ${bus.patente} (${diffDays} días)`, nivel: 'warning', dias: diffDays, vencimiento: fechaVenc 
-              });
-           }
-        }
-      });
-
-      // --- ALERTAS LICENCIAS (CONDUCTORES) ---
-      conductores.forEach(cond => {
-        if (cond.fecha_vencimiento_licencia) {
-           const venc = new Date(cond.fecha_vencimiento_licencia);
-           venc.setMinutes(venc.getMinutes() + venc.getTimezoneOffset());
-           const diffTime = venc - now;
-           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-           const fechaVenc = venc.toLocaleDateString('es-CL');
-           
-           const nombre = cond.empleado?.user 
-             ? `${cond.empleado.user.nombre} ${cond.empleado.user.apellido}` 
-             : `Conductor #${cond.id}`;
-
-           if (diffDays < 0) {
-              nuevasAlertas.push({ 
-                id: cond.id, tipo: 'licencia', titulo: 'LICENCIA VENCIDA', 
-                detalle: nombre, nivel: 'critical', dias: diffDays, vencimiento: fechaVenc 
-              });
-           } else if (diffDays <= 30) {
-              nuevasAlertas.push({ 
-                id: cond.id, tipo: 'licencia', titulo: 'Licencia por vencer', 
-                detalle: `${nombre} (${diffDays} días)`, nivel: 'warning', dias: diffDays, vencimiento: fechaVenc 
-              });
-           }
-        }
-      });
-
-      // Ordenar alertas (críticas primero, luego por días)
-      nuevasAlertas.sort((a, b) => {
-        if (a.nivel === 'critical' && b.nivel !== 'critical') return -1;
-        if (a.nivel !== 'critical' && b.nivel === 'critical') return 1;
-        return a.dias - b.dias;
-      });
-
-      setAlertas(nuevasAlertas);
 
       setStats({
         busesTotal: buses.length,
         busesOperativos: operativos,
-        busesMantenimiento: mantenimientoCount,
-        rutasActivas: rutas.filter(r => r.estado === 'activa').length,
+        busesMantenimiento: mantenimiento,
+        rutasActivas: rutas.filter((r) => r.estado === 'activa').length,
         viajesHoy: totalViajes,
         viajesCompletadosHoy: completados,
-        reportesPendientes,
-        personalEnLicencia: personalAusente,
-        mantenimientosActivos: mantActivos
       });
-      
       setTurnosDelDia(turnosEnriquecidos);
-
     } catch (error) {
-      console.error('Error cargando dashboard:', error);
+      console.error('Error general dashboard:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
-      <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-4"></div>
-      <p className="text-gray-500 animate-pulse">Cargando tablero de control...</p>
-    </div>
-  );
+  const formatoDinero = (val) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(val || 0);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-gray-50">
+        <div className="text-center">
+          <Activity className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-500 font-medium">Sincronizando operaciones...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const alertas = biData?.alertas || [];
+  const criticos = alertas.filter((a) => (a.nivel || '').toLowerCase() === 'critico').length;
+  const finanzas = alertas.filter((a) => (a.categoria || '').toLowerCase() === 'finanzas').length;
+  const operacion = alertas.filter((a) => (a.categoria || '').toLowerCase() === 'operacion').length;
+  const seguridad = alertas.filter((a) => (a.categoria || '').toLowerCase() === 'seguridad').length;
 
   return (
-    <div className="p-8 bg-gray-50/50 min-h-screen font-sans text-slate-800">
-      
-      {/* HEADER (fusionado: versión amigo + botones rápidos tuyos) */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+    <div className="p-6 max-w-7xl mx-auto space-y-6 bg-gray-50/30 min-h-screen">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Panel de Operaciones</h1>
-          <div className="flex items-center gap-2 mt-2 bg-white px-3 py-1 rounded-full shadow-sm w-fit border border-gray-100">
-            <div className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-            </div>
-            <span className="text-sm font-medium text-gray-600">
-              Datos al {new Date().toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </span>
-          </div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+            Panel de Control Gerencial <Activity className="text-blue-600" size={24} />
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">Visión unificada: Financiera, Operativa y de Seguridad.</p>
         </div>
-
-        {/* Botones de acciones rápidas (tomados de tu versión) */}
         <div className="flex gap-3">
-          <button 
+          <button
             onClick={() => onNavigate('viajes')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-blue-600/20 flex items-center gap-2 transition-all font-medium hover:-translate-y-0.5"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-2 font-medium transition-all text-sm"
           >
-            <TrendingUp size={18} /> 
-            <span>Gestionar Viajes</span>
+            <TrendingUp size={16} /> Gestión Viajes
           </button>
-          <button 
-            onClick={() => onNavigate('buses')}
-            className="bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-5 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all font-medium"
+          <button
+            onClick={() => onNavigate('analisis-mantenimientos')}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg shadow-md shadow-indigo-600/20 flex items-center gap-2 font-medium transition-all text-sm"
           >
-            <Bus size={18} /> 
-            <span>Flota</span>
+            <Wrench size={16} /> Análisis Mantenimiento
+          </button>
+          <button
+            onClick={() => onNavigate('analisis-rrhh')}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg shadow-md shadow-emerald-600/20 flex items-center gap-2 font-medium transition-all text-sm"
+          >
+            <Users size={16} /> Análisis RRHH
           </button>
         </div>
       </div>
 
-      {/* --- ALERTAS DE VENCIMIENTOS --- */}
-      {alertas.length > 0 && (
-        <div className={`rounded-2xl border transition-all duration-500 overflow-hidden mb-8 ${isAlertasOpen ? 'bg-white border-red-200 shadow-lg ring-1 ring-red-100' : 'bg-red-50 border-red-200 shadow-sm'}`}>
-           <button 
-             onClick={() => setIsAlertasOpen(!isAlertasOpen)}
-             className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-red-50 to-white hover:from-red-100 transition-colors"
-           >
-              <div className="flex items-center gap-3">
-                 <div className="bg-red-100 p-2 rounded-full text-red-600">
-                   <Bell className={`size-5 ${alertas.some(a => a.nivel === 'critical') ? 'animate-swing' : ''}`} />
-                 </div>
-                 <div className="text-left">
-                   <p className="text-red-800 font-bold text-sm">ALERTAS DE VENCIMIENTOS</p>
-                   <p className="text-red-600 text-xs font-medium">{alertas.length} notificaciones</p>
-                 </div>
+      {/* ALERTAS Y OPERACIÓN */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Centro de Alertas */}
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full">
+          <div className="p-4 border-b border-gray-100 bg-gray-50/50 rounded-t-xl space-y-3">
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                <AlertTriangle className="text-amber-500" size={18} />
+                Centro de Alertas Proactivas
+              </h3>
+              <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded-full border border-red-200">
+                {alertas.length} requieren atención
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg border border-red-100 text-xs">
+                <ShieldAlert size={14} className="text-red-500" />
+                <div>
+                  <p className="font-semibold text-red-700">Críticos</p>
+                  <p className="text-red-600">{criticos}</p>
+                </div>
               </div>
-              <div className={`bg-white p-2 rounded-full shadow-sm text-red-500 transition-transform duration-300 ${isAlertasOpen ? 'rotate-180' : ''}`}>
-                 <ChevronDown size={20} />
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-100 text-xs">
+                <PiggyBank size={14} className="text-amber-500" />
+                <div>
+                  <p className="font-semibold text-amber-700">Finanzas</p>
+                  <p className="text-amber-600">{finanzas}</p>
+                </div>
               </div>
-           </button>
+              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-100 text-xs">
+                <Gauge size={14} className="text-blue-500" />
+                <div>
+                  <p className="font-semibold text-blue-700">Operación</p>
+                  <p className="text-blue-600">{operacion}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100 text-xs">
+                <ShieldAlert size={14} className="text-emerald-500" />
+                <div>
+                  <p className="font-semibold text-emerald-700">Seguridad</p>
+                  <p className="text-emerald-600">{seguridad}</p>
+                </div>
+              </div>
+            </div>
+          </div>
 
-           {isAlertasOpen && (
-             <div className="p-6 border-t border-red-100 bg-white">
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {alertas.map((alerta, idx) => {
-                     const isCritical = alerta.nivel === 'critical';
-                     return (
-                       <div 
-                         key={idx} 
-                         onClick={() => onNavigate(alerta.tipo === 'soap' ? 'buses' : 'conductores')}
-                         className={`
-                           relative p-4 rounded-xl border-l-4 cursor-pointer transition-all hover:-translate-y-1 hover:shadow-md
-                           ${isCritical 
-                             ? 'bg-red-50/50 border-red-500 border-t border-r border-b border-gray-100' 
-                             : 'bg-amber-50/50 border-amber-500 border-t border-r border-b border-gray-100'
-                           }
-                         `}
-                       >
-                          <div className="flex justify-between items-start mb-2">
-                             <div className={`flex items-center gap-2 font-bold text-xs uppercase tracking-wider ${isCritical ? 'text-red-700' : 'text-amber-700'}`}>
-                               {isCritical ? <AlertCircle size={14}/> : <AlertTriangle size={14}/>}
-                               {alerta.titulo}
-                             </div>
-                             {isCritical && <span className="flex h-2 w-2 rounded-full bg-red-500"></span>}
+          <div className="flex-1 overflow-y-auto max-h-[350px]">
+            {!alertas.length ? (
+              <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8 min-h-[200px]">
+                <Activity size={40} className="mb-2 opacity-20" />
+                <p>Operación normal. Sin alertas críticas.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {alertas.map((alerta, idx) => {
+                  const nivel = (alerta.nivel || '').toLowerCase();
+                  const badge =
+                    nivel === 'critico'
+                      ? 'bg-red-50 text-red-700 border border-red-100'
+                      : 'bg-amber-50 text-amber-700 border border-amber-100';
+                  const categoria = (alerta.categoria || '').toLowerCase();
+                  const chipColor =
+                    categoria === 'finanzas'
+                      ? 'bg-amber-100 text-amber-700'
+                      : categoria === 'seguridad'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-blue-100 text-blue-700';
+                  return (
+                    <div key={idx} className="group p-4 hover:bg-gray-50 transition-colors flex gap-4 items-start">
+                      <div className={`w-1.5 h-12 rounded-full mt-1 ${nivel === 'critico' ? 'bg-red-500' : 'bg-amber-400'}`}></div>
+                      <div className="flex-1">
+                        <div className="flex flex-wrap justify-between items-start gap-2 mb-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${badge}`}>{alerta.titulo}</span>
+                            {alerta.ruta && (
+                              <span className="text-[11px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-medium">Ruta {alerta.ruta}</span>
+                            )}
+                            {alerta.bus && (
+                              <span className="text-[11px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-medium">Bus {alerta.bus}</span>
+                            )}
+                            <span className={`text-[11px] px-2 py-0.5 rounded font-semibold ${chipColor}`}>
+                              {alerta.categoria || 'Operación'}
+                            </span>
                           </div>
-                          <p className="font-bold text-gray-800 text-sm mb-1">{alerta.detalle}</p>
-                          <div className="flex items-center gap-2 mt-3 text-xs font-medium text-gray-500 bg-white/80 p-1.5 rounded-lg w-fit border border-gray-100">
-                             <Calendar size={12} className="text-gray-400" /> 
-                             Vence: <span className="text-gray-700">{alerta.vencimiento}</span>
-                          </div>
-                       </div>
-                     );
-                  })}
-               </div>
-             </div>
-           )}
-        </div>
-      )}
-
-      {/* --- KPIS --- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {/* Card 1: Estado de Flota */}
-        <div 
-          onClick={() => onNavigate('buses')}
-          className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden group cursor-pointer hover:shadow-lg hover:border-blue-100 transition-all duration-300"
-        >
-          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-10 -mt-10 opacity-50 group-hover:scale-110 transition-transform"></div>
-          <div className="flex justify-between items-start relative z-10">
-            <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Flota Operativa</p>
-              <div className="flex items-baseline gap-2">
-                <h3 className="text-4xl font-extrabold text-gray-900">{stats.busesOperativos}</h3>
-                <span className="text-lg text-gray-400 font-medium">/ {stats.busesTotal}</span>
-              </div>
-            </div>
-            <div className="p-3 bg-blue-100 text-blue-600 rounded-xl shadow-sm group-hover:rotate-12 transition-transform">
-              <Bus size={28} />
-            </div>
-          </div>
-          <div 
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate('mantenciones');
-            }}
-            className="mt-6 flex items-center gap-2 text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg w-fit border border-amber-100 cursor-pointer hover:bg-amber-100 transition-colors z-20 relative"
-          >
-            <Wrench size={14} /> {stats.busesMantenimiento} en mantenimiento
-          </div>
-        </div>
-
-        {/* Card 2: Viajes del Día */}
-        <div 
-           onClick={() => onNavigate('viajes')}
-           className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 group cursor-pointer hover:shadow-lg hover:border-purple-100 transition-all duration-300 relative overflow-hidden"
-        >
-          <div className="absolute bottom-0 left-0 w-full h-1 bg-gray-100">
-             <div 
-               className="bg-purple-600 h-full transition-all duration-1000 ease-out" 
-               style={{ width: `${stats.viajesHoy > 0 ? (stats.viajesCompletadosHoy / stats.viajesHoy) * 100 : 0}%` }}
-             ></div>
-          </div>
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Viajes Hoy</p>
-              <h3 className="text-4xl font-extrabold text-gray-900">{stats.viajesHoy}</h3>
-            </div>
-            <div className="p-3 bg-purple-100 text-purple-600 rounded-xl shadow-sm group-hover:rotate-12 transition-transform">
-              <TrendingUp size={28} />
-            </div>
-          </div>
-          <div className="flex items-center justify-between mt-4">
-             <p className="text-sm font-medium text-gray-600">
-               <span className="text-purple-600 font-bold">{stats.viajesCompletadosHoy}</span> completados
-             </p>
-             <span className="text-xs font-bold bg-purple-50 text-purple-700 px-2 py-1 rounded">
-               {stats.viajesHoy > 0 ? Math.round((stats.viajesCompletadosHoy / stats.viajesHoy) * 100) : 0}%
-             </span>
-          </div>
-        </div>
-
-        {/* Card 3: Rutas Activas */}
-        <div 
-          onClick={() => onNavigate('rutas')}
-          className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-lg hover:border-emerald-100 transition-all duration-300 group"
-        >
-          <div className="flex justify-between items-start mb-6">
-            <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Rutas Activas</p>
-              <h3 className="text-4xl font-extrabold text-gray-900">{stats.rutasActivas}</h3>
-            </div>
-            <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl shadow-sm group-hover:rotate-12 transition-transform">
-              <MapPin size={28} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 group-hover:translate-x-1 transition-transform">
-            Ver catálogo de rutas <ArrowRight size={14} />
-          </div>
-        </div>
-      </div>
-
-      {/* --- TARJETAS RÁPIDAS + PERSONAL --- */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        <div 
-          onClick={() => onNavigate('reportes')} 
-          className="bg-gradient-to-br from-white to-red-50 p-5 rounded-2xl shadow-sm border border-red-100 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all group"
-        >
-           <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                 <div className="bg-white p-3 rounded-xl shadow-sm text-red-500 border border-red-100 group-hover:bg-red-500 group-hover:text-white transition-colors">
-                    <FileText size={20} />
-                 </div>
-                 <div>
-                    <h4 className="text-2xl font-bold text-gray-800">{stats.reportesPendientes}</h4>
-                    <p className="text-xs text-red-600 font-bold uppercase tracking-wide">Reportes Pendientes</p>
-                 </div>
-              </div>
-              <ChevronUp className="text-red-300 rotate-90" />
-           </div>
-        </div>
-
-        <div 
-          onClick={() => onNavigate('mantenciones')} 
-          className="bg-gradient-to-br from-white to-orange-50 p-5 rounded-2xl shadow-sm border border-orange-100 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all group"
-        >
-           <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                 <div className="bg-white p-3 rounded-xl shadow-sm text-orange-500 border border-orange-100 group-hover:bg-orange-500 group-hover:text-white transition-colors">
-                    <Wrench size={20} />
-                 </div>
-                 <div>
-                    <h4 className="text-2xl font-bold text-gray-800">{stats.mantenimientosActivos}</h4>
-                    <p className="text-xs text-orange-600 font-bold uppercase tracking-wide">En Taller</p>
-                 </div>
-              </div>
-              <ChevronUp className="text-orange-300 rotate-90" />
-           </div>
-        </div>
-
-        <div 
-          onClick={() => onNavigate('licencias')} 
-          className="bg-gradient-to-br from-white to-indigo-50 p-5 rounded-2xl shadow-sm border border-indigo-100 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all group"
-        >
-           <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                 <div className="bg-white p-3 rounded-xl shadow-sm text-indigo-500 border border-indigo-100 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-                    <Users size={20} />
-                 </div>
-                 <div>
-                    <h4 className="text-2xl font-bold text-gray-800">{stats.personalEnLicencia}</h4>
-                    <p className="text-xs text-indigo-600 font-bold uppercase tracking-wide">Ausencias Activas</p>
-                 </div>
-              </div>
-              <ChevronUp className="text-indigo-300 rotate-90" />
-           </div>
-        </div>
-
-        {/* Tarjeta de Personal (de tu versión) */}
-        <div 
-          onClick={() => onNavigate('empleados')}
-          className="bg-gradient-to-br from-slate-800 to-slate-900 p-5 rounded-2xl shadow-lg text-white cursor-pointer hover:-translate-y-1 transition-transform"
-        >
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-xs font-medium text-slate-300 mb-1 uppercase tracking-wide">Personal</p>
-              <h3 className="text-xl font-bold">Gestionar</h3>
-            </div>
-            <div className="p-3 bg-white/10 rounded-xl text-white">
-              <Users size={24} />
-            </div>
-          </div>
-          <p className="mt-6 text-xs text-slate-400 flex items-center gap-2">
-            Conductores • Mecánicos • Asistentes
-          </p>
-        </div>
-      </div>
-
-      {/* --- MONITOR DE TURNOS (CORREGIDO) --- */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-8">
-        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
-          <div className="flex items-center gap-3">
-             <div className="p-2 bg-white rounded-lg shadow-sm text-blue-600">
-               <Clock size={20} />
-             </div>
-             <div>
-               <h3 className="font-bold text-gray-900 text-lg">Monitor de Turnos (Hoy)</h3>
-               <p className="text-xs text-gray-500">Estado en tiempo real</p>
-             </div>
-          </div>
-          <button 
-            onClick={() => onNavigate('viajes')} 
-            className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg transition-colors"
-          >
-            VER CALENDARIO COMPLETO
-          </button>
-        </div>
-        
-        {turnosDelDia.length === 0 ? (
-          <div className="p-16 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-50 rounded-full mb-4">
-              <Activity className="text-gray-300" size={32} />
-            </div>
-            <h4 className="text-gray-900 font-medium mb-1">Sin actividad programada</h4>
-            <p className="text-gray-500 text-sm">No hay turnos registrados para la fecha actual.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 tracking-wider">
-                <tr>
-                  <th className="px-6 py-4">Horario</th>
-                  <th className="px-6 py-4">Tipo</th>
-                  <th className="px-6 py-4">Bus</th>
-                  <th className="px-6 py-4">Progreso</th>
-                  <th className="px-6 py-4 text-right">Acción</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {turnosDelDia.slice(0, 5).map((turno) => (
-                  <tr key={turno.id} className="hover:bg-blue-50/30 transition-colors group">
-                    <td className="px-6 py-4 font-mono text-gray-600 font-semibold group-hover:text-blue-600 transition-colors">
-                      {turno.hora_inicio.slice(0,5)} - {turno.hora_termino.slice(0,5)}
-                    </td>
-                    <td className="px-6 py-4 capitalize font-medium text-gray-800">{turno.tipo_turno}</td>
-                    
-                    {/* Usamos turno.bus?.patente para evitar errores si no viene cargado */}
-                    <td className="px-6 py-4">
-                      {turno.bus?.patente ? (
-                        <span className="bg-gray-100 text-gray-700 px-2.5 py-1 rounded-md font-mono text-xs font-bold border border-gray-200">
-                          {turno.bus.patente}
-                        </span>
-                      ) : (
-                        <span className="text-red-400 text-xs italic">Sin Asignar</span>
-                      )}
-                    </td>
-
-                    <td className="px-6 py-4 w-1/3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden shadow-inner">
-                          <div 
-                            className={`h-2 rounded-full transition-all duration-1000 ${turno.progreso === 100 ? 'bg-green-500' : 'bg-blue-500'}`} 
-                            style={{ width: `${turno.progreso}%` }}
-                          ></div>
+                          <span className="text-xs text-gray-400 flex items-center gap-1 font-mono">
+                            <Clock size={12} /> {alerta.fecha}
+                          </span>
                         </div>
-                        <span className="text-xs font-bold text-gray-500 min-w-[30px]">{turno.progreso}%</span>
+                        <p className="text-sm text-gray-700 leading-snug font-medium">{alerta.mensaje}</p>
+                        {alerta.monto && (
+                          <p className="text-xs text-red-600 font-semibold mt-1">
+                            Pérdida estimada: {alerta.monto_formateado || formatoDinero(alerta.monto)}
+                          </p>
+                        )}
+                        {alerta.accion_recomendada && (
+                          <div className="mt-2 inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 text-[11px] px-2 py-1 rounded border border-indigo-100">
+                            <Wrench size={12} /> {alerta.accion_recomendada}
+                          </div>
+                        )}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                        <button 
-                          onClick={() => onNavigate('viajes')} 
-                          className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-all"
-                          title="Ver detalle"
-                        >
-                          <ArrowRight size={18} />
-                        </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Operación del día */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full">
+          <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2">
+              <Clock size={18} className="text-blue-600" /> Turnos Hoy
+            </h3>
+            <button onClick={() => onNavigate('viajes')} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+              Ver Todo
+            </button>
+          </div>
+          <div className="flex-1 p-2 overflow-y-auto max-h-[350px]">
+            {turnosDelDia.length === 0 ? (
+              <div className="text-center p-8 text-gray-400 text-sm">No hay turnos hoy.</div>
+            ) : (
+              <div className="space-y-3">
+                {turnosDelDia.map((turno) => (
+                  <div key={turno.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-mono text-xs font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                        {turno.hora_inicio.slice(0, 5)}
+                      </span>
+                      <span className="text-xs bg-white border border-gray-200 px-1.5 py-0.5 rounded text-gray-500 capitalize">
+                        {turno.tipo_turno}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm font-medium text-gray-800">{turno.bus?.patente || 'Sin Bus'}</p>
+                      <span className={`text-xs font-bold ${turno.progreso === 100 ? 'text-green-600' : 'text-blue-600'}`}>
+                        {turno.progreso}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+                      <div
+                        className={`h-1.5 rounded-full ${turno.progreso === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
+                        style={{ width: `${turno.progreso}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1439,6 +1439,32 @@ export const fetchBusesDisponiblesEmergencia = async (params = {}) => {
 };
 
 /**
+ * Dashboard operativo - Alertas categorizadas
+ * @param {Object} params - Parámetros opcionales (mes, anio, fecha_inicio, fecha_fin)
+ */
+export const fetchDashboardOperativo = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/reportes/dashboard-operativo${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Puntualidad y SLA
+ * @param {Object} params - Parámetros opcionales (mes, anio, fecha_inicio, fecha_fin)
+ */
+export const fetchPuntualidadSLA = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/reportes/puntualidad-sla${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
  * Activar bus en emergencia (cambiar estado de mantenimiento a operativo)
  * Suspende mantenimientos en proceso y activa el bus
  */
