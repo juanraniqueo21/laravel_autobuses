@@ -1,6 +1,6 @@
 import React from 'react';
-import { 
-  LayoutDashboard, Users, UserCog, Wrench, Bus, Map, 
+import {
+  LayoutDashboard, Users, UserCog, Wrench, Bus, Map,
   CalendarClock, Navigation, TrendingUp, Shield, User, Briefcase,
   X, DollarSign, Calendar, MapPin, FileText, ClipboardList, BarChart3
 } from 'lucide-react';
@@ -160,6 +160,15 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
         >
           <Wrench size={20} className={getIconClasses('analisis-mantenimientos')} />
           <span className="font-medium truncate">Análisis Mantenimientos</span>
+        </button>
+
+        {/* NUEVO: Botón de Análisis RRHH */}
+        <button
+          onClick={() => handleSelect('analisis-rrhh')}
+          className={getButtonClasses('analisis-rrhh')}
+        >
+          <Users size={20} className={getIconClasses('analisis-rrhh')} />
+          <span className="font-medium truncate">Análisis RRHH</span>
         </button>
 
         <button

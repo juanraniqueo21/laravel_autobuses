@@ -20,6 +20,7 @@ use App\Http\Controllers\PermisoLicenciaController;
 use App\Http\Controllers\LiquidacionController;
 use App\Http\Controllers\ReportController; // Controlador de Logística
 use App\Http\Controllers\ReporteController; // Controlador de Reportes (Nuevo)
+use App\Http\Controllers\RRHHController; // Controlador de RRHH
 
 // ============================================
 // RUTAS PÚBLICAS (sin autenticación)
@@ -81,6 +82,7 @@ Route::middleware('jwt.auth')->group(function () {
     Route::get('/buses/{id}', [BusController::class, 'show']);
     Route::post('/buses', [BusController::class, 'store']);
     Route::put('/buses/{id}', [BusController::class, 'update']);
+    Route::post('/buses/{id}/activar-emergencia', [BusController::class, 'activarEmergencia']);
     Route::delete('/buses/{id}', [BusController::class, 'destroy']);
 
     // RUTAS
@@ -208,6 +210,10 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/costos-mantenimiento-por-bus', [ReporteController::class, 'costosMantenimientoPorBus']);
         Route::get('/buses-disponibles-emergencia', [ReporteController::class, 'busesDisponiblesEmergencia']);
 
+        // Dashboard operativo y SLA
+        Route::get('/dashboard-operativo', [ReporteController::class, 'dashboardOperativo']);
+        Route::get('/puntualidad-sla', [ReporteController::class, 'puntualidadSLA']);
+
         Route::get('/{id}', [ReporteController::class, 'show']);
         Route::post('/', [ReporteController::class, 'store']);
         Route::put('/{id}', [ReporteController::class, 'update']);
@@ -215,6 +221,31 @@ Route::middleware('jwt.auth')->group(function () {
         Route::post('/{id}/rechazar', [ReporteController::class, 'rechazar']);
         Route::delete('/{id}', [ReporteController::class, 'destroy']);
         Route::get('/{id}/descargar-documento', [ReporteController::class, 'descargarDocumento']);
+    });
+
+    // ============================================
+    // ALERTAS INTELIGENTES Y PREDICCIONES
+    // ============================================
+    Route::prefix('alertas')->group(function () {
+        Route::get('/', [App\Http\Controllers\AlertasInteligentesController::class, 'obtenerAlertas']);
+        Route::get('/predicciones', [App\Http\Controllers\AlertasInteligentesController::class, 'predicciones']);
+    });
+
+    // ============================================
+    // RECURSOS HUMANOS - ANÁLISIS Y GESTIÓN
+    // ============================================
+    Route::prefix('rrhh')->group(function () {
+        // Alertas de contratos
+        Route::get('/alertas-contratos', [RRHHController::class, 'alertasContratos']);
+
+        // Ranking de licencias
+        Route::get('/ranking-licencias', [RRHHController::class, 'rankingLicencias']);
+
+        // Resumen de contratos
+        Route::get('/resumen-contratos', [RRHHController::class, 'resumenContratos']);
+
+        // Empleados con alto riesgo de no renovación
+        Route::get('/empleados-alto-riesgo', [RRHHController::class, 'empleadosAltoRiesgo']);
     });
 
 });

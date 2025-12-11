@@ -12,6 +12,33 @@ use Illuminate\Support\Facades\DB;
 class ReporteController extends Controller
 {
     /**
+     * Helper para convertir parámetros mes/año a fechas
+     * Si se proporcionan mes/año, convierte a fecha_inicio y fecha_fin del mes
+     */
+    private function procesarFiltrosFecha(Request $request)
+    {
+        $fechaInicio = null;
+        $fechaFin = null;
+
+        // Si se envía mes y año, convertir a rango de fechas
+        if ($request->has('mes') && $request->has('anio')) {
+            $mes = $request->mes;
+            $anio = $request->anio;
+
+            // Primer día del mes
+            $fechaInicio = \Carbon\Carbon::createFromDate($anio, $mes, 1)->startOfDay()->format('Y-m-d');
+            // Último día del mes
+            $fechaFin = \Carbon\Carbon::createFromDate($anio, $mes, 1)->endOfMonth()->endOfDay()->format('Y-m-d');
+        } else {
+            // Si no hay mes/año, usar fecha_inicio y fecha_fin directamente
+            $fechaInicio = $request->input('fecha_inicio');
+            $fechaFin = $request->input('fecha_fin');
+        }
+
+        return ['fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin];
+    }
+
+    /**
      * Listar todos los reportes
      */
     public function index(Request $request)
@@ -473,6 +500,9 @@ class ReporteController extends Controller
      */
     public function busesConMasMantenimientos(Request $request)
     {
+        // Procesar filtros de fecha (mes/año o fecha_inicio/fecha_fin)
+        $fechas = $this->procesarFiltrosFecha($request);
+
         $query = DB::table('mantenimientos')
             ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
             ->select(
@@ -490,11 +520,11 @@ class ReporteController extends Controller
             );
 
         // Filtros de fecha
-        if ($request->has('fecha_inicio')) {
-            $query->where('mantenimientos.fecha_inicio', '>=', $request->fecha_inicio);
+        if ($fechas['fecha_inicio']) {
+            $query->where('mantenimientos.fecha_inicio', '>=', $fechas['fecha_inicio']);
         }
-        if ($request->has('fecha_fin')) {
-            $query->where('mantenimientos.fecha_inicio', '<=', $request->fecha_fin);
+        if ($fechas['fecha_fin']) {
+            $query->where('mantenimientos.fecha_inicio', '<=', $fechas['fecha_fin']);
         }
         if ($request->has('tipo_mantenimiento')) {
             $query->where('mantenimientos.tipo_mantenimiento', $request->tipo_mantenimiento);
@@ -508,6 +538,7 @@ class ReporteController extends Controller
 
         $analisis = $resultados->map(function ($item) {
             return [
+                'id' => $item->id, // Agregado id
                 'bus_id' => $item->id,
                 'patente' => $item->patente,
                 'marca' => $item->marca,
@@ -518,7 +549,7 @@ class ReporteController extends Controller
                 'preventivos' => (int) $item->preventivos,
                 'correctivos' => (int) $item->correctivos,
                 'en_proceso' => (int) $item->en_proceso,
-                'costo_total' => (int) $item->costo_total_mantenimientos,
+                'costo_total_mantenimientos' => (int) $item->costo_total_mantenimientos, // Corregido nombre del campo
             ];
         });
 
@@ -535,16 +566,19 @@ class ReporteController extends Controller
      */
     public function tiposFallasMasComunes(Request $request)
     {
+        // Procesar filtros de fecha (mes/año o fecha_inicio/fecha_fin)
+        $fechas = $this->procesarFiltrosFecha($request);
+
         $query = DB::table('mantenimientos')
             ->where('tipo_mantenimiento', 'correctivo')
             ->whereNotNull('descripcion');
 
         // Filtros de fecha
-        if ($request->has('fecha_inicio')) {
-            $query->where('fecha_inicio', '>=', $request->fecha_inicio);
+        if ($fechas['fecha_inicio']) {
+            $query->where('fecha_inicio', '>=', $fechas['fecha_inicio']);
         }
-        if ($request->has('fecha_fin')) {
-            $query->where('fecha_inicio', '<=', $request->fecha_fin);
+        if ($fechas['fecha_fin']) {
+            $query->where('fecha_inicio', '<=', $fechas['fecha_fin']);
         }
 
         $resultados = $query
@@ -582,17 +616,20 @@ class ReporteController extends Controller
      */
     public function costosMantenimientoPorBus(Request $request)
     {
+        // Procesar filtros de fecha (mes/año o fecha_inicio/fecha_fin)
+        $fechas = $this->procesarFiltrosFecha($request);
+
         $query = DB::table('mantenimientos')
             ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
             ->whereNotNull('mantenimientos.costo_total')
             ->where('mantenimientos.estado', 'completado');
 
         // Filtros de fecha
-        if ($request->has('fecha_inicio')) {
-            $query->where('mantenimientos.fecha_inicio', '>=', $request->fecha_inicio);
+        if ($fechas['fecha_inicio']) {
+            $query->where('mantenimientos.fecha_inicio', '>=', $fechas['fecha_inicio']);
         }
-        if ($request->has('fecha_fin')) {
-            $query->where('mantenimientos.fecha_inicio', '<=', $request->fecha_fin);
+        if ($fechas['fecha_fin']) {
+            $query->where('mantenimientos.fecha_inicio', '<=', $fechas['fecha_fin']);
         }
 
         $resultados = $query
@@ -616,6 +653,7 @@ class ReporteController extends Controller
             $edadBus = now()->year - $item->anio_fabricacion;
 
             return [
+                'id' => $item->id, // Agregado para consistencia
                 'bus_id' => $item->id,
                 'patente' => $item->patente,
                 'marca' => $item->marca,
@@ -623,8 +661,8 @@ class ReporteController extends Controller
                 'tipo_servicio' => ucfirst($item->tipo_servicio),
                 'edad_anios' => $edadBus,
                 'total_mantenimientos' => (int) $item->total_mantenimientos,
-                'costo_total' => (int) $item->costo_total,
-                'costo_promedio' => (int) $item->costo_promedio,
+                'costo_total_mantenimiento' => (int) $item->costo_total, // Nombre corregido para frontend
+                'costo_promedio_mantenimiento' => (int) $item->costo_promedio, // Nombre corregido para frontend
                 'costo_maximo' => (int) $item->costo_maximo,
             ];
         });
@@ -636,24 +674,43 @@ class ReporteController extends Controller
      * Buses disponibles para activación de emergencia
      * Buses en mantenimiento que podrían activarse en caso de urgencia
      * Se consideran activables los mantenimientos preventivos o correctivos menores
+     *
+     * Parámetros opcionales:
+     * - mes: filtrar por mes específico
+     * - anio: filtrar por año específico
      */
     public function busesDisponiblesEmergencia(Request $request)
     {
+        // Procesar filtros de fecha (mes/año o fecha_inicio/fecha_fin)
+        $fechas = $this->procesarFiltrosFecha($request);
         $hoy = now()->format('Y-m-d');
 
-        // Buses actualmente en mantenimiento
-        $busesEnMantenimiento = DB::table('mantenimientos')
+        // Query base para buses en mantenimiento
+        $query = DB::table('mantenimientos')
             ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
             ->leftJoin('mecanicos', 'mantenimientos.mecanico_id', '=', 'mecanicos.id')
             ->leftJoin('empleados', 'mecanicos.empleado_id', '=', 'empleados.id')
             ->leftJoin('users', 'empleados.user_id', '=', 'users.id')
-            ->where('mantenimientos.estado', 'en_proceso')
-            ->where('mantenimientos.fecha_inicio', '<=', $hoy)
-            ->where(function($query) use ($hoy) {
-                $query->whereNull('mantenimientos.fecha_termino')
-                      ->orWhere('mantenimientos.fecha_termino', '>=', $hoy);
-            })
-            ->select(
+            ->where('mantenimientos.estado', 'en_proceso');
+
+        // Si hay filtros de fecha, aplicarlos al periodo del mantenimiento
+        if ($fechas['fecha_inicio'] && $fechas['fecha_fin']) {
+            // Buses que estuvieron en mantenimiento durante el periodo filtrado
+            $query->where('mantenimientos.fecha_inicio', '<=', $fechas['fecha_fin'])
+                  ->where(function($q) use ($fechas) {
+                      $q->whereNull('mantenimientos.fecha_termino')
+                        ->orWhere('mantenimientos.fecha_termino', '>=', $fechas['fecha_inicio']);
+                  });
+        } else {
+            // Sin filtros: mostrar estado actual (buses actualmente en mantenimiento)
+            $query->where('mantenimientos.fecha_inicio', '<=', $hoy)
+                  ->where(function($q) use ($hoy) {
+                      $q->whereNull('mantenimientos.fecha_termino')
+                        ->orWhere('mantenimientos.fecha_termino', '>=', $hoy);
+                  });
+        }
+
+        $busesEnMantenimiento = $query->select(
                 'buses.id as bus_id',
                 'buses.patente',
                 'buses.marca',
@@ -695,7 +752,20 @@ class ReporteController extends Controller
                 $activable = false;
             }
 
-            $diasEnMantenimiento = now()->diffInDays($item->fecha_inicio);
+            // Calcular días de duración del mantenimiento
+            $fechaInicio = \Carbon\Carbon::parse($item->fecha_inicio);
+
+            if ($item->fecha_termino) {
+                // Si hay fecha de término, calcular duración total del mantenimiento
+                $fechaTermino = \Carbon\Carbon::parse($item->fecha_termino);
+                $diasEnMantenimiento = (int) $fechaInicio->diffInDays($fechaTermino, false);
+                // Agregar 1 para contar ambos días (inicio y fin inclusive)
+                $diasEnMantenimiento = abs($diasEnMantenimiento) + 1;
+            } else {
+                // Si no hay fecha de término, calcular días desde el inicio hasta hoy
+                $diasEnMantenimiento = (int) $fechaInicio->diffInDays(now(), false);
+                $diasEnMantenimiento = max(0, $diasEnMantenimiento);
+            }
 
             return [
                 'bus_id' => $item->bus_id,
@@ -723,5 +793,245 @@ class ReporteController extends Controller
         ])->values();
 
         return response()->json($analisis);
+    }
+
+    /**
+     * Dashboard Operativo - Alertas Categorizadas
+     * Retorna alertas operativas categorizadas por: finanzas, operación, seguridad
+     *
+     * Parámetros opcionales:
+     * - fecha_inicio: filtrar desde fecha
+     * - fecha_fin: filtrar hasta fecha
+     */
+    public function dashboardOperativo(Request $request)
+    {
+        // Procesar filtros de fecha
+        $fechas = $this->procesarFiltrosFecha($request);
+        $fechaInicio = $fechas['fecha_inicio'];
+        $fechaFin = $fechas['fecha_fin'];
+        $hoy = now()->format('Y-m-d');
+
+        $alertas = [];
+
+        // 1. ALERTAS DE FINANZAS: Mantenimientos costosos
+        $mantenimientosCostosos = DB::table('mantenimientos')
+            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+            ->select('mantenimientos.*', 'buses.patente', 'buses.marca', 'buses.modelo')
+            ->where('mantenimientos.costo_total', '>', 500000); // Más de $500k
+
+        if ($fechaInicio) {
+            $mantenimientosCostosos->where('mantenimientos.fecha_inicio', '>=', $fechaInicio);
+        }
+        if ($fechaFin) {
+            $mantenimientosCostosos->where('mantenimientos.fecha_inicio', '<=', $fechaFin);
+        }
+
+        $mantenimientosCostosos = $mantenimientosCostosos->orderByDesc('mantenimientos.costo_total')
+            ->limit(5)
+            ->get();
+
+        foreach ($mantenimientosCostosos as $mant) {
+            $nivel = $mant->costo_total > 1000000 ? 'critico' : 'alto';
+            $alertas[] = [
+                'titulo' => 'Costo Alto',
+                'mensaje' => "Mantenimiento en bus {$mant->patente} ({$mant->marca} {$mant->modelo}): {$mant->descripcion}",
+                'categoria' => 'finanzas',
+                'nivel' => $nivel,
+                'fecha' => \Carbon\Carbon::parse($mant->fecha_inicio)->format('d-m-Y'),
+                'monto' => (int) $mant->costo_total,
+                'monto_formateado' => '$' . number_format($mant->costo_total, 0, ',', '.'),
+                'bus' => $mant->patente,
+                'accion_recomendada' => 'Revisar justificación y buscar alternativas de costo'
+            ];
+        }
+
+        // 2. ALERTAS DE OPERACIÓN: Buses en mantenimiento prolongado
+        $mantProlongados = DB::table('mantenimientos')
+            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+            ->select('mantenimientos.*', 'buses.patente', 'buses.marca')
+            ->where('mantenimientos.estado', 'en_proceso')
+            ->where('mantenimientos.fecha_inicio', '<=', now()->subDays(7)->format('Y-m-d'))
+            ->get();
+
+        foreach ($mantProlongados as $mant) {
+            $diasTranscurridos = (int) \Carbon\Carbon::parse($mant->fecha_inicio)->diffInDays(now());
+            $alertas[] = [
+                'titulo' => 'Mantenimiento Prolongado',
+                'mensaje' => "Bus {$mant->patente} lleva {$diasTranscurridos} días en mantenimiento: {$mant->descripcion}",
+                'categoria' => 'operacion',
+                'nivel' => $diasTranscurridos > 14 ? 'critico' : 'alto',
+                'fecha' => \Carbon\Carbon::parse($mant->fecha_inicio)->format('d-m-Y'),
+                'bus' => $mant->patente,
+                'accion_recomendada' => 'Verificar estado y priorizar finalización'
+            ];
+        }
+
+        // 3. ALERTAS DE SEGURIDAD: SOAP próximos a vencer o vencidos
+        $busesSOAP = DB::table('buses')
+            ->select('id', 'patente', 'marca', 'modelo', 'vencimiento_soap')
+            ->whereNotNull('vencimiento_soap')
+            ->get();
+
+        foreach ($busesSOAP as $bus) {
+            $vencimiento = \Carbon\Carbon::parse($bus->vencimiento_soap);
+            $diasRestantes = (int) now()->diffInDays($vencimiento, false);
+
+            if ($diasRestantes < 0) {
+                $alertas[] = [
+                    'titulo' => 'SOAP VENCIDO',
+                    'mensaje' => "Bus {$bus->patente} ({$bus->marca} {$bus->modelo}) tiene SOAP vencido hace " . abs($diasRestantes) . " días",
+                    'categoria' => 'seguridad',
+                    'nivel' => 'critico',
+                    'fecha' => $vencimiento->format('d-m-Y'),
+                    'bus' => $bus->patente,
+                    'accion_recomendada' => 'Renovar SOAP inmediatamente y no operar el bus'
+                ];
+            } elseif ($diasRestantes <= 30) {
+                $alertas[] = [
+                    'titulo' => 'SOAP por Vencer',
+                    'mensaje' => "Bus {$bus->patente} tiene SOAP que vence en {$diasRestantes} días",
+                    'categoria' => 'seguridad',
+                    'nivel' => $diasRestantes <= 7 ? 'alto' : 'medio',
+                    'fecha' => $vencimiento->format('d-m-Y'),
+                    'bus' => $bus->patente,
+                    'accion_recomendada' => 'Programar renovación de SOAP'
+                ];
+            }
+        }
+
+        // 4. ALERTAS DE SEGURIDAD: Licencias de conducir próximas a vencer
+        $conductores = DB::table('conductores')
+            ->join('empleados', 'conductores.empleado_id', '=', 'empleados.id')
+            ->join('users', 'empleados.user_id', '=', 'users.id')
+            ->select('conductores.id', 'conductores.fecha_vencimiento_licencia', 'users.nombre', 'users.apellido')
+            ->whereNotNull('conductores.fecha_vencimiento_licencia')
+            ->where('empleados.estado', 'activo')
+            ->get();
+
+        foreach ($conductores as $conductor) {
+            $vencimiento = \Carbon\Carbon::parse($conductor->fecha_vencimiento_licencia);
+            $diasRestantes = (int) now()->diffInDays($vencimiento, false);
+            $nombreCompleto = "{$conductor->nombre} {$conductor->apellido}";
+
+            if ($diasRestantes < 0) {
+                $alertas[] = [
+                    'titulo' => 'Licencia VENCIDA',
+                    'mensaje' => "Conductor {$nombreCompleto} tiene licencia vencida hace " . abs($diasRestantes) . " días",
+                    'categoria' => 'seguridad',
+                    'nivel' => 'critico',
+                    'fecha' => $vencimiento->format('d-m-Y'),
+                    'accion_recomendada' => 'Suspender conducción hasta renovación de licencia'
+                ];
+            } elseif ($diasRestantes <= 30) {
+                $alertas[] = [
+                    'titulo' => 'Licencia por Vencer',
+                    'mensaje' => "Conductor {$nombreCompleto} tiene licencia que vence en {$diasRestantes} días",
+                    'categoria' => 'seguridad',
+                    'nivel' => $diasRestantes <= 7 ? 'alto' : 'medio',
+                    'fecha' => $vencimiento->format('d-m-Y'),
+                    'accion_recomendada' => 'Programar renovación de licencia'
+                ];
+            }
+        }
+
+        // 5. ALERTAS DE OPERACIÓN: Rutas sin viajes recientes
+        if ($fechaInicio && $fechaFin) {
+            $rutasSinViajes = DB::table('rutas')
+                ->leftJoin('viajes', function($join) use ($fechaInicio, $fechaFin) {
+                    $join->on('rutas.id', '=', 'viajes.ruta_id')
+                         ->whereBetween('viajes.fecha_viaje', [$fechaInicio, $fechaFin]);
+                })
+                ->select('rutas.id', 'rutas.nombre', 'rutas.origen', 'rutas.destino', DB::raw('COUNT(viajes.id) as total_viajes'))
+                ->where('rutas.estado', 'activa')
+                ->groupBy('rutas.id', 'rutas.nombre', 'rutas.origen', 'rutas.destino')
+                ->having('total_viajes', '=', 0)
+                ->get();
+
+            foreach ($rutasSinViajes as $ruta) {
+                $alertas[] = [
+                    'titulo' => 'Ruta Inactiva',
+                    'mensaje' => "Ruta {$ruta->nombre} ({$ruta->origen} - {$ruta->destino}) no tiene viajes en el periodo seleccionado",
+                    'categoria' => 'operacion',
+                    'nivel' => 'medio',
+                    'fecha' => now()->format('d-m-Y'),
+                    'ruta' => $ruta->nombre,
+                    'accion_recomendada' => 'Evaluar demanda y considerar desactivación temporal'
+                ];
+            }
+        }
+
+        // Ordenar alertas: críticas primero
+        usort($alertas, function($a, $b) {
+            $prioridad = ['critico' => 0, 'alto' => 1, 'medio' => 2, 'bajo' => 3];
+            return ($prioridad[$a['nivel']] ?? 4) - ($prioridad[$b['nivel']] ?? 4);
+        });
+
+        return response()->json([
+            'success' => true,
+            'alertas' => $alertas,
+            'total' => count($alertas),
+        ]);
+    }
+
+    /**
+     * Puntualidad y SLA
+     * Retorna métricas de cumplimiento de horarios y nivel de servicio
+     *
+     * Parámetros opcionales:
+     * - fecha_inicio: filtrar desde fecha
+     * - fecha_fin: filtrar hasta fecha
+     */
+    public function puntualidadSLA(Request $request)
+    {
+        // Procesar filtros de fecha
+        $fechas = $this->procesarFiltrosFecha($request);
+        $fechaInicio = $fechas['fecha_inicio'] ?? now()->subDays(30)->format('Y-m-d');
+        $fechaFin = $fechas['fecha_fin'] ?? now()->format('Y-m-d');
+
+        // Viajes en el periodo
+        $viajes = DB::table('viajes')
+            ->whereBetween('fecha_viaje', [$fechaInicio, $fechaFin])
+            ->select('id', 'estado', 'hora_salida_programada', 'hora_salida_real', 'hora_llegada_programada', 'hora_llegada_real')
+            ->get();
+
+        $totalViajes = $viajes->count();
+        $viajesCompletados = $viajes->where('estado', 'completado')->count();
+        $viajesCancelados = $viajes->where('estado', 'cancelado')->count();
+
+        // Calcular puntualidad (viajes que salieron a tiempo)
+        $viajesPuntuales = 0;
+        foreach ($viajes->where('estado', 'completado') as $viaje) {
+            if ($viaje->hora_salida_real && $viaje->hora_salida_programada) {
+                $programada = \Carbon\Carbon::parse($viaje->hora_salida_programada);
+                $real = \Carbon\Carbon::parse($viaje->hora_salida_real);
+                $diferencia = $real->diffInMinutes($programada, false);
+
+                // Considerar "puntual" si sale dentro de los 10 minutos de retraso
+                if ($diferencia >= -10) {
+                    $viajesPuntuales++;
+                }
+            }
+        }
+
+        $porcentajePuntualidad = $viajesCompletados > 0 ? round(($viajesPuntuales / $viajesCompletados) * 100, 1) : 0;
+        $porcentajeCompletados = $totalViajes > 0 ? round(($viajesCompletados / $totalViajes) * 100, 1) : 0;
+        $porcentajeCancelados = $totalViajes > 0 ? round(($viajesCancelados / $totalViajes) * 100, 1) : 0;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total_viajes' => $totalViajes,
+                'viajes_completados' => $viajesCompletados,
+                'viajes_cancelados' => $viajesCancelados,
+                'viajes_puntuales' => $viajesPuntuales,
+                'porcentaje_puntualidad' => $porcentajePuntualidad,
+                'porcentaje_completados' => $porcentajeCompletados,
+                'porcentaje_cancelados' => $porcentajeCancelados,
+                'periodo' => [
+                    'inicio' => $fechaInicio,
+                    'fin' => $fechaFin,
+                ],
+            ],
+        ]);
     }
 }

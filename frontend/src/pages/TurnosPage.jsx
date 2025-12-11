@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, X, Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
-  Edit2, Trash2, Clock, MapPin, Users, Bus, AlertCircle, UserCheck 
+  Edit2, Trash2, Clock, Users, Bus, AlertCircle, UserCheck, Search, User, Layers 
 } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
@@ -43,18 +43,44 @@ export default function TurnosPage() {
   const [formConductores, setFormConductores] = useState([{ conductor_id: '', rol: 'principal' }]);
   const [formAsistentes, setFormAsistentes] = useState([]);
 
+  // --- ESTADOS PARA BÚSQUEDA ---
+  const [busSearch, setBusSearch] = useState('');
+  const [showBusOptions, setShowBusOptions] = useState(false);
+
+  // Arrays para manejar el texto de búsqueda de cada fila dinámica
+  const [condSearchTerms, setCondSearchTerms] = useState(['']); 
+  const [showCondOptions, setShowCondOptions] = useState([false]);
+
+  const [asistSearchTerms, setAsistSearchTerms] = useState([]);
+  const [showAsistOptions, setShowAsistOptions] = useState([]);
+
+  // Ref para detectar clics fuera y cerrar sugerencias
+  const wrapperRef = useRef(null);
+
   // --- EFECTOS ---
   useEffect(() => { loadInitialData(); }, []);
   useEffect(() => { loadTurnos(); }, [currentDate]);
   useEffect(() => { if (success) setTimeout(() => setSuccess(null), 3000); }, [success]);
   useEffect(() => { if (error) setTimeout(() => setError(null), 5000); }, [error]);
 
+  // Cerrar sugerencias al hacer clic fuera
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setShowBusOptions(false);
+        setShowCondOptions(prev => prev.map(() => false));
+        setShowAsistOptions(prev => prev.map(() => false));
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // --- CARGA DE DATOS ---
   const loadInitialData = async () => {
     try {
       setLoading(true);
       
-      // Cargar datos básicos
       const [busesData, conductoresData, asistentesData] = await Promise.all([
         fetchBuses(), 
         fetchConductores(), 
@@ -65,14 +91,12 @@ export default function TurnosPage() {
       setConductores(Array.isArray(conductoresData) ? conductoresData : []);
       setAsistentes(Array.isArray(asistentesData) ? asistentesData : []);
       
-      // Solo cargar licencias si el usuario tiene permisos (Admin, Manager, RRHH)
       const user = JSON.parse(localStorage.getItem('user'));
       if (user && [1, 2, 6].includes(user.rol_id)) {
         try {
           const licenciasData = await fetchLicencias();
           setLicencias(Array.isArray(licenciasData) ? licenciasData.filter(l => l.estado === 'aprobado') : []);
         } catch (err) {
-          console.warn('No se pudieron cargar licencias:', err);
           setLicencias([]);
         }
       } else {
@@ -118,117 +142,53 @@ export default function TurnosPage() {
     });
   };
 
+  // --- LOGICA DE DISPONIBILIDAD ---
   const getConductoresDisponibles = () => {
-    // Obtener conductores ya asignados en este turno (si estamos editando)
-    const conductoresAsignadosEnEsteTurno = editingTurno 
-      ? editingTurno.conductores?.map(c => c.id) || []
-      : [];
-    
-    // Obtener IDs de conductores ya seleccionados en el formulario actual
-    const conductoresSeleccionados = formConductores
-      .map(c => parseInt(c.conductor_id))
-      .filter(id => !isNaN(id));
+    const conductoresAsignadosEnEsteTurno = editingTurno ? editingTurno.conductores?.map(c => c.id) || [] : [];
+    const conductoresSeleccionados = formConductores.map(c => parseInt(c.conductor_id)).filter(id => !isNaN(id));
 
-    return conductores
-      .filter(c => c.estado === 'activo')
-      .map(conductor => {
-        // Verificar si tiene licencia
-        const licencia = empleadoTieneLicenciaEnFecha(conductor.empleado_id, formData.fecha_turno);
-        
-        // Verificar si ya tiene turno ese día (excepto el turno actual si estamos editando)
-        let yaTieneTurnoEseDia = false;
-        if (formData.fecha_turno) {
-          const fechaTurno = formData.fecha_turno;
-          
-          yaTieneTurnoEseDia = turnos.some(turno => {
-            // Si estamos editando, excluir el turno actual
-            if (editingTurno && turno.id === editingTurno.id) {
-              return false;
-            }
-            
-            // Verificar si es la misma fecha
-            const turnoFecha = turno.fecha_turno.split('T')[0];
-            if (turnoFecha !== fechaTurno) {
-              return false;
-            }
-            
-            // Verificar si este conductor está asignado a ese turno
-            return turno.conductores?.some(c => c.id === conductor.id);
-          });
-        }
-        
-        // Verificar si ya fue seleccionado en otro campo del formulario
-        const yaSeleccionadoEnOtroCampo = conductoresSeleccionados.includes(conductor.id) && 
-                                          !conductoresAsignadosEnEsteTurno.includes(conductor.id);
-        
-        return {
-          ...conductor,
-          tieneLicencia: !!licencia,
-          licenciaInfo: licencia,
-          yaTieneTurno: yaTieneTurnoEseDia,
-          yaSeleccionado: yaSeleccionadoEnOtroCampo
-        };
-      })
-      // FILTRAR
-      .filter(conductor => {
-        if (editingTurno && conductoresAsignadosEnEsteTurno.includes(conductor.id)) {
-          return true;
-        }
-        return !conductor.tieneLicencia && !conductor.yaTieneTurno;
-      });
+    return conductores.filter(c => c.estado === 'activo').map(conductor => {
+      const licencia = empleadoTieneLicenciaEnFecha(conductor.empleado_id, formData.fecha_turno);
+      let yaTieneTurnoEseDia = false;
+      if (formData.fecha_turno) {
+        const fechaTurno = formData.fecha_turno;
+        yaTieneTurnoEseDia = turnos.some(turno => {
+          if (editingTurno && turno.id === editingTurno.id) return false;
+          const turnoFecha = turno.fecha_turno.split('T')[0];
+          if (turnoFecha !== fechaTurno) return false;
+          return turno.conductores?.some(c => c.id === conductor.id);
+        });
+      }
+      const yaSeleccionadoEnOtroCampo = conductoresSeleccionados.includes(conductor.id) && !conductoresAsignadosEnEsteTurno.includes(conductor.id);
+      return { ...conductor, tieneLicencia: !!licencia, licenciaInfo: licencia, yaTieneTurno: yaTieneTurnoEseDia, yaSeleccionado: yaSeleccionadoEnOtroCampo };
+    }).filter(conductor => {
+      if (editingTurno && conductoresAsignadosEnEsteTurno.includes(conductor.id)) return true;
+      return !conductor.tieneLicencia && !conductor.yaTieneTurno;
+    });
   };
 
   const getAsistentesDisponibles = () => {
-    // Obtener asistentes ya asignados en este turno (si estamos editando)
-    const asistentesAsignadosEnEsteTurno = editingTurno 
-      ? editingTurno.asistentes?.map(a => a.id) || []
-      : [];
-    
-    // Obtener IDs de asistentes ya seleccionados en el formulario actual
-    const asistentesSeleccionados = formAsistentes
-      .map(a => parseInt(a.asistente_id))
-      .filter(id => !isNaN(id));
+    const asistentesAsignadosEnEsteTurno = editingTurno ? editingTurno.asistentes?.map(a => a.id) || [] : [];
+    const asistentesSeleccionados = formAsistentes.map(a => parseInt(a.asistente_id)).filter(id => !isNaN(id));
 
-    return asistentes
-      .filter(a => a.estado === 'activo')
-      .map(asistente => {
-        // Verificar si tiene licencia
-        const licencia = empleadoTieneLicenciaEnFecha(asistente.empleado_id, formData.fecha_turno);
-        
-        // Verificar si ya tiene turno ese día
-        let yaTieneTurnoEseDia = false;
-        if (formData.fecha_turno) {
-          const fechaTurno = formData.fecha_turno;
-          
-          yaTieneTurnoEseDia = turnos.some(turno => {
-            if (editingTurno && turno.id === editingTurno.id) {
-              return false;
-            }
-            const turnoFecha = turno.fecha_turno.split('T')[0];
-            if (turnoFecha !== fechaTurno) {
-              return false;
-            }
-            return turno.asistentes?.some(a => a.id === asistente.id);
-          });
-        }
-        
-        const yaSeleccionadoEnOtroCampo = asistentesSeleccionados.includes(asistente.id) && 
-                                          !asistentesAsignadosEnEsteTurno.includes(asistente.id);
-        
-        return {
-          ...asistente,
-          tieneLicencia: !!licencia,
-          licenciaInfo: licencia,
-          yaTieneTurno: yaTieneTurnoEseDia,
-          yaSeleccionado: yaSeleccionadoEnOtroCampo
-        };
-      })
-      .filter(asistente => {
-        if (editingTurno && asistentesAsignadosEnEsteTurno.includes(asistente.id)) {
-          return true;
-        }
-        return !asistente.tieneLicencia && !asistente.yaTieneTurno;
-      });
+    return asistentes.filter(a => a.estado === 'activo').map(asistente => {
+      const licencia = empleadoTieneLicenciaEnFecha(asistente.empleado_id, formData.fecha_turno);
+      let yaTieneTurnoEseDia = false;
+      if (formData.fecha_turno) {
+        const fechaTurno = formData.fecha_turno;
+        yaTieneTurnoEseDia = turnos.some(turno => {
+          if (editingTurno && turno.id === editingTurno.id) return false;
+          const turnoFecha = turno.fecha_turno.split('T')[0];
+          if (turnoFecha !== fechaTurno) return false;
+          return turno.asistentes?.some(a => a.id === asistente.id);
+        });
+      }
+      const yaSeleccionadoEnOtroCampo = asistentesSeleccionados.includes(asistente.id) && !asistentesAsignadosEnEsteTurno.includes(asistente.id);
+      return { ...asistente, tieneLicencia: !!licencia, licenciaInfo: licencia, yaTieneTurno: yaTieneTurnoEseDia, yaSeleccionado: yaSeleccionadoEnOtroCampo };
+    }).filter(asistente => {
+      if (editingTurno && asistentesAsignadosEnEsteTurno.includes(asistente.id)) return true;
+      return !asistente.tieneLicencia && !asistente.yaTieneTurno;
+    });
   };
 
   // --- LOGICA CALENDARIO ---
@@ -262,12 +222,33 @@ export default function TurnosPage() {
         estado: turno.estado,
         observaciones: turno.observaciones || '',
       });
-      setFormConductores(turno.conductores?.map(c => ({
+
+      // Precargar Buscador de Bus
+      const bus = buses.find(b => b.id === (turno.bus?.id || turno.bus_id));
+      setBusSearch(bus ? `${bus.patente} - ${bus.modelo}` : '');
+
+      // Precargar Conductores
+      const mappedConductores = turno.conductores?.map(c => ({
         conductor_id: c.id, rol: c.pivot?.rol || 'principal'
-      })) || [{ conductor_id: '', rol: 'principal' }]);
-      setFormAsistentes(turno.asistentes?.map(a => ({
+      })) || [{ conductor_id: '', rol: 'principal' }];
+      setFormConductores(mappedConductores);
+      
+      setCondSearchTerms(turno.conductores?.map(c => 
+        c.empleado?.user ? `${c.empleado.user.nombre} ${c.empleado.user.apellido}` : ''
+      ) || ['']);
+      setShowCondOptions(new Array(mappedConductores.length).fill(false));
+
+      // Precargar Asistentes
+      const mappedAsistentes = turno.asistentes?.map(a => ({
         asistente_id: a.id, posicion: a.pivot?.posicion || 'general'
-      })) || []);
+      })) || [];
+      setFormAsistentes(mappedAsistentes);
+
+      setAsistSearchTerms(turno.asistentes?.map(a => 
+        a.empleado?.user ? `${a.empleado.user.nombre} ${a.empleado.user.apellido}` : ''
+      ) || []);
+      setShowAsistOptions(new Array(mappedAsistentes.length).fill(false));
+
     } else {
       setEditingTurno(null);
       const fechaInicial = date ? date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
@@ -275,8 +256,13 @@ export default function TurnosPage() {
         bus_id: '', fecha_turno: fechaInicial, hora_inicio: '06:00', hora_termino: '14:00',
         tipo_turno: 'mañana', estado: 'programado', observaciones: '',
       });
+      setBusSearch('');
       setFormConductores([{ conductor_id: '', rol: 'principal' }]);
+      setCondSearchTerms(['']);
+      setShowCondOptions([false]);
       setFormAsistentes([]);
+      setAsistSearchTerms([]);
+      setShowAsistOptions([]);
     }
     setOpenDialog(true);
   };
@@ -291,13 +277,13 @@ export default function TurnosPage() {
         return; 
       }
 
-      // Validar licencias del lado del cliente
+      // Validar licencias
       for (const c of conductoresValidos) {
         const conductor = conductores.find(x => x.id === parseInt(c.conductor_id));
         if (conductor) {
           const licencia = empleadoTieneLicenciaEnFecha(conductor.empleado_id, formData.fecha_turno);
           if (licencia) {
-            setError(`El conductor ${conductor.empleado?.user?.nombre} ${conductor.empleado?.user?.apellido} tiene licencia médica`);
+            setError(`El conductor ${conductor.empleado?.user?.nombre} tiene licencia médica`);
             return;
           }
         }
@@ -308,7 +294,7 @@ export default function TurnosPage() {
         if (asistente) {
           const licencia = empleadoTieneLicenciaEnFecha(asistente.empleado_id, formData.fecha_turno);
           if (licencia) {
-            setError(`El asistente ${asistente.empleado?.user?.nombre} ${asistente.empleado?.user?.apellido} tiene licencia médica`);
+            setError(`El asistente ${asistente.empleado?.user?.nombre} tiene licencia médica`);
             return;
           }
         }
@@ -346,7 +332,17 @@ export default function TurnosPage() {
     }
   };
 
-  // --- RENDER HELPERS ---
+  // --- LOGICA DE FILTROS EN FORMULARIO ---
+  const getFilteredBuses = () => {
+    if (!busSearch) return buses.filter(b => b.estado === 'operativo');
+    const term = busSearch.toLowerCase();
+    return buses.filter(b => 
+      b.estado === 'operativo' && 
+      (b.patente.toLowerCase().includes(term) || b.modelo.toLowerCase().includes(term))
+    );
+  };
+
+  // --- HELPERS RENDER ---
   const getEstadoColor = (estado) => ({
     'programado': 'bg-blue-50 text-blue-700 border-blue-200',
     'en_curso': 'bg-amber-50 text-amber-700 border-amber-200',
@@ -361,13 +357,34 @@ export default function TurnosPage() {
   const conductoresDisponibles = getConductoresDisponibles();
   const asistentesDisponibles = getAsistentesDisponibles();
 
-  // Gestión dinámica de conductores/asistentes
-  const handleConductorChange = (idx, field, val) => {
-    const newC = [...formConductores]; newC[idx][field] = val; setFormConductores(newC);
+  // Gestión dinámica Conductores
+  const updateConductorSearch = (idx, value) => {
+    const newTerms = [...condSearchTerms]; newTerms[idx] = value; setCondSearchTerms(newTerms);
+    const newOpts = [...showCondOptions]; newOpts[idx] = true; setShowCondOptions(newOpts);
+    if (!value) {
+      const newC = [...formConductores]; newC[idx].conductor_id = ''; setFormConductores(newC);
+    }
   };
-  
-  const handleAsistenteChange = (idx, field, val) => {
-    const newA = [...formAsistentes]; newA[idx][field] = val; setFormAsistentes(newA);
+
+  const selectConductor = (idx, conductor) => {
+    const newC = [...formConductores]; newC[idx].conductor_id = conductor.id; setFormConductores(newC);
+    const newTerms = [...condSearchTerms]; newTerms[idx] = `${conductor.empleado.user.nombre} ${conductor.empleado.user.apellido}`; setCondSearchTerms(newTerms);
+    const newOpts = [...showCondOptions]; newOpts[idx] = false; setShowCondOptions(newOpts);
+  };
+
+  // Gestión dinámica Asistentes
+  const updateAsistenteSearch = (idx, value) => {
+    const newTerms = [...asistSearchTerms]; newTerms[idx] = value; setAsistSearchTerms(newTerms);
+    const newOpts = [...showAsistOptions]; newOpts[idx] = true; setShowAsistOptions(newOpts);
+    if (!value) {
+      const newA = [...formAsistentes]; newA[idx].asistente_id = ''; setFormAsistentes(newA);
+    }
+  };
+
+  const selectAsistente = (idx, asistente) => {
+    const newA = [...formAsistentes]; newA[idx].asistente_id = asistente.id; setFormAsistentes(newA);
+    const newTerms = [...asistSearchTerms]; newTerms[idx] = `${asistente.empleado.user.nombre} ${asistente.empleado.user.apellido}`; setAsistSearchTerms(newTerms);
+    const newOpts = [...showAsistOptions]; newOpts[idx] = false; setShowAsistOptions(newOpts);
   };
 
   return (
@@ -452,7 +469,7 @@ export default function TurnosPage() {
           </div>
         </div>
 
-        {/* 2. AGENDA DEL DÍA (MODIFICADO) */}
+        {/* 2. AGENDA DEL DÍA */}
         <div className="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col h-[600px]">
           <div className="p-5 border-b border-gray-100 bg-gray-50/50">
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -485,7 +502,22 @@ export default function TurnosPage() {
                       </div>
                       <div>
                         <p className="font-bold text-slate-800 text-sm">{turno.bus?.patente || 'S/P'}</p>
-                        <p className="text-xs text-slate-500">{turno.bus?.modelo}</p>
+                        
+                        {/* --- AQUÍ ESTÁ EL NUEVO INDICADOR VISUAL DE TIPO DE BUS --- */}
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-slate-500">{turno.bus?.modelo}</p>
+                          {turno.bus?.tipo_bus && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+                              turno.bus.tipo_bus === 'doble_piso' 
+                                ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                                : 'bg-slate-100 text-slate-600 border-slate-200'
+                            }`}>
+                              {turno.bus.tipo_bus === 'doble_piso' ? 'Doble Piso' : 'Normal'}
+                            </span>
+                          )}
+                        </div>
+                        {/* --------------------------------------------------------- */}
+
                       </div>
                     </div>
                     <span className="px-2 py-1 rounded-md bg-white/60 text-xs font-bold uppercase border border-black/5">
@@ -495,14 +527,11 @@ export default function TurnosPage() {
 
                   {/* Body Card */}
                   <div className="space-y-3 text-sm text-slate-600 mb-3">
-                    
-                    {/* Hora */}
                     <div className="flex items-center gap-2 bg-white/50 p-1.5 rounded">
                       <Clock size={14} className="text-slate-500"/>
                       <span className="font-medium text-xs">{turno.hora_inicio} - {turno.hora_termino}</span>
                     </div>
 
-                    {/* Conductores */}
                     <div className="flex items-start gap-2">
                       <div className="min-w-[16px]"><Users size={14} className="text-blue-500 mt-0.5"/></div>
                       <div className="flex flex-col">
@@ -512,11 +541,10 @@ export default function TurnosPage() {
                             {c.empleado?.user?.nombre} {c.empleado?.user?.apellido}
                           </span>
                         ))}
-                        {(turno.conductores?.length > 2) && <span className="text-[10px] italic text-slate-400">+ {turno.conductores.length - 2} más</span>}
                       </div>
                     </div>
 
-                    {/* Asistentes (NUEVA SECCIÓN) */}
+                    {/* Asistentes */}
                     {turno.asistentes && turno.asistentes.length > 0 && (
                       <div className="flex items-start gap-2 pt-2 border-t border-black/5">
                         <div className="min-w-[16px]"><UserCheck size={14} className="text-emerald-500 mt-0.5"/></div>
@@ -561,7 +589,7 @@ export default function TurnosPage() {
         onCancel={handleCloseDialog}
         size="large"
       >
-        <div className="space-y-6">
+        <div className="space-y-6" ref={wrapperRef}>
           {/* Info Básica */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Fecha *" type="date" value={formData.fecha_turno} onChange={(e) => setFormData({...formData, fecha_turno: e.target.value})} required />
@@ -570,100 +598,209 @@ export default function TurnosPage() {
             <Input label="Término *" type="time" value={formData.hora_termino} onChange={(e) => setFormData({...formData, hora_termino: e.target.value})} required />
           </div>
 
-          {/* Bus */}
-          <div>
+          {/* BUSCADOR DE BUS (AUTOCOMPLETADO) */}
+          <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-2">Bus *</label>
-            <select
-              value={formData.bus_id}
-              onChange={(e) => setFormData({...formData, bus_id: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              required
-            >
-              <option value="">Seleccione un bus...</option>
-              {buses.filter(b => b.estado === 'operativo').map(bus => (
-                <option key={bus.id} value={bus.id}>{bus.patente} - {bus.modelo} ({bus.tipo_bus})</option>
-              ))}
-            </select>
+            <div className="relative">
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pl-9"
+                placeholder="Buscar por patente o modelo..."
+                value={busSearch}
+                onChange={(e) => { setBusSearch(e.target.value); setShowBusOptions(true); }}
+                onFocus={() => setShowBusOptions(true)}
+              />
+              <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+              {busSearch && (
+                <button type="button" onClick={() => { setBusSearch(''); setFormData({...formData, bus_id: ''}); }} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            
+            {showBusOptions && (
+              <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto mt-1">
+                {getFilteredBuses().length > 0 ? (
+                  getFilteredBuses().map(bus => (
+                    <li 
+                      key={bus.id}
+                      onClick={() => {
+                        setFormData({...formData, bus_id: bus.id});
+                        setBusSearch(`${bus.patente} - ${bus.modelo}`);
+                        setShowBusOptions(false);
+                      }}
+                      className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 flex items-center gap-3"
+                    >
+                      <div className="bg-blue-100 p-1.5 rounded-full text-blue-600"><Bus size={16} /></div>
+                      <div>
+                        <div className="font-medium text-gray-800">{bus.patente}</div>
+                        {/* --- MUESTRA EL TIPO TAMBIÉN EN EL BUSCADOR --- */}
+                        <div className="text-xs text-gray-500">
+                          {bus.modelo} <span className="text-slate-400">• {bus.tipo_bus?.replace('_', ' ')}</span>
+                        </div>
+                      </div>
+                    </li>
+                  ))
+                ) : (
+                  <li className="px-4 py-3 text-sm text-gray-400 text-center">No se encontraron buses operativos</li>
+                )}
+              </ul>
+            )}
           </div>
 
           {/* Personal */}
           <div className="border-t pt-4">
             <h4 className="text-sm font-bold text-slate-700 mb-3">Tripulación</h4>
               
-            {/* Conductores */}
-            <div className="space-y-2 mb-4">
+            {/* CONDUCTORES (Buscador por fila) */}
+            <div className="space-y-3 mb-4">
               <label className="text-xs font-semibold text-slate-500 uppercase">Conductores</label>
               {formConductores.map((c, i) => {
-                const conductor = conductoresDisponibles.find(x => x.id === parseInt(c.conductor_id));
-                const tieneLicencia = conductor?.tieneLicencia;
+                const conductor = conductores.find(x => x.id === parseInt(c.conductor_id));
+                const tieneLicencia = conductor && empleadoTieneLicenciaEnFecha(conductor.empleado_id, formData.fecha_turno);
+                
                 return (
-                  <div key={i} className="space-y-2">
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <select
-                          value={c.conductor_id}
-                          onChange={(e) => handleConductorChange(i, 'conductor_id', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        >
-                          <option value="">Seleccione...</option>
-                          {conductoresDisponibles.map(con => (
-                            <option key={con.id} value={con.id}>{con.empleado?.user?.nombre} {con.empleado?.user?.apellido}</option>
-                          ))}
-                        </select>
+                  <div key={i} className="space-y-1">
+                    <div className="flex gap-2 relative">
+                      {/* Input Buscador Conductor */}
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pl-9 text-sm"
+                          placeholder="Buscar conductor..."
+                          value={condSearchTerms[i]}
+                          onChange={(e) => updateConductorSearch(i, e.target.value)}
+                          onFocus={() => {
+                            const newOpts = [...showCondOptions]; newOpts[i] = true; setShowCondOptions(newOpts);
+                          }}
+                        />
+                        <User className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                        
+                        {/* Sugerencias Conductor */}
+                        {showCondOptions[i] && (
+                          <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1 left-0">
+                            {conductoresDisponibles
+                              .filter(con => {
+                                const term = condSearchTerms[i].toLowerCase();
+                                const nombre = `${con.empleado?.user?.nombre} ${con.empleado?.user?.apellido}`.toLowerCase();
+                                return nombre.includes(term) || (con.empleado?.user?.rut && con.empleado.user.rut.includes(term));
+                              })
+                              .map(con => (
+                                <li 
+                                  key={con.id} 
+                                  onClick={() => selectConductor(i, con)}
+                                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50"
+                                >
+                                  {con.empleado?.user?.nombre} {con.empleado?.user?.apellido}
+                                </li>
+                              ))}
+                          </ul>
+                        )}
                       </div>
+
                       <div className="w-32">
-                        <Select options={ROLES_CONDUCTOR.map(r=>({id:r, label:r}))} value={c.rol} onChange={(e)=>handleConductorChange(i,'rol',e.target.value)} />
+                        <Select options={ROLES_CONDUCTOR.map(r=>({id:r, label:r}))} value={c.rol} onChange={(e)=>{
+                           const newC = [...formConductores]; newC[i].rol = e.target.value; setFormConductores(newC);
+                        }} />
                       </div>
-                      {formConductores.length > 1 && <button type="button" onClick={() => {const n=[...formConductores]; n.splice(i,1); setFormConductores(n)}} className="text-red-500 p-2"><X size={16}/></button>}
+                      
+                      {formConductores.length > 1 && (
+                        <button type="button" onClick={() => {
+                          const newC = [...formConductores]; newC.splice(i,1); setFormConductores(newC);
+                          const newT = [...condSearchTerms]; newT.splice(i,1); setCondSearchTerms(newT);
+                          const newO = [...showCondOptions]; newO.splice(i,1); setShowCondOptions(newO);
+                        }} className="text-red-500 p-2 hover:bg-red-50 rounded">
+                          <X size={16}/>
+                        </button>
+                      )}
                     </div>
-                    {tieneLicencia && conductor.licenciaInfo && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
-                        <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                        <div className="text-xs text-amber-800"><p className="font-semibold">Empleado con licencia médica</p></div>
+                    
+                    {tieneLicencia && (
+                      <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                        <AlertCircle size={14}/> Conductor con licencia médica en esta fecha
                       </div>
                     )}
                   </div>
                 );
               })}
-              <Button variant="outline" size="sm" onClick={() => setFormConductores([...formConductores, {conductor_id:'', rol:'apoyo'}])} className="w-full border-dashed text-slate-500 hover:text-blue-600 hover:border-blue-300 text-xs py-1">+ Añadir Conductor</Button>
+              <Button variant="outline" size="sm" onClick={() => {
+                setFormConductores([...formConductores, {conductor_id:'', rol:'apoyo'}]);
+                setCondSearchTerms([...condSearchTerms, '']);
+                setShowCondOptions([...showCondOptions, false]);
+              }} className="w-full border-dashed text-slate-500 text-xs py-1">+ Añadir Conductor</Button>
             </div>
 
-            {/* Asistentes */}
-            <div className="space-y-2">
+            {/* ASISTENTES (Buscador por fila) */}
+            <div className="space-y-3">
               <label className="text-xs font-semibold text-slate-500 uppercase">Asistentes</label>
               {formAsistentes.map((a, i) => {
-                const asistente = asistentesDisponibles.find(x => x.id === parseInt(a.asistente_id));
-                const tieneLicencia = asistente?.tieneLicencia;
+                const asistente = asistentes.find(x => x.id === parseInt(a.asistente_id));
+                const tieneLicencia = asistente && empleadoTieneLicenciaEnFecha(asistente.empleado_id, formData.fecha_turno);
+
                 return (
-                  <div key={i} className="space-y-2">
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <select
-                          value={a.asistente_id}
-                          onChange={(e) => handleAsistenteChange(i, 'asistente_id', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        >
-                          <option value="">Seleccione...</option>
-                          {asistentesDisponibles.map(asist => (
-                            <option key={asist.id} value={asist.id}>{asist.empleado?.user?.nombre} {asist.empleado?.user?.apellido}</option>
-                          ))}
-                        </select>
+                  <div key={i} className="space-y-1">
+                    <div className="flex gap-2 relative">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pl-9 text-sm"
+                          placeholder="Buscar asistente..."
+                          value={asistSearchTerms[i]}
+                          onChange={(e) => updateAsistenteSearch(i, e.target.value)}
+                          onFocus={() => {
+                            const newOpts = [...showAsistOptions]; newOpts[i] = true; setShowAsistOptions(newOpts);
+                          }}
+                        />
+                        <UserCheck className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                        
+                        {showAsistOptions[i] && (
+                          <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1 left-0">
+                            {asistentesDisponibles
+                              .filter(asist => {
+                                const term = asistSearchTerms[i].toLowerCase();
+                                const nombre = `${asist.empleado?.user?.nombre} ${asist.empleado?.user?.apellido}`.toLowerCase();
+                                return nombre.includes(term);
+                              })
+                              .map(asist => (
+                                <li 
+                                  key={asist.id} 
+                                  onClick={() => selectAsistente(i, asist)}
+                                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50"
+                                >
+                                  {asist.empleado?.user?.nombre} {asist.empleado?.user?.apellido}
+                                </li>
+                              ))}
+                          </ul>
+                        )}
                       </div>
+
                       <div className="w-32">
-                        <Select options={POSICIONES_ASISTENTE.map(p=>({id:p, label:p.replace('_',' ')}))} value={a.posicion} onChange={(e)=>handleAsistenteChange(i,'posicion',e.target.value)} />
+                        <Select options={POSICIONES_ASISTENTE.map(p=>({id:p, label:p.replace('_',' ')}))} value={a.posicion} onChange={(e)=>{
+                          const newA = [...formAsistentes]; newA[i].posicion = e.target.value; setFormAsistentes(newA);
+                        }} />
                       </div>
-                      <button type="button" onClick={() => {const n=[...formAsistentes]; n.splice(i,1); setFormAsistentes(n)}} className="text-red-500 p-2"><X size={16}/></button>
+
+                      <button type="button" onClick={() => {
+                        const newA = [...formAsistentes]; newA.splice(i,1); setFormAsistentes(newA);
+                        const newT = [...asistSearchTerms]; newT.splice(i,1); setAsistSearchTerms(newT);
+                        const newO = [...showAsistOptions]; newO.splice(i,1); setShowAsistOptions(newO);
+                      }} className="text-red-500 p-2 hover:bg-red-50 rounded">
+                        <X size={16}/>
+                      </button>
                     </div>
-                    {tieneLicencia && asistente.licenciaInfo && (
-                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
-                       <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                       <div className="text-xs text-amber-800"><p className="font-semibold">Empleado con licencia médica</p></div>
-                     </div>
+                    {tieneLicencia && (
+                      <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                        <AlertCircle size={14}/> Asistente con licencia médica
+                      </div>
                     )}
                   </div>
                 );
               })}
-              <Button variant="outline" size="sm" onClick={() => setFormAsistentes([...formAsistentes, {asistente_id:'', posicion:'general'}])} className="w-full border-dashed text-slate-500 hover:text-blue-600 hover:border-blue-300 text-xs py-1">+ Añadir Asistente</Button>
+              <Button variant="outline" size="sm" onClick={() => {
+                setFormAsistentes([...formAsistentes, {asistente_id:'', posicion:'general'}]);
+                setAsistSearchTerms([...asistSearchTerms, '']);
+                setShowAsistOptions([...showAsistOptions, false]);
+              }} className="w-full border-dashed text-slate-500 text-xs py-1">+ Añadir Asistente</Button>
             </div>
           </div>
 

@@ -1427,9 +1427,37 @@ export const fetchCostosMantenimientoPorBus = async (params = {}) => {
 
 /**
  * Obtener buses disponibles para emergencia
+ * @param {Object} params - Parámetros opcionales (mes, anio)
  */
-export const fetchBusesDisponiblesEmergencia = async () => {
-  const url = `${API_URL}/reportes/buses-disponibles-emergencia`;
+export const fetchBusesDisponiblesEmergencia = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/reportes/buses-disponibles-emergencia${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Dashboard operativo - Alertas categorizadas
+ * @param {Object} params - Parámetros opcionales (mes, anio, fecha_inicio, fecha_fin)
+ */
+export const fetchDashboardOperativo = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/reportes/dashboard-operativo${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Puntualidad y SLA
+ * @param {Object} params - Parámetros opcionales (mes, anio, fecha_inicio, fecha_fin)
+ */
+export const fetchPuntualidadSLA = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/reportes/puntualidad-sla${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
   const response = await fetch(url, fetchOptions());
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
@@ -1438,10 +1466,95 @@ export const fetchBusesDisponiblesEmergencia = async () => {
 
 /**
  * Activar bus en emergencia (cambiar estado de mantenimiento a operativo)
+ * Suspende mantenimientos en proceso y activa el bus
  */
 export const activarBusEmergencia = async (busId) => {
-  const url = `${API_URL}/buses/${busId}`;
-  const response = await fetch(url, fetchOptions('PUT', { estado: 'operativo' }));
+  const url = `${API_URL}/buses/${busId}/activar-emergencia`;
+  const response = await fetch(url, fetchOptions('POST', {}));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  const result = await response.json();
+  return result;
+};
+
+// ============================================
+// ALERTAS INTELIGENTES Y PREDICCIONES
+// ============================================
+
+/**
+ * Obtener todas las alertas del sistema
+ */
+export const fetchAlertas = async () => {
+  const url = `${API_URL}/alertas`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener predicciones del sistema
+ */
+export const fetchPredicciones = async () => {
+  const url = `${API_URL}/alertas/predicciones`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+// ============================================
+// RECURSOS HUMANOS - ANÁLISIS Y GESTIÓN
+// ============================================
+
+/**
+ * Obtener alertas de contratos próximos a vencer
+ * @param {Object} params - Parámetros opcionales (mes, anio)
+ */
+export const fetchAlertasContratos = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/rrhh/alertas-contratos${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener ranking de empleados por cantidad de licencias
+ */
+export const fetchRankingLicencias = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/rrhh/ranking-licencias${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener resumen de contratos por tipo
+ * @param {Object} params - Parámetros opcionales (mes, anio)
+ */
+export const fetchResumenContratos = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/rrhh/resumen-contratos${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener empleados con alto riesgo de no renovación
+ * @param {Object} params - Parámetros opcionales (mes, anio)
+ */
+export const fetchEmpleadosAltoRiesgo = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/rrhh/empleados-alto-riesgo${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
   return result;

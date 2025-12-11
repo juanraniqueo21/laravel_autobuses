@@ -16,28 +16,31 @@ export default function AnalisisMantenimientosPage() {
   const [costosMantenimiento, setCostosMantenimiento] = useState([]);
   const [busesEmergencia, setBusesEmergencia] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
+  const [mes, setMes] = useState(new Date().getMonth() + 1);
+  const [anio, setAnio] = useState(new Date().getFullYear());
   const [activandoBus, setActivandoBus] = useState(null);
+  const [filtroActivo, setFiltroActivo] = useState(false);
 
   const { addNotification } = useNotifications();
 
   useEffect(() => {
     loadData();
-  }, [fechaInicio, fechaFin]);
+  }, [mes, anio, filtroActivo]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const params = {};
-      if (fechaInicio) params.fecha_inicio = fechaInicio;
-      if (fechaFin) params.fecha_fin = fechaFin;
+      if (filtroActivo) {
+        params.mes = mes;
+        params.anio = anio;
+      }
 
       const [busesData, fallasData, costosData, emergenciaData] = await Promise.all([
         fetchBusesConMasMantenimientos(params),
         fetchTiposFallasMasComunes(params),
         fetchCostosMantenimientoPorBus(params),
-        fetchBusesDisponiblesEmergencia()
+        fetchBusesDisponiblesEmergencia(params)
       ]);
 
       setBusesMantenimientos(busesData || []);
@@ -84,10 +87,25 @@ export default function AnalisisMantenimientosPage() {
     return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount || 0);
   };
 
+  const getMesNombre = (m) => {
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    return meses[m - 1];
+  };
+
+  const formatFecha = (fechaString) => {
+    if (!fechaString) return 'N/A';
+    // Si la fecha viene con formato ISO (2025-11-10T03:00:00.000000Z), extraer solo la fecha
+    const fecha = fechaString.split('T')[0];
+    // Convertir de YYYY-MM-DD a DD-MM-YYYY
+    const [anio, mes, dia] = fecha.split('-');
+    return `${dia}-${mes}-${anio}`;
+  };
+
   // Calcular métricas totales
   const totalMantenimientos = busesMantenimientos.reduce((sum, bus) => sum + (bus.total_mantenimientos || 0), 0);
   const totalCostos = costosMantenimiento.reduce((sum, bus) => sum + (bus.costo_total_mantenimiento || 0), 0);
-  const busesEnMantenimiento = busesMantenimientos.filter(bus => bus.estado_bus === 'mantenimiento').length;
+  // Buses en mantenimiento = todos los buses en el endpoint de emergencia (que están en proceso)
+  const busesEnMantenimiento = busesEmergencia.length;
   const busesActivablesEmergencia = busesEmergencia.filter(bus => bus.activable_emergencia).length;
 
   if (loading) {
@@ -108,37 +126,51 @@ export default function AnalisisMantenimientosPage() {
         <Wrench className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Filtros de Fecha */}
+      {/* Filtros de Período */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
         <div className="flex items-center gap-4">
           <Calendar size={20} className="text-gray-500" />
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fecha Inicio</label>
+
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
-                type="date"
-                value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                type="checkbox"
+                checked={filtroActivo}
+                onChange={(e) => setFiltroActivo(e.target.checked)}
+                className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
               />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fecha Fin</label>
-              <input
-                type="date"
-                value={fechaFin}
-                onChange={(e) => setFechaFin(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-              />
-            </div>
+              <span className="text-sm font-semibold text-gray-700">Filtrar por período</span>
+            </label>
           </div>
-          {(fechaInicio || fechaFin) && (
-            <button
-              onClick={() => { setFechaInicio(''); setFechaFin(''); }}
-              className="px-4 py-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
-            >
-              Limpiar
-            </button>
+
+          {filtroActivo && (
+            <>
+              <select
+                value={mes}
+                onChange={(e) => setMes(parseInt(e.target.value))}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
+              >
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                  <option key={m} value={m}>{getMesNombre(m)}</option>
+                ))}
+              </select>
+
+              <select
+                value={anio}
+                onChange={(e) => setAnio(parseInt(e.target.value))}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
+              >
+                {[2024, 2025, 2026].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {filtroActivo && (
+            <div className="ml-auto px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800 font-medium">
+              Mostrando: {getMesNombre(mes)} {anio}
+            </div>
           )}
         </div>
       </div>
@@ -188,10 +220,11 @@ export default function AnalisisMantenimientosPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Bus</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Servicio</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Capacidad</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Mant.</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Descripción</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Días</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Fecha Inicio</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Fecha Término</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Días</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Mecánico</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Prioridad</th>
                   <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Acción</th>
@@ -202,20 +235,25 @@ export default function AnalisisMantenimientosPage() {
                   <tr key={bus.bus_id} className={`hover:bg-gray-50 transition-colors ${!bus.activable_emergencia ? 'opacity-50' : ''}`}>
                     <td className="px-4 py-4">
                       <div className="font-bold text-gray-900">{bus.patente}</div>
-                      <div className="text-xs text-gray-500">{bus.marca} {bus.modelo}</div>
+                      <div className="text-xs text-gray-500">{bus.marca} {bus.modelo} ({bus.capacidad_pasajeros} pax)</div>
                     </td>
                     <td className="px-4 py-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase border ${getTipoServicioColor(bus.tipo_servicio)}`}>
                         {bus.tipo_servicio}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-gray-700">{bus.capacidad_pasajeros} pax</td>
                     <td className="px-4 py-4">
                       <span className={`px-2 py-1 rounded text-xs font-bold ${bus.tipo_mantenimiento === 'Preventivo' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`}>
                         {bus.tipo_mantenimiento}
                       </span>
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-700 max-w-xs truncate">{bus.descripcion}</td>
+                    <td className="px-4 py-4 text-center text-sm text-gray-700">
+                      {formatFecha(bus.fecha_inicio)}
+                    </td>
+                    <td className="px-4 py-4 text-center text-sm text-gray-700">
+                      {formatFecha(bus.fecha_termino_estimada)}
+                    </td>
                     <td className="px-4 py-4 text-center">
                       <span className="px-2 py-1 bg-gray-100 rounded text-sm font-semibold text-gray-900">
                         {bus.dias_en_mantenimiento}d
@@ -223,9 +261,10 @@ export default function AnalisisMantenimientosPage() {
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-600">{bus.mecanico_asignado || 'N/A'}</td>
                     <td className="px-4 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${
                         bus.prioridad_mantenimiento === 'baja' ? 'bg-green-100 text-green-800' :
                         bus.prioridad_mantenimiento === 'media' ? 'bg-yellow-100 text-yellow-800' :
+                        bus.prioridad_mantenimiento === 'alta' ? 'bg-orange-100 text-orange-800' :
                         'bg-red-100 text-red-800'
                       }`}>
                         {bus.prioridad_mantenimiento}

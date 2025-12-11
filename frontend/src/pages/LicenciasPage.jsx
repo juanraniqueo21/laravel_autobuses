@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   FileText, Plus, Filter, Search, Check, X, 
-  Trash2, Edit2, Download, AlertCircle 
+  Trash2, Edit2, Download, AlertCircle, User 
 } from 'lucide-react';
 import {
   fetchLicencias,
@@ -19,6 +19,9 @@ import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import FormDialog from '../components/forms/FormDialog';
+// --- IMPORTS ALERTAS ---
+import AlertDialog from '../components/common/AlertDialog';
+import ConfirmDialog from '../components/common/ConfirmDialog';
 
 // Helper para formatear fecha (evita el desfase de un día)
 const formatDate = (dateString) => {
@@ -36,8 +39,8 @@ const LicenciasPage = () => {
   const [success, setSuccess] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Filtros
-  const [filtroEmpleado, setFiltroEmpleado] = useState(''); // Ahora almacenará el texto de búsqueda
+  // Filtros de Tabla
+  const [filtroEmpleado, setFiltroEmpleado] = useState(''); 
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
 
@@ -47,6 +50,22 @@ const LicenciasPage = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [currentLicencia, setCurrentLicencia] = useState(null);
   const [motivoRechazo, setMotivoRechazo] = useState('');
+
+  // --- ESTADOS PARA BUSCADOR DE EMPLEADO (AUTOCOMPLETADO EN FORMULARIO) ---
+  const [empleadoSearchTerm, setEmpleadoSearchTerm] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsRef = useRef(null);
+
+  // --- SISTEMA ALERTAS ---
+  const [dialogs, setDialogs] = useState({
+    alert: { isOpen: false, type: 'success', title: '', message: '' },
+    confirm: { isOpen: false, type: 'warning', title: '', message: '', onConfirm: null }
+  });
+  const showAlert = (type, title, message) => setDialogs(prev => ({ ...prev, alert: { isOpen: true, type, title, message } }));
+  const showConfirm = (type, title, message, onConfirm) => setDialogs(prev => ({ ...prev, confirm: { isOpen: true, type, title, message, onConfirm } }));
+  const closeAlert = () => setDialogs(prev => ({ ...prev, alert: { ...prev.alert, isOpen: false } }));
+  const closeConfirm = () => setDialogs(prev => ({ ...prev, confirm: { ...prev.confirm, isOpen: false } }));
+  // ---------------------
 
   // Estado del formulario
   const [formData, setFormData] = useState({
@@ -74,6 +93,19 @@ const LicenciasPage = () => {
     aplicarFiltros();
   }, [licencias, filtroEmpleado, filtroEstado, filtroTipo]);
 
+  // Cerrar sugerencias al hacer clic fuera (Igual que en Liquidaciones)
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   const cargarDatos = async () => {
     try {
       setLoading(true);
@@ -88,6 +120,7 @@ const LicenciasPage = () => {
       setEmpleados(empleadosData);
     } catch (err) {
       setError(err.message);
+      showAlert('error', 'Error de Carga', err.message);
     } finally {
       setLoading(false);
     }
@@ -106,11 +139,10 @@ const LicenciasPage = () => {
     return `${empleado.user.rut}-${empleado.user.rut_verificador}`;
   };
 
-  // --- LÓGICA DE FILTROS ACTUALIZADA ---
+  // --- LÓGICA DE FILTROS TABLA ---
   const aplicarFiltros = () => {
     let resultado = [...licencias];
 
-    // MODIFICADO: Ahora filtra por coincidencia de texto (nombre o RUT)
     if (filtroEmpleado) {
       const termino = filtroEmpleado.toLowerCase();
       resultado = resultado.filter((l) => {
@@ -137,6 +169,25 @@ const LicenciasPage = () => {
     setFiltroTipo('');
   };
 
+  // --- LÓGICA DEL BUSCADOR DE EMPLEADOS EN FORMULARIO (NUEVO) ---
+  const getEmpleadosSugeridos = () => {
+    if (!empleadoSearchTerm) return [];
+    const term = empleadoSearchTerm.toLowerCase();
+    return empleados
+      .filter(emp => emp.estado === 'activo') // Solo empleados activos
+      .filter(emp => {
+        const nombre = getEmpleadoNombre(emp.id).toLowerCase();
+        const rut = getEmpleadoRut(emp.id).toLowerCase();
+        return nombre.includes(term) || rut.includes(term);
+      }).slice(0, 5); // Limitar a 5 sugerencias
+  };
+
+  const seleccionarEmpleado = (empleado) => {
+    setEmpleadoSearchTerm(getEmpleadoNombre(empleado.id));
+    setFormData(prev => ({ ...prev, empleado_id: empleado.id }));
+    setShowSuggestions(false);
+  };
+
   // --- MANEJADORES DE FORMULARIOS Y ACCIONES ---
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -148,12 +199,14 @@ const LicenciasPage = () => {
     if (file && file.type === 'application/pdf') {
       if (file.size > 5 * 1024 * 1024) {
         setError('El archivo no debe superar los 5MB');
+        showAlert('error', 'Archivo muy grande', 'El archivo no debe superar los 5MB');
         e.target.value = '';
         return;
       }
       setFormData((prev) => ({ ...prev, archivo_pdf: file }));
     } else {
       setError('Solo se permiten archivos PDF');
+      showAlert('error', 'Formato inválido', 'Solo se permiten archivos PDF');
       e.target.value = '';
     }
   };
@@ -161,6 +214,7 @@ const LicenciasPage = () => {
   const abrirModalCrear = () => {
     setIsEditing(false);
     setCurrentLicencia(null);
+    setEmpleadoSearchTerm(''); // Limpiar buscador
     setFormData({
       empleado_id: '',
       tipo: 'licencia_medica',
@@ -176,11 +230,15 @@ const LicenciasPage = () => {
   const abrirModalEditar = (licencia) => {
     if (licencia.estado && licencia.estado !== 'solicitado') {
       setError('Solo se pueden editar licencias en estado "solicitado"');
+      showAlert('warning', 'No editable', 'Solo se pueden editar licencias en estado "solicitado"');
       return;
     }
 
     setIsEditing(true);
     setCurrentLicencia(licencia);
+    // Cargar nombre del empleado en el buscador
+    setEmpleadoSearchTerm(getEmpleadoNombre(licencia.empleado_id));
+    
     setFormData({
       empleado_id: licencia.empleado_id,
       tipo: licencia.tipo,
@@ -197,56 +255,73 @@ const LicenciasPage = () => {
     setShowModal(false);
     setIsEditing(false);
     setCurrentLicencia(null);
+    setEmpleadoSearchTerm('');
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = (e) => {
+    if(e) e.preventDefault();
     setError(null);
     setSuccess(null);
 
-    try {
-      if (!formData.empleado_id || !formData.fecha_inicio || !formData.fecha_termino) {
-        setError('Complete los campos obligatorios');
-        return;
-      }
-
-      const data = new FormData();
-      data.append('empleado_id', formData.empleado_id);
-      data.append('tipo', formData.tipo);
-      data.append('fecha_inicio', formData.fecha_inicio);
-      data.append('fecha_termino', formData.fecha_termino);
-      data.append('motivo', formData.motivo);
-      data.append('observaciones', formData.observaciones);
-      if (formData.archivo_pdf) {
-        data.append('archivo_pdf', formData.archivo_pdf);
-      }
-
-      if (isEditing) {
-        await actualizarLicencia(currentLicencia.id, data);
-        setSuccess('Licencia actualizada exitosamente');
-      } else {
-        await crearLicencia(data);
-        setSuccess('Licencia creada exitosamente');
-      }
-
-      cerrarModal();
-      cargarDatos();
-    } catch (err) {
-      setError(err.message);
+    if (!formData.empleado_id || !formData.fecha_inicio || !formData.fecha_termino) {
+      setError('Complete los campos obligatorios');
+      showAlert('error', 'Campos incompletos', 'Complete los campos obligatorios (*)');
+      return;
     }
+
+    const action = isEditing ? 'Actualizar' : 'Crear';
+    showConfirm(
+      'info',
+      `¿${action} Licencia?`,
+      `Se procederá a ${action.toLowerCase()} la solicitud de licencia.`,
+      async () => {
+        try {
+          const data = new FormData();
+          data.append('empleado_id', formData.empleado_id);
+          data.append('tipo', formData.tipo);
+          data.append('fecha_inicio', formData.fecha_inicio);
+          data.append('fecha_termino', formData.fecha_termino);
+          data.append('motivo', formData.motivo);
+          data.append('observaciones', formData.observaciones);
+          if (formData.archivo_pdf) {
+            data.append('archivo_pdf', formData.archivo_pdf);
+          }
+
+          if (isEditing) {
+            await actualizarLicencia(currentLicencia.id, data);
+            setSuccess('Licencia actualizada exitosamente');
+          } else {
+            await crearLicencia(data);
+            setSuccess('Licencia creada exitosamente');
+          }
+
+          cerrarModal();
+          cargarDatos();
+        } catch (err) {
+          setError(err.message);
+          showAlert('error', 'Error al guardar', err.message);
+        }
+      }
+    );
   };
 
-  const handleAprobar = async (id) => {
-    if (!window.confirm('¿Aprobar esta licencia?')) return;
-
-    try {
-      setError(null);
-      await aprobarLicencia(id);
-      setSuccess('Licencia aprobada. El empleado ha sido marcado como "en licencia".');
-      cargarDatos();
-    } catch (err) {
-      setError('Error al aprobar: ' + err.message);
-    }
+  const handleAprobar = (id) => {
+    showConfirm(
+      'success',
+      '¿Aprobar Licencia?',
+      'La licencia será aprobada y el empleado marcado como ausente durante el período.',
+      async () => {
+        try {
+          setError(null);
+          await aprobarLicencia(id);
+          setSuccess('Licencia aprobada. El empleado ha sido marcado como "en licencia".');
+          cargarDatos();
+        } catch (err) {
+          setError('Error al aprobar: ' + err.message);
+          showAlert('error', 'Error al aprobar', err.message);
+        }
+      }
+    );
   };
 
   const abrirModalRechazar = (licencia) => {
@@ -261,36 +336,51 @@ const LicenciasPage = () => {
     setMotivoRechazo('');
   };
 
-  const handleRechazar = async (e) => {
+  const handleRechazar = (e) => {
     if(e) e.preventDefault();
     
     if (!motivoRechazo || motivoRechazo.trim().length < 10) {
       setError('El motivo de rechazo debe tener al menos 10 caracteres');
+      showAlert('warning', 'Motivo insuficiente', 'El motivo de rechazo debe tener al menos 10 caracteres');
       return;
     }
 
-    try {
-      setError(null);
-      await rechazarLicencia(currentLicencia.id, motivoRechazo);
-      setSuccess('Licencia rechazada exitosamente');
-      cerrarModalRechazar();
-      cargarDatos();
-    } catch (err) {
-      setError('Error al rechazar: ' + err.message);
-    }
+    showConfirm(
+      'danger',
+      '¿Rechazar Licencia?',
+      'La solicitud será rechazada permanentemente.',
+      async () => {
+        try {
+          setError(null);
+          await rechazarLicencia(currentLicencia.id, motivoRechazo);
+          setSuccess('Licencia rechazada exitosamente');
+          cerrarModalRechazar();
+          cargarDatos();
+        } catch (err) {
+          setError('Error al rechazar: ' + err.message);
+          showAlert('error', 'Error al rechazar', err.message);
+        }
+      }
+    );
   };
 
-  const handleEliminar = async (id) => {
-    if (!window.confirm('¿Eliminar esta licencia? Esta acción no se puede deshacer.')) return;
-
-    try {
-      setError(null);
-      await eliminarLicencia(id);
-      setSuccess('Licencia eliminada exitosamente');
-      cargarDatos();
-    } catch (err) {
-      setError('Error al eliminar: ' + err.message);
-    }
+  const handleEliminar = (id) => {
+    showConfirm(
+      'danger',
+      '¿Eliminar Licencia?',
+      'Esta acción eliminará el registro permanentemente. No se puede deshacer.',
+      async () => {
+        try {
+          setError(null);
+          await eliminarLicencia(id);
+          setSuccess('Licencia eliminada exitosamente');
+          cargarDatos();
+        } catch (err) {
+          setError('Error al eliminar: ' + err.message);
+          showAlert('error', 'Error al eliminar', err.message);
+        }
+      }
+    );
   };
 
   const handleDescargarPdf = async (id) => {
@@ -299,6 +389,7 @@ const LicenciasPage = () => {
       await descargarPdfLicencia(id);
     } catch (err) {
       setError('Error al descargar el PDF: ' + err.message);
+      showAlert('error', 'Error descarga', 'No se pudo descargar el PDF: ' + err.message);
     }
   };
 
@@ -439,7 +530,9 @@ const LicenciasPage = () => {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      
+      <AlertDialog isOpen={dialogs.alert.isOpen} type={dialogs.alert.type} title={dialogs.alert.title} message={dialogs.alert.message} onClose={closeAlert} />
+      <ConfirmDialog isOpen={dialogs.confirm.isOpen} type={dialogs.confirm.type} title={dialogs.confirm.title} message={dialogs.confirm.message} onConfirm={() => { if(dialogs.confirm.onConfirm) dialogs.confirm.onConfirm(); closeConfirm(); }} onCancel={closeConfirm} />
+
       {/* Header con estilo de proyecto */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -479,7 +572,7 @@ const LicenciasPage = () => {
         <div className="flex flex-col space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             
-            {/* MODIFICADO: Input de búsqueda en lugar de Select */}
+            {/* Input de búsqueda en la TABLA (No confundir con el formulario) */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Buscar Empleado</label>
               <div className="relative">
@@ -565,20 +658,63 @@ const LicenciasPage = () => {
         onClose={cerrarModal}
       >
         <div className="grid grid-cols-1 gap-4">
-          <Select
-            label="Empleado *"
-            value={formData.empleado_id}
-            onChange={handleInputChange}
-            name="empleado_id"
-            options={empleados
-              .filter((emp) => emp.estado === 'activo')
-              .map((emp) => ({
-                id: emp.id,
-                label: `${getEmpleadoNombre(emp.id)} (${getEmpleadoRut(emp.id)})`
-              }))}
-            required
-            disabled={isEditing}
-          />
+          
+          {/* --- AQUÍ ESTÁ EL NUEVO BUSCADOR DE EMPLEADOS --- */}
+          <div className="space-y-1 relative" ref={suggestionsRef}>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Buscar Empleado *</label>
+            <div className="relative">
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pl-9"
+                placeholder="Escriba nombre o RUT..."
+                value={empleadoSearchTerm}
+                onChange={(e) => {
+                  setEmpleadoSearchTerm(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                disabled={isEditing} // Deshabilitar si se está editando
+              />
+              <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+              
+              {/* Botón borrar búsqueda */}
+              {empleadoSearchTerm && !isEditing && (
+                <button 
+                  type="button"
+                  onClick={() => { setEmpleadoSearchTerm(''); setFormData(prev => ({...prev, empleado_id: ''})); }}
+                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {/* Lista de sugerencias */}
+            {showSuggestions && !isEditing && empleadoSearchTerm && (
+              <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto mt-1">
+                {getEmpleadosSugeridos().length > 0 ? (
+                  getEmpleadosSugeridos().map(emp => (
+                    <li 
+                      key={emp.id}
+                      onClick={() => seleccionarEmpleado(emp)}
+                      className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0 flex items-center gap-3"
+                    >
+                       <div className="bg-blue-100 p-1.5 rounded-full text-blue-600">
+                          <User size={16} />
+                       </div>
+                       <div>
+                          <div className="font-medium text-gray-800">{getEmpleadoNombre(emp.id)}</div>
+                          <div className="text-xs text-gray-500">RUT: {getEmpleadoRut(emp.id)}</div>
+                       </div>
+                    </li>
+                  ))
+                ) : (
+                  <li className="px-4 py-3 text-sm text-gray-400 text-center">No se encontraron empleados</li>
+                )}
+              </ul>
+            )}
+          </div>
+          {/* --- FIN BUSCADOR --- */}
 
           <Select
             label="Tipo *"

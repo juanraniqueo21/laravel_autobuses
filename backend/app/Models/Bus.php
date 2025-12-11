@@ -35,6 +35,10 @@ class Bus extends Model
         'numero_soap',
         'observaciones',
         'kilometraje_original',
+        'kilometraje_actual',
+        'kilometraje_ultimo_cambio_aceite',
+        'tipo_aceite_motor',
+        'fecha_ultima_revision_tecnica',
         // nuevos campos
         'tipo_bus',
         'cantidad_ejes',
@@ -60,14 +64,15 @@ class Bus extends Model
         'anio' => 'integer',
         'capacidad_pasajeros' => 'integer',
         'kilometraje_original' => 'integer',
+        'kilometraje_actual' => 'integer',
+        'kilometraje_ultimo_cambio_aceite' => 'integer',
+        'fecha_ultima_revision_tecnica' => 'date',
         // nuevos casts
         'proximo_mantenimiento_km' => 'integer',
         'fecha_ultimo_mantenimiento' => 'date',
         'fecha_proximo_mantenimiento' => 'date',
         'factor_tarifa' => 'decimal:1',
     ];
-
-
 
     // ============================================
     // RELACIONES
@@ -102,7 +107,64 @@ class Bus extends Model
     }
 
     /**
-     * Verificar si la revisión técnica está vencida
+     * Calcular kilómetros desde último cambio de aceite
+     */
+    public function getKmDesdeUltimoAceiteAttribute(): ?int
+    {
+        if ($this->kilometraje_actual === null || $this->kilometraje_ultimo_cambio_aceite === null) {
+            return null;
+        }
+        return max(0, $this->kilometraje_actual - $this->kilometraje_ultimo_cambio_aceite);
+    }
+
+    /**
+     * Obtener estado del aceite del motor
+     */
+    public function getEstadoAceiteAttribute(): string
+    {
+        $km = $this->km_desde_ultimo_aceite;
+        if ($km === null) {
+            return 'sin_datos';
+        }
+
+        $umbral = $this->tipo_aceite_motor === 'sintetico' ? 40000 : 15000;
+        $alerta = $umbral * 0.9;
+
+        if ($km >= $umbral) {
+            return 'critico';
+        }
+        if ($km >= $alerta) {
+            return 'alerta';
+        }
+        return 'ok';
+    }
+
+    /**
+     * Verificar si la revisión técnica semestral está vencida
+     */
+    public function getRevisionTecnicaSemestralVencidaAttribute(): bool
+    {
+        if (!$this->fecha_ultima_revision_tecnica) {
+            return false;
+        }
+        $proxima = Carbon::parse($this->fecha_ultima_revision_tecnica)->addMonths(6);
+        return $proxima->isPast();
+    }
+
+    /**
+     * Calcular días para la próxima revisión técnica semestral
+     */
+    public function getDiasRevisionTecnicaSemestralAttribute(): ?int
+    {
+        if (!$this->fecha_ultima_revision_tecnica) {
+            return null;
+        }
+        $proxima = Carbon::parse($this->fecha_ultima_revision_tecnica)->addMonths(6);
+        return Carbon::now()->diffInDays($proxima, false);
+    }
+
+    /**
+     * Verificar si la revisión técnica anual está vencida
      */
     public function getRevisionTecnicaVencidaAttribute(): bool
     {
@@ -113,18 +175,29 @@ class Bus extends Model
     }
 
     /**
-     * Verificar si el seguro está vencido
+     * Verificar si el SOAP está vencido (seguro obligatorio)
      */
     public function getSeguroVencidoAttribute(): bool
     {
-        if (!$this->vencimiento_seguro) {
+        if (!$this->vencimiento_soap) {
             return false;
         }
-        return Carbon::parse($this->vencimiento_seguro)->isPast();
+        return Carbon::parse($this->vencimiento_soap)->isPast();
     }
 
     /**
-     * Calcular días hasta la próxima revisión técnica
+     * Verificar si la póliza de seguro adicional está vencida
+     */
+    public function getPolizaVencidaAttribute(): bool
+    {
+        if (!$this->vencimiento_poliza) {
+            return false;
+        }
+        return Carbon::parse($this->vencimiento_poliza)->isPast();
+    }
+
+    /**
+     * Calcular días hasta la próxima revisión técnica anual
      */
     public function getDiasHastaRevisionAttribute(): ?int
     {
@@ -135,14 +208,39 @@ class Bus extends Model
     }
 
     /**
-     * Calcular días hasta el vencimiento del seguro
+     * Calcular días hasta el vencimiento del SOAP
      */
     public function getDiasHastaVencimientoSeguroAttribute(): ?int
     {
-        if (!$this->vencimiento_seguro) {
+        if (!$this->vencimiento_soap) {
             return null;
         }
-        return Carbon::now()->diffInDays(Carbon::parse($this->vencimiento_seguro), false);
+        return Carbon::now()->diffInDays(Carbon::parse($this->vencimiento_soap), false);
+    }
+
+    /**
+     * Calcular días hasta el vencimiento de la póliza adicional
+     */
+    public function getDiasHastaVencimientoPolizaAttribute(): ?int
+    {
+        if (!$this->vencimiento_poliza) {
+            return null;
+        }
+        return Carbon::now()->diffInDays(Carbon::parse($this->vencimiento_poliza), false);
+    }
+
+    /**
+     * Obtener nombre descriptivo del tipo de servicio
+     */
+    public function getNombreTipoServicioAttribute(): string
+    {
+        $nombres = [
+            'clasico' => 'Clásico',
+            'semicama' => 'Semi Cama',
+            'cama' => 'Cama',
+            'premium' => 'Premium',
+        ];
+        return $nombres[$this->tipo_servicio] ?? 'Desconocido';
     }
 
     // ============================================
@@ -183,7 +281,7 @@ class Bus extends Model
     }
 
     /**
-     * Verificar si el seguro vence pronto (30 días)
+     * Verificar si el SOAP vence pronto (30 días)
      */
     public function seguroVenceProxima(): bool
     {
@@ -198,11 +296,12 @@ class Bus extends Model
     {
         return $this->estaOperativo() 
             && !$this->revision_tecnica_vencida 
-            && !$this->seguro_vencido;
+            && !$this->seguro_vencido
+            && !$this->mantenimientoVencido();
     }
     
     /**
-     * verificar si necesita mantenimiento proximo
+     * Verificar si necesita mantenimiento próximo (30 días)
      */
     public function necesitaMantenimientoProximo(): bool
     {
@@ -217,7 +316,7 @@ class Bus extends Model
     }
 
     /**
-     * verificar si el mantenimiento esta vencido
+     * Verificar si el mantenimiento está vencido
      */
     public function mantenimientoVencido(): bool
     {
@@ -228,7 +327,19 @@ class Bus extends Model
     }
 
     /**
-     * verificar si requiere asistente (buses dole piso)
+     * Verificar si necesita mantenimiento por kilometraje
+     */
+    public function necesitaMantenimientoPorKm(): bool
+    {
+        if ($this->kilometraje_actual === null || $this->proximo_mantenimiento_km === null) {
+            return false;
+        }
+        $diferencia = $this->proximo_mantenimiento_km - $this->kilometraje_actual;
+        return $diferencia <= 1000 && $diferencia >= 0;
+    }
+
+    /**
+     * Verificar si requiere asistente (buses doble piso)
      */
     public function requiereAsistente(): bool
     {
@@ -244,20 +355,6 @@ class Bus extends Model
     }
 
     /**
-     * Obtener nombre descriptivo del tipo de servicio
-     */
-    public function getNombreTipoServicioAttribute(): string
-    {
-        $nombres = [
-            'clasico' => 'Clásico',
-            'semicama' => 'Semi Cama',
-            'cama' => 'Cama',
-            'premium' => 'Premium',
-        ];
-        return $nombres[$this->tipo_servicio] ?? 'Desconocido';
-    }
-
-    /**
      * Calcular tarifa ajustada según tipo de servicio
      *
      * @param int|float $tarifaBase Tarifa base de la ruta
@@ -268,6 +365,26 @@ class Bus extends Model
         return (int) ($tarifaBase * $this->factor_tarifa);
     }
 
+    /**
+     * Obtener estado general del bus
+     */
+    public function getEstadoGeneralAttribute(): string
+    {
+        if (!$this->estaOperativo()) {
+            return 'no_operativo';
+        }
+        
+        if ($this->revision_tecnica_vencida || $this->seguro_vencido || $this->mantenimientoVencido()) {
+            return 'con_vencimientos';
+        }
+        
+        if ($this->necesitaRevisionProxima() || $this->seguroVenceProxima() || 
+            $this->necesitaMantenimientoProximo() || $this->necesitaMantenimientoPorKm()) {
+            return 'con_advertencias';
+        }
+        
+        return 'optimo';
+    }
 
     // ============================================
     // SCOPES (Consultas reutilizables)
@@ -298,11 +415,27 @@ class Bus extends Model
     }
 
     /**
-     * Scope para obtener buses con seguro vencido
+     * Scope para obtener buses con SOAP vencido
      */
     public function scopeConSeguroVencido($query)
     {
-        return $query->whereDate('vencimiento_seguro', '<', Carbon::now());
+        return $query->whereDate('vencimiento_soap', '<', Carbon::now());
+    }
+
+    /**
+     * Scope para obtener buses con póliza vencida
+     */
+    public function scopeConPolizaVencida($query)
+    {
+        return $query->whereDate('vencimiento_poliza', '<', Carbon::now());
+    }
+
+    /**
+     * Scope para obtener buses con mantenimiento vencido
+     */
+    public function scopeConMantenimientoVencido($query)
+    {
+        return $query->whereDate('fecha_proximo_mantenimiento', '<', Carbon::now());
     }
 
     /**
@@ -316,8 +449,12 @@ class Bus extends Model
                   ->orWhereNull('proxima_revision_tecnica');
             })
             ->where(function($q) {
-                $q->whereDate('vencimiento_seguro', '>=', Carbon::now())
-                  ->orWhereNull('vencimiento_seguro');
+                $q->whereDate('vencimiento_soap', '>=', Carbon::now())
+                  ->orWhereNull('vencimiento_soap');
+            })
+            ->where(function($q) {
+                $q->whereDate('fecha_proximo_mantenimiento', '>=', Carbon::now())
+                  ->orWhereNull('fecha_proximo_mantenimiento');
             });
     }
 
@@ -343,5 +480,60 @@ class Bus extends Model
     public function scopeEconomicos($query)
     {
         return $query->whereIn('tipo_servicio', ['clasico', 'semicama']);
+    }
+
+    /**
+     * Scope para obtener buses por tipo
+     */
+    public function scopePorTipo($query, $tipoBus)
+    {
+        return $query->where('tipo_bus', $tipoBus);
+    }
+
+    /**
+     * Scope para obtener buses con aceite en estado crítico
+     */
+    public function scopeConAceiteCritico($query)
+    {
+        return $query->where(function($q) {
+            $q->where('tipo_aceite_motor', 'sintetico')
+              ->whereRaw('kilometraje_actual - kilometraje_ultimo_cambio_aceite >= 40000');
+        })->orWhere(function($q) {
+            $q->where('tipo_aceite_motor', '!=', 'sintetico')
+              ->orWhereNull('tipo_aceite_motor')
+              ->whereRaw('kilometraje_actual - kilometraje_ultimo_cambio_aceite >= 15000');
+        });
+    }
+
+    /**
+     * Scope para obtener buses que necesitan revisión técnica próxima
+     */
+    public function scopeConRevisionProxima($query, $dias = 30)
+    {
+        return $query->whereDate('proxima_revision_tecnica', '>=', Carbon::now())
+                     ->whereDate('proxima_revision_tecnica', '<=', Carbon::now()->addDays($dias));
+    }
+
+    /**
+     * Scope para obtener buses que necesitan mantenimiento próximo
+     */
+    public function scopeConMantenimientoProximo($query, $dias = 30)
+    {
+        return $query->whereDate('fecha_proximo_mantenimiento', '>=', Carbon::now())
+                     ->whereDate('fecha_proximo_mantenimiento', '<=', Carbon::now()->addDays($dias));
+    }
+
+    /**
+     * Scope para obtener buses por rango de kilometraje
+     */
+    public function scopePorKilometraje($query, $min = null, $max = null)
+    {
+        if ($min !== null) {
+            $query->where('kilometraje_actual', '>=', $min);
+        }
+        if ($max !== null) {
+            $query->where('kilometraje_actual', '<=', $max);
+        }
+        return $query;
     }
 }
