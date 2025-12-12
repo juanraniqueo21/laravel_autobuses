@@ -135,8 +135,8 @@ class ViajeController extends Controller
                 'codigo_viaje' => $codigoViaje,
                 'nombre_viaje' => $ruta->nombre_ruta,
                 'ruta_id' => $request->ruta_id,
-                'fecha_hora_salida' => DB::raw("'{$fechaHoraSalida}'::timestamp"),
-                'fecha_hora_llegada' => $fechaHoraLlegada ? DB::raw("'{$fechaHoraLlegada}'::timestamp") : null,
+                'fecha_hora_salida' => $fechaHoraSalida,
+                'fecha_hora_llegada' => $fechaHoraLlegada,
                 'estado' => $request->estado ?? 'programado',
                 'tarifa_aplicada' => $tarifaAplicada, // Tarifa con factor del tipo de servicio
                 'observaciones' => $request->observaciones,
@@ -200,10 +200,9 @@ class ViajeController extends Controller
                 }
                 $fechaHoraSalida = str_replace('T', ' ', $fechaHoraSalida);
 
-                DB::statement(
-                    "UPDATE viajes SET fecha_hora_salida = ?::timestamp WHERE id = ?",
-                    [$fechaHoraSalida, $id]
-                );
+                DB::table('viajes')
+                    ->where('id', $id)
+                    ->update(['fecha_hora_salida' => $fechaHoraSalida]);
             }
 
             if ($request->has('fecha_hora_llegada') && $request->fecha_hora_llegada) {
@@ -213,10 +212,9 @@ class ViajeController extends Controller
                 }
                 $fechaHoraLlegada = str_replace('T', ' ', $fechaHoraLlegada);
 
-                DB::statement(
-                    "UPDATE viajes SET fecha_hora_llegada = ?::timestamp WHERE id = ?",
-                    [$fechaHoraLlegada, $id]
-                );
+                DB::table('viajes')
+                    ->where('id', $id)
+                    ->update(['fecha_hora_llegada' => $fechaHoraLlegada]);
             }
 
             // Datos base
@@ -295,15 +293,19 @@ class ViajeController extends Controller
             }
             $fechaHoraLlegada = str_replace('T', ' ', $fechaHoraLlegada);
 
-            DB::statement(
-                "UPDATE viajes SET 
-                    fecha_hora_llegada = ?::timestamp, 
-                    estado = 'completado',
-                    observaciones = COALESCE(?, observaciones),
-                    updated_at = NOW()
-                WHERE id = ?",
-                [$fechaHoraLlegada, $request->observaciones, $id]
-            );
+            $updateData = [
+                'fecha_hora_llegada' => $fechaHoraLlegada,
+                'estado' => 'completado',
+                'updated_at' => now(),
+            ];
+
+            if ($request->observaciones) {
+                $updateData['observaciones'] = $request->observaciones;
+            }
+
+            DB::table('viajes')
+                ->where('id', $id)
+                ->update($updateData);
 
             DB::commit();
 

@@ -2,29 +2,30 @@ version: '3.8'
 
 services:
   # ============================================
-  # PostgreSQL Database
+  # MySQL Database
   # ============================================
   database:
-    image: postgres:15-alpine
+    image: mysql:8.0
     container_name: gestion_buses_db
     environment:
-      POSTGRES_DB: gestion_buses
-      POSTGRES_USER: usuario_buses
-      POSTGRES_PASSWORD: password_segura_aqui
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+      MYSQL_DATABASE: gestion_buses
+      MYSQL_USER: usuario_buses
+      MYSQL_PASSWORD: password_segura_aqui
+      MYSQL_ROOT_PASSWORD: root_password_segura
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
       - ./migrations_database.sql:/docker-entrypoint-initdb.d/01-init.sql
     networks:
       - gestion_buses_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U usuario_buses -d gestion_buses"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "usuario_buses", "-ppassword_segura_aqui"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
 
   # ============================================
   # Laravel Backend
@@ -40,9 +41,9 @@ services:
       - APP_DEBUG=true
       - APP_URL=http://localhost:8000
       - APP_KEY=
-      - DB_CONNECTION=pgsql
+      - DB_CONNECTION=mysql
       - DB_HOST=database
-      - DB_PORT=5432
+      - DB_PORT=3306
       - DB_DATABASE=gestion_buses
       - DB_USERNAME=usuario_buses
       - DB_PASSWORD=password_segura_aqui
@@ -88,22 +89,24 @@ services:
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     restart: unless-stopped
 
-#Pgadmin 
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: gestion_buses_pgadmin
+# phpMyAdmin
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: gestion_buses_phpmyadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@gestionbuses.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
+      PMA_HOST: database
+      PMA_PORT: 3306
+      PMA_USER: usuario_buses
+      PMA_PASSWORD: password_segura_aqui
     ports:
-      - "5050:80"
+      - "8080:80"
     depends_on:
       - database
     networks:
       - gestion_buses_network
     restart: unless-stopped
 volumes:
-  postgres_data:
+  mysql_data:
     driver: local
 networks:
   gestion_buses_network:
