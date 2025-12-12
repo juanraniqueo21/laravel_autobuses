@@ -250,6 +250,9 @@ Route::middleware('jwt.auth')->group(function () {
 
         // Empleados con alto riesgo de no renovación
         Route::get('/empleados-alto-riesgo', [RRHHController::class, 'empleadosAltoRiesgo']);
+
+        // Evolución temporal de licencias
+        Route::get('/evolucion-licencias', [RRHHController::class, 'evolucionLicenciasPorMes']);
     });
 
 });

@@ -1611,3 +1611,16 @@ export const fetchEmpleadosAltoRiesgo = async (params = {}) => {
   const result = await response.json();
   return result;
 };
+
+/**
+ * Obtener evolución temporal de licencias por mes
+ * Para gráfico de líneas mostrando tendencias
+ */
+export const fetchEvolucionLicencias = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/rrhh/evolucion-licencias${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
