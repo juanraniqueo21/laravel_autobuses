@@ -1370,36 +1370,26 @@ class ReporteController extends Controller
     }
 
     /**
-     * Obtener buses con permiso de circulación próximo a vencer
-     * NOTA: Requiere campo vencimiento_permiso_circulacion en la tabla buses
+     * Obtener buses con revisión técnica (permiso circulación) próxima a vencer
+     * Usa el campo proxima_revision_tecnica
      */
     public function busesPermisoCirculacionPorVencer(Request $request)
     {
         $dias = $request->input('dias', 30); // Default 30 días
 
-        // Verificar si existe el campo
-        if (!\Schema::hasColumn('buses', 'vencimiento_permiso_circulacion')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'El campo vencimiento_permiso_circulacion no existe en la tabla buses',
-                'data' => [],
-                'total' => 0
-            ]);
-        }
-
         $buses = DB::table('buses')
-            ->whereNotNull('vencimiento_permiso_circulacion')
-            ->whereDate('vencimiento_permiso_circulacion', '>=', now())
-            ->whereDate('vencimiento_permiso_circulacion', '<=', now()->addDays($dias))
+            ->whereNotNull('proxima_revision_tecnica')
+            ->whereDate('proxima_revision_tecnica', '>=', now())
+            ->whereDate('proxima_revision_tecnica', '<=', now()->addDays($dias))
             ->select(
                 'id',
                 'patente',
                 'marca',
                 'modelo',
                 'tipo_servicio',
-                'vencimiento_permiso_circulacion',
+                'proxima_revision_tecnica as vencimiento_permiso_circulacion',
                 'estado',
-                DB::raw('DATEDIFF(vencimiento_permiso_circulacion, CURDATE()) as dias_restantes')
+                DB::raw('DATEDIFF(proxima_revision_tecnica, CURDATE()) as dias_restantes')
             )
             ->orderBy('dias_restantes', 'asc')
             ->get();
