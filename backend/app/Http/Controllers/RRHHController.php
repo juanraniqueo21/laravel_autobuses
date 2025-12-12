@@ -81,10 +81,10 @@ class RRHHController extends Controller
                     // Filtrar licencias que se solapen con el período seleccionado
                     $join->where(function($query) use ($fechaInicio, $fechaFin) {
                         $query->whereBetween('permisos_licencias.fecha_inicio', [$fechaInicio, $fechaFin])
-                              ->orWhereBetween('permisos_licencias.fecha_fin', [$fechaInicio, $fechaFin])
+                              ->orWhereBetween('permisos_licencias.fecha_termino', [$fechaInicio, $fechaFin])
                               ->orWhere(function($q) use ($fechaInicio, $fechaFin) {
                                   $q->where('permisos_licencias.fecha_inicio', '<=', $fechaInicio)
-                                    ->where('permisos_licencias.fecha_fin', '>=', $fechaFin);
+                                    ->where('permisos_licencias.fecha_termino', '>=', $fechaFin);
                               });
                     });
                 }
@@ -300,10 +300,10 @@ class RRHHController extends Controller
                     ->where('estado', '!=', 'rechazado')
                     ->where(function($query) use ($inicioMes, $finMes) {
                         $query->whereBetween('fecha_inicio', [$inicioMes, $finMes])
-                              ->orWhereBetween('fecha_fin', [$inicioMes, $finMes])
+                              ->orWhereBetween('fecha_termino', [$inicioMes, $finMes])
                               ->orWhere(function($q) use ($inicioMes, $finMes) {
                                   $q->where('fecha_inicio', '<=', $inicioMes)
-                                    ->where('fecha_fin', '>=', $finMes);
+                                    ->where('fecha_termino', '>=', $finMes);
                               });
                     })
                     ->select(

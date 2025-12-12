@@ -1344,15 +1344,14 @@ class ReporteController extends Controller
     public function busesSOAPPorVencer(Request $request)
     {
         try {
-            $dias = $request->input('dias', 30); // Default 30 días
-
+            $dias = $request->input('dias', 30);
             $fechaInicio = now()->format('Y-m-d');
             $fechaFin = now()->addDays($dias)->format('Y-m-d');
 
+            // 1. Obtener los datos crudos sin cálculos SQL complejos
             $buses = DB::table('buses')
                 ->whereNotNull('vencimiento_soap')
-                ->where('vencimiento_soap', '>=', $fechaInicio)
-                ->where('vencimiento_soap', '<=', $fechaFin)
+                ->whereBetween('vencimiento_soap', [$fechaInicio, $fechaFin])
                 ->select(
                     'id',
                     'patente',
@@ -1360,16 +1359,23 @@ class ReporteController extends Controller
                     'modelo',
                     'tipo_servicio',
                     'vencimiento_soap',
-                    'estado',
-                    DB::raw('DATEDIFF(vencimiento_soap, CURDATE()) as dias_restantes')
+                    'estado'
                 )
-                ->orderBy('dias_restantes', 'asc')
                 ->get();
+
+            // 2. Realizar el cálculo y ordenamiento usando colecciones de Laravel
+            $busesProcesados = $buses->map(function ($bus) {
+                $vencimiento = \Carbon\Carbon::parse($bus->vencimiento_soap)->startOfDay();
+                $hoy = now()->startOfDay();
+                // Calcula la diferencia en días (positivo si es futuro, negativo si ya pasó)
+                $bus->dias_restantes = (int) $hoy->diffInDays($vencimiento, false);
+                return $bus;
+            })->sortBy('dias_restantes')->values();
 
             return response()->json([
                 'success' => true,
-                'data' => $buses,
-                'total' => $buses->count()
+                'data' => $busesProcesados,
+                'total' => $busesProcesados->count()
             ]);
         } catch (\Exception $e) {
             \Log::error('Error en busesSOAPPorVencer: ' . $e->getMessage());
@@ -1382,21 +1388,18 @@ class ReporteController extends Controller
     }
 
     /**
-     * Obtener buses con revisión técnica (permiso circulación) próxima a vencer
-     * Usa el campo proxima_revision_tecnica
+     * Obtener buses con permiso de circulación próximo a vencer
      */
     public function busesPermisoCirculacionPorVencer(Request $request)
     {
         try {
-            $dias = $request->input('dias', 30); // Default 30 días
-
+            $dias = $request->input('dias', 30);
             $fechaInicio = now()->format('Y-m-d');
             $fechaFin = now()->addDays($dias)->format('Y-m-d');
 
             $buses = DB::table('buses')
                 ->whereNotNull('proxima_revision_tecnica')
-                ->where('proxima_revision_tecnica', '>=', $fechaInicio)
-                ->where('proxima_revision_tecnica', '<=', $fechaFin)
+                ->whereBetween('proxima_revision_tecnica', [$fechaInicio, $fechaFin])
                 ->select(
                     'id',
                     'patente',
@@ -1404,16 +1407,21 @@ class ReporteController extends Controller
                     'modelo',
                     'tipo_servicio',
                     'proxima_revision_tecnica as vencimiento_permiso_circulacion',
-                    'estado',
-                    DB::raw('DATEDIFF(proxima_revision_tecnica, CURDATE()) as dias_restantes')
+                    'estado'
                 )
-                ->orderBy('dias_restantes', 'asc')
                 ->get();
+
+            $busesProcesados = $buses->map(function ($bus) {
+                $vencimiento = \Carbon\Carbon::parse($bus->vencimiento_permiso_circulacion)->startOfDay();
+                $hoy = now()->startOfDay();
+                $bus->dias_restantes = (int) $hoy->diffInDays($vencimiento, false);
+                return $bus;
+            })->sortBy('dias_restantes')->values();
 
             return response()->json([
                 'success' => true,
-                'data' => $buses,
-                'total' => $buses->count()
+                'data' => $busesProcesados,
+                'total' => $busesProcesados->count()
             ]);
         } catch (\Exception $e) {
             \Log::error('Error en busesPermisoCirculacionPorVencer: ' . $e->getMessage());
