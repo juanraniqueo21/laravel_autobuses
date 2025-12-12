@@ -5,9 +5,10 @@ import {
   fetchRankingLicencias,
   fetchResumenContratos,
   fetchEmpleadosAltoRiesgo,
+  fetchEvolucionLicencias,
   updateEmpleado
 } from '../services/api';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import MetricCard from '../components/cards/MetricCard';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -16,6 +17,7 @@ export default function AnalisisRRHHPage() {
   const [rankingLicencias, setRankingLicencias] = useState([]);
   const [resumenContratos, setResumenContratos] = useState({});
   const [empleadosAltoRiesgo, setEmpleadosAltoRiesgo] = useState([]);
+  const [evolucionLicencias, setEvolucionLicencias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [procesandoBaja, setProcesandoBaja] = useState(null);
 
@@ -51,13 +53,23 @@ export default function AnalisisRRHHPage() {
         fetchAlertasContratos(params),
         fetchRankingLicencias(params),
         fetchResumenContratos(params),
-        fetchEmpleadosAltoRiesgo(params),
+        fetchEmpleadosAltoRiesgo(params)
       ]);
 
       setAlertasContratos(alertas.data || []);
       setRankingLicencias(ranking.data || []);
       setResumenContratos(resumen.data || {});
       setEmpleadosAltoRiesgo(altoRiesgo.data || []);
+
+      // Intentar cargar evolución de forma separada con manejo de errores
+      // Este endpoint puede fallar sin romper toda la página
+      try {
+        const evolucion = await fetchEvolucionLicencias({ meses: 12 });
+        setEvolucionLicencias(evolucion.data || []);
+      } catch (error) {
+        console.warn('Error cargando evolución de licencias:', error);
+        setEvolucionLicencias([]);
+      }
     } catch (error) {
       console.error('Error cargando datos de RRHH:', error);
       addNotification('error', 'Error', 'No se pudieron cargar los datos de RRHH.');
@@ -448,6 +460,46 @@ export default function AnalisisRRHHPage() {
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Evolución Temporal de Licencias */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">Evolución de Licencias - Últimos 12 Meses</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={evolucionLicencias}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+            <YAxis yAxisId="left" />
+            <YAxis yAxisId="right" orientation="right" />
+            <Tooltip />
+            <Legend />
+            <Line yAxisId="left" type="monotone" dataKey="total_licencias" stroke="#3b82f6" strokeWidth={2} name="Cantidad Licencias" dot={{ r: 4 }} />
+            <Line yAxisId="right" type="monotone" dataKey="total_dias" stroke="#ef4444" strokeWidth={2} name="Total Días" dot={{ r: 4 }} />
+            <Line yAxisId="right" type="monotone" dataKey="promedio_dias_por_empleado" stroke="#10b981" strokeWidth={2} name="Promedio Días/Empleado" dot={{ r: 4 }} />
+          </LineChart>
+        </ResponsiveContainer>
+        <div className="mt-4 grid grid-cols-3 gap-4 text-center">
+          <div className="p-3 bg-blue-50 rounded-lg">
+            <p className="text-xs text-gray-600">Total Licencias (12 meses)</p>
+            <p className="text-xl font-bold text-blue-600">
+              {evolucionLicencias.reduce((sum, item) => sum + item.total_licencias, 0)}
+            </p>
+          </div>
+          <div className="p-3 bg-red-50 rounded-lg">
+            <p className="text-xs text-gray-600">Total Días (12 meses)</p>
+            <p className="text-xl font-bold text-red-600">
+              {evolucionLicencias.reduce((sum, item) => sum + item.total_dias, 0)}
+            </p>
+          </div>
+          <div className="p-3 bg-green-50 rounded-lg">
+            <p className="text-xs text-gray-600">Promedio Mensual</p>
+            <p className="text-xl font-bold text-green-600">
+              {evolucionLicencias.length > 0
+                ? Math.round(evolucionLicencias.reduce((sum, item) => sum + item.total_licencias, 0) / evolucionLicencias.length)
+                : 0}
+            </p>
+          </div>
         </div>
       </div>
 

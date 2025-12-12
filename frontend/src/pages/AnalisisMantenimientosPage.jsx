@@ -7,9 +7,11 @@ import {
   fetchBusesDisponiblesEmergencia,
   fetchMantenimientoAlertas,
   fetchMantenimientoTops,
+  fetchBusesSOAPPorVencer,
+  fetchBusesPermisoCirculacionPorVencer,
   activarBusEmergencia
 } from '../services/api';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import MetricCard from '../components/cards/MetricCard';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -20,6 +22,8 @@ export default function AnalisisMantenimientosPage() {
   const [busesEmergencia, setBusesEmergencia] = useState([]);
   const [alertasData, setAlertasData] = useState({ alertas: [], por_tipo: {} });
   const [topsData, setTopsData] = useState({ top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] });
+  const [busesSOAP, setBusesSOAP] = useState([]);
+  const [busesPermiso, setBusesPermiso] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mes, setMes] = useState(new Date().getMonth() + 1);
   const [anio, setAnio] = useState(new Date().getFullYear());
@@ -64,6 +68,24 @@ export default function AnalisisMantenimientosPage() {
       setBusesEmergencia(emergenciaData || []);
       setAlertasData(alertas || { alertas: [], por_tipo: {} });
       setTopsData(tops || { top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] });
+
+      // Intentar cargar SOAP y Permisos de forma separada con manejo de errores
+      // Estos endpoints pueden fallar sin romper toda la página
+      try {
+        const soap = await fetchBusesSOAPPorVencer({ dias: 30 });
+        setBusesSOAP(soap?.data || []);
+      } catch (error) {
+        console.warn('Error cargando buses SOAP por vencer:', error);
+        setBusesSOAP([]);
+      }
+
+      try {
+        const permiso = await fetchBusesPermisoCirculacionPorVencer({ dias: 30 });
+        setBusesPermiso(permiso?.data || []);
+      } catch (error) {
+        console.warn('Error cargando buses con permiso por vencer:', error);
+        setBusesPermiso([]);
+      }
     } catch (error) {
       console.error('Error cargando análisis de mantenimientos:', error);
       addNotification('error', 'Error', 'No se pudieron cargar los datos de mantenimiento.');
@@ -283,6 +305,19 @@ export default function AnalisisMantenimientosPage() {
             <div className="flex items-center gap-2">
               <Power size={18} />
               Buses en Mantenimiento
+            </div>
+          </button>
+          <button
+            onClick={() => setTabActiva('graficos')}
+            className={`px-6 py-3 font-medium text-sm transition-colors ${
+              tabActiva === 'graficos'
+                ? 'border-b-2 border-orange-600 text-orange-600 bg-orange-50'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <PieChartIcon size={18} />
+              Gráficos
             </div>
           </button>
           <button
@@ -757,8 +792,6 @@ export default function AnalisisMantenimientosPage() {
             {/* Alerta SOAP por Vencer */}
             <div
               onClick={() => {
-                // Mock data - replace with actual SOAP expiring buses
-                const busesSOAP = busesMantenimientos.filter(bus => bus.estado_bus !== 'fuera_servicio').slice(0, 3);
                 abrirModalConDatos('Buses con SOAP por Vencer', busesSOAP);
               }}
               className="bg-white rounded-lg shadow-sm border-2 border-orange-300 p-6 cursor-pointer hover:shadow-lg hover:border-orange-500 transition-all transform hover:scale-105"
@@ -774,7 +807,7 @@ export default function AnalisisMantenimientosPage() {
                   </div>
                 </div>
                 <span className="px-4 py-2 bg-orange-100 text-orange-800 rounded-full text-2xl font-bold">
-                  {busesMantenimientos.length > 0 ? Math.min(5, busesMantenimientos.length) : 0}
+                  {busesSOAP.length}
                 </span>
               </div>
               <p className="text-sm text-gray-600 border-t border-gray-200 pt-4">
@@ -785,8 +818,6 @@ export default function AnalisisMantenimientosPage() {
             {/* Alerta Permiso Circulación por Vencer */}
             <div
               onClick={() => {
-                // Mock data - replace with actual permit expiring buses
-                const busesPermiso = busesMantenimientos.filter(bus => bus.estado_bus === 'operativo').slice(0, 2);
                 abrirModalConDatos('Buses con Permiso de Circulación por Vencer', busesPermiso);
               }}
               className="bg-white rounded-lg shadow-sm border-2 border-red-300 p-6 cursor-pointer hover:shadow-lg hover:border-red-500 transition-all transform hover:scale-105"
@@ -802,7 +833,7 @@ export default function AnalisisMantenimientosPage() {
                   </div>
                 </div>
                 <span className="px-4 py-2 bg-red-100 text-red-800 rounded-full text-2xl font-bold">
-                  {busesMantenimientos.length > 0 ? Math.min(3, busesMantenimientos.length) : 0}
+                  {busesPermiso.length}
                 </span>
               </div>
               <p className="text-sm text-gray-600 border-t border-gray-200 pt-4">
@@ -863,6 +894,88 @@ export default function AnalisisMantenimientosPage() {
                 )}
               </div>
             </div>
+          </div>
+        </>
+      )}
+
+      {/* TAB: Gráficos */}
+      {tabActiva === 'graficos' && (
+        <>
+          {/* Top Buses con Más Fallas */}
+          {topsData.top_buses_fallas && topsData.top_buses_fallas.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <BarChart3 size={24} className="text-red-600" />
+                Top Buses con Más Fallas
+              </h2>
+
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={topsData.top_buses_fallas.slice(0, 10)}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="patente" angle={-45} textAnchor="end" height={100} />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="total_fallas" fill="#ef4444" name="Cantidad de Fallas" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Análisis por Modelo y Rutas */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* Fallas por Modelo */}
+            {topsData.top_modelos_fallas && topsData.top_modelos_fallas.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <PieChartIcon size={24} className="text-indigo-600" />
+                  Fallas por Modelo de Bus
+                </h2>
+
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={topsData.top_modelos_fallas.slice(0, 5)}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ marca_modelo, total_fallas }) => `${marca_modelo}: ${total_fallas}`}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="total_fallas"
+                    >
+                      {topsData.top_modelos_fallas.slice(0, 5).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Rutas con Más Fallas - Chart */}
+            {topsData.rutas_criticas && topsData.rutas_criticas.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <MapPin size={24} className="text-rose-600" />
+                  Rutas con Más Fallas
+                </h2>
+
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={topsData.rutas_criticas.slice(0, 10)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="nombre" angle={-45} textAnchor="end" height={100} tick={{ fontSize: 11 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="total_incidentes" fill="#f43f5e" name="Total Incidentes" />
+                    <Bar dataKey="incidentes_graves" fill="#dc2626" name="Incidentes Graves" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
         </>
       )}
