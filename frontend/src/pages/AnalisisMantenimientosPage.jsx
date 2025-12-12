@@ -53,15 +53,13 @@ export default function AnalisisMantenimientosPage() {
         params.anio = anio;
       }
 
-      const [busesData, fallasData, costosData, emergenciaData, alertas, tops, soap, permiso] = await Promise.all([
+      const [busesData, fallasData, costosData, emergenciaData, alertas, tops] = await Promise.all([
         fetchBusesConMasMantenimientos(params),
         fetchTiposFallasMasComunes(params),
         fetchCostosMantenimientoPorBus(params),
         fetchBusesDisponiblesEmergencia(params),
         fetchMantenimientoAlertas(params),
-        fetchMantenimientoTops(params),
-        fetchBusesSOAPPorVencer({ dias: 30 }),
-        fetchBusesPermisoCirculacionPorVencer({ dias: 30 })
+        fetchMantenimientoTops(params)
       ]);
 
       setBusesMantenimientos(busesData || []);
@@ -70,8 +68,24 @@ export default function AnalisisMantenimientosPage() {
       setBusesEmergencia(emergenciaData || []);
       setAlertasData(alertas || { alertas: [], por_tipo: {} });
       setTopsData(tops || { top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] });
-      setBusesSOAP(soap?.data || []);
-      setBusesPermiso(permiso?.data || []);
+
+      // Intentar cargar SOAP y Permisos de forma separada con manejo de errores
+      // Estos endpoints pueden fallar sin romper toda la página
+      try {
+        const soap = await fetchBusesSOAPPorVencer({ dias: 30 });
+        setBusesSOAP(soap?.data || []);
+      } catch (error) {
+        console.warn('Error cargando buses SOAP por vencer:', error);
+        setBusesSOAP([]);
+      }
+
+      try {
+        const permiso = await fetchBusesPermisoCirculacionPorVencer({ dias: 30 });
+        setBusesPermiso(permiso?.data || []);
+      } catch (error) {
+        console.warn('Error cargando buses con permiso por vencer:', error);
+        setBusesPermiso([]);
+      }
     } catch (error) {
       console.error('Error cargando análisis de mantenimientos:', error);
       addNotification('error', 'Error', 'No se pudieron cargar los datos de mantenimiento.');

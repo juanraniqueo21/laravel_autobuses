@@ -49,19 +49,27 @@ export default function AnalisisRRHHPage() {
         params.anio = anio;
       }
 
-      const [alertas, ranking, resumen, altoRiesgo, evolucion] = await Promise.all([
+      const [alertas, ranking, resumen, altoRiesgo] = await Promise.all([
         fetchAlertasContratos(params),
         fetchRankingLicencias(params),
         fetchResumenContratos(params),
-        fetchEmpleadosAltoRiesgo(params),
-        fetchEvolucionLicencias({ meses: 12 }),
+        fetchEmpleadosAltoRiesgo(params)
       ]);
 
       setAlertasContratos(alertas.data || []);
       setRankingLicencias(ranking.data || []);
       setResumenContratos(resumen.data || {});
       setEmpleadosAltoRiesgo(altoRiesgo.data || []);
-      setEvolucionLicencias(evolucion.data || []);
+
+      // Intentar cargar evolución de forma separada con manejo de errores
+      // Este endpoint puede fallar sin romper toda la página
+      try {
+        const evolucion = await fetchEvolucionLicencias({ meses: 12 });
+        setEvolucionLicencias(evolucion.data || []);
+      } catch (error) {
+        console.warn('Error cargando evolución de licencias:', error);
+        setEvolucionLicencias([]);
+      }
     } catch (error) {
       console.error('Error cargando datos de RRHH:', error);
       addNotification('error', 'Error', 'No se pudieron cargar los datos de RRHH.');
