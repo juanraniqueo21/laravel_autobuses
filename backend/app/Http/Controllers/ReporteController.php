@@ -1343,30 +1343,42 @@ class ReporteController extends Controller
      */
     public function busesSOAPPorVencer(Request $request)
     {
-        $dias = $request->input('dias', 30); // Default 30 días
+        try {
+            $dias = $request->input('dias', 30); // Default 30 días
 
-        $buses = DB::table('buses')
-            ->whereNotNull('vencimiento_soap')
-            ->whereDate('vencimiento_soap', '>=', now())
-            ->whereDate('vencimiento_soap', '<=', now()->addDays($dias))
-            ->select(
-                'id',
-                'patente',
-                'marca',
-                'modelo',
-                'tipo_servicio',
-                'vencimiento_soap',
-                'estado',
-                DB::raw('DATEDIFF(vencimiento_soap, CURDATE()) as dias_restantes')
-            )
-            ->orderBy('dias_restantes', 'asc')
-            ->get();
+            $fechaInicio = now()->format('Y-m-d');
+            $fechaFin = now()->addDays($dias)->format('Y-m-d');
 
-        return response()->json([
-            'success' => true,
-            'data' => $buses,
-            'total' => $buses->count()
-        ]);
+            $buses = DB::table('buses')
+                ->whereNotNull('vencimiento_soap')
+                ->where('vencimiento_soap', '>=', $fechaInicio)
+                ->where('vencimiento_soap', '<=', $fechaFin)
+                ->select(
+                    'id',
+                    'patente',
+                    'marca',
+                    'modelo',
+                    'tipo_servicio',
+                    'vencimiento_soap',
+                    'estado',
+                    DB::raw('DATEDIFF(vencimiento_soap, CURDATE()) as dias_restantes')
+                )
+                ->orderBy('dias_restantes', 'asc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $buses,
+                'total' => $buses->count()
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error en busesSOAPPorVencer: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener buses con SOAP por vencer',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -1375,29 +1387,41 @@ class ReporteController extends Controller
      */
     public function busesPermisoCirculacionPorVencer(Request $request)
     {
-        $dias = $request->input('dias', 30); // Default 30 días
+        try {
+            $dias = $request->input('dias', 30); // Default 30 días
 
-        $buses = DB::table('buses')
-            ->whereNotNull('proxima_revision_tecnica')
-            ->whereDate('proxima_revision_tecnica', '>=', now())
-            ->whereDate('proxima_revision_tecnica', '<=', now()->addDays($dias))
-            ->select(
-                'id',
-                'patente',
-                'marca',
-                'modelo',
-                'tipo_servicio',
-                'proxima_revision_tecnica as vencimiento_permiso_circulacion',
-                'estado',
-                DB::raw('DATEDIFF(proxima_revision_tecnica, CURDATE()) as dias_restantes')
-            )
-            ->orderBy('dias_restantes', 'asc')
-            ->get();
+            $fechaInicio = now()->format('Y-m-d');
+            $fechaFin = now()->addDays($dias)->format('Y-m-d');
 
-        return response()->json([
-            'success' => true,
-            'data' => $buses,
-            'total' => $buses->count()
-        ]);
+            $buses = DB::table('buses')
+                ->whereNotNull('proxima_revision_tecnica')
+                ->where('proxima_revision_tecnica', '>=', $fechaInicio)
+                ->where('proxima_revision_tecnica', '<=', $fechaFin)
+                ->select(
+                    'id',
+                    'patente',
+                    'marca',
+                    'modelo',
+                    'tipo_servicio',
+                    'proxima_revision_tecnica as vencimiento_permiso_circulacion',
+                    'estado',
+                    DB::raw('DATEDIFF(proxima_revision_tecnica, CURDATE()) as dias_restantes')
+                )
+                ->orderBy('dias_restantes', 'asc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $buses,
+                'total' => $buses->count()
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error en busesPermisoCirculacionPorVencer: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener buses con permiso por vencer',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

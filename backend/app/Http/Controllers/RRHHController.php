@@ -281,62 +281,71 @@ class RRHHController extends Controller
      */
     public function evolucionLicenciasPorMes(Request $request)
     {
-        $anio = $request->input('anio', date('Y'));
-        $mesesAtras = $request->input('meses', 12); // Por defecto últimos 12 meses
+        try {
+            $anio = $request->input('anio', date('Y'));
+            $mesesAtras = $request->input('meses', 12); // Por defecto últimos 12 meses
 
-        $resultado = [];
+            $resultado = [];
 
-        for ($i = $mesesAtras - 1; $i >= 0; $i--) {
-            $fecha = Carbon::now()->subMonths($i);
-            $mes = $fecha->month;
-            $year = $fecha->year;
+            for ($i = $mesesAtras - 1; $i >= 0; $i--) {
+                $fecha = Carbon::now()->subMonths($i);
+                $mes = $fecha->month;
+                $year = $fecha->year;
 
-            $inicioMes = Carbon::create($year, $mes, 1)->startOfMonth();
-            $finMes = Carbon::create($year, $mes, 1)->endOfMonth();
+                $inicioMes = Carbon::create($year, $mes, 1)->startOfMonth()->format('Y-m-d');
+                $finMes = Carbon::create($year, $mes, 1)->endOfMonth()->format('Y-m-d');
 
-            // Contar licencias que se solapen con este mes
-            $licencias = DB::table('permisos_licencias')
-                ->where('estado', '!=', 'rechazado')
-                ->where(function($query) use ($inicioMes, $finMes) {
-                    $query->whereBetween('fecha_inicio', [$inicioMes, $finMes])
-                          ->orWhereBetween('fecha_fin', [$inicioMes, $finMes])
-                          ->orWhere(function($q) use ($inicioMes, $finMes) {
-                              $q->where('fecha_inicio', '<=', $inicioMes)
-                                ->where('fecha_fin', '>=', $finMes);
-                          });
-                })
-                ->select(
-                    DB::raw('COUNT(id) as total_licencias'),
-                    DB::raw('SUM(dias_totales) as total_dias')
-                )
-                ->first();
+                // Contar licencias que se solapen con este mes
+                $licencias = DB::table('permisos_licencias')
+                    ->where('estado', '!=', 'rechazado')
+                    ->where(function($query) use ($inicioMes, $finMes) {
+                        $query->whereBetween('fecha_inicio', [$inicioMes, $finMes])
+                              ->orWhereBetween('fecha_fin', [$inicioMes, $finMes])
+                              ->orWhere(function($q) use ($inicioMes, $finMes) {
+                                  $q->where('fecha_inicio', '<=', $inicioMes)
+                                    ->where('fecha_fin', '>=', $finMes);
+                              });
+                    })
+                    ->select(
+                        DB::raw('COUNT(id) as total_licencias'),
+                        DB::raw('SUM(dias_totales) as total_dias')
+                    )
+                    ->first();
 
-            // Contar empleados activos en ese mes
-            $empleadosActivos = DB::table('empleados')
-                ->where('estado', 'activo')
-                ->where('fecha_contratacion', '<=', $finMes)
-                ->where(function($query) use ($finMes) {
-                    $query->whereNull('fecha_termino')
-                          ->orWhere('fecha_termino', '>=', $finMes);
-                })
-                ->count();
+                // Contar empleados activos en ese mes
+                $empleadosActivos = DB::table('empleados')
+                    ->where('estado', 'activo')
+                    ->where('fecha_contratacion', '<=', $finMes)
+                    ->where(function($query) use ($finMes) {
+                        $query->whereNull('fecha_termino')
+                              ->orWhere('fecha_termino', '>=', $finMes);
+                    })
+                    ->count();
 
-            $resultado[] = [
-                'mes' => $fecha->format('M Y'),
-                'mes_numero' => $mes,
-                'anio' => $year,
-                'total_licencias' => (int) ($licencias->total_licencias ?? 0),
-                'total_dias' => (int) ($licencias->total_dias ?? 0),
-                'empleados_activos' => $empleadosActivos,
-                'promedio_dias_por_empleado' => $empleadosActivos > 0
-                    ? round(($licencias->total_dias ?? 0) / $empleadosActivos, 2)
-                    : 0,
-            ];
+                $resultado[] = [
+                    'mes' => $fecha->format('M Y'),
+                    'mes_numero' => $mes,
+                    'anio' => $year,
+                    'total_licencias' => (int) ($licencias->total_licencias ?? 0),
+                    'total_dias' => (int) ($licencias->total_dias ?? 0),
+                    'empleados_activos' => $empleadosActivos,
+                    'promedio_dias_por_empleado' => $empleadosActivos > 0
+                        ? round(($licencias->total_dias ?? 0) / $empleadosActivos, 2)
+                        : 0,
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $resultado,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error en evolucionLicenciasPorMes: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener evolución de licencias',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        return response()->json([
-            'success' => true,
-            'data' => $resultado,
-        ]);
     }
 }
