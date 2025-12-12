@@ -1493,6 +1493,30 @@ export const fetchMantenimientoTops = async (params = {}) => {
 };
 
 /**
+ * Obtener buses con SOAP próximo a vencer
+ */
+export const fetchBusesSOAPPorVencer = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/reportes/buses-soap-por-vencer${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * Obtener buses con permiso de circulación próximo a vencer
+ */
+export const fetchBusesPermisoCirculacionPorVencer = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/reportes/buses-permiso-circulacion-por-vencer${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
  * Activar bus en emergencia (cambiar estado de mantenimiento a operativo)
  * Suspende mantenimientos en proceso y activa el bus
  */

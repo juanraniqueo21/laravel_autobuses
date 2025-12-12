@@ -211,6 +211,8 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/buses-disponibles-emergencia', [ReporteController::class, 'busesDisponiblesEmergencia']);
         Route::get('/mantenimiento-alertas', [ReporteController::class, 'mantenimientoAlertas']);
         Route::get('/mantenimiento-tops', [ReporteController::class, 'mantenimientoTops']);
+        Route::get('/buses-soap-por-vencer', [ReporteController::class, 'busesSOAPPorVencer']);
+        Route::get('/buses-permiso-circulacion-por-vencer', [ReporteController::class, 'busesPermisoCirculacionPorVencer']);
 
         // Dashboard operativo y SLA
         Route::get('/dashboard-operativo', [ReporteController::class, 'dashboardOperativo']);
