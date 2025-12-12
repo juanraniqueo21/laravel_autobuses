@@ -13,19 +13,56 @@ class RRHHController extends Controller
     /**
      * Alertas de contratos próximos a vencer
      * Retorna empleados con contrato "plazo_fijo" que vencen en los próximos 30 días
+     * Filtros: tipo_contrato, estado_empleado, fecha_inicio, fecha_fin, severidad, buscar
      */
-    public function alertasContratos()
+    public function alertasContratos(Request $request)
     {
         $hoy = Carbon::now();
-        $limite = $hoy->copy()->addDays(30);
+        $diasVencimiento = $request->input('dias_vencimiento', 30); // Configurable
+        $limite = $hoy->copy()->addDays($diasVencimiento);
 
-        $empleados = Empleado::with(['user'])
-            ->where('tipo_contrato', 'plazo_fijo')
-            ->where('estado', 'activo')
-            ->whereNotNull('fecha_termino')
-            ->whereBetween('fecha_termino', [$hoy, $limite])
-            ->orderBy('fecha_termino', 'asc')
-            ->get();
+        $query = Empleado::with(['user'])
+            ->whereNotNull('fecha_termino');
+
+        // Filtro por tipo de contrato
+        if ($request->has('tipo_contrato') && $request->tipo_contrato) {
+            $query->where('tipo_contrato', $request->tipo_contrato);
+        } else {
+            // Por defecto solo plazo_fijo
+            $query->where('tipo_contrato', 'plazo_fijo');
+        }
+
+        // Filtro por estado del empleado
+        if ($request->has('estado_empleado') && $request->estado_empleado) {
+            $query->where('estado', $request->estado_empleado);
+        } else {
+            $query->where('estado', 'activo');
+        }
+
+        // Filtro por rango de fechas de término
+        if ($request->has('fecha_inicio') && $request->fecha_inicio) {
+            $query->where('fecha_termino', '>=', $request->fecha_inicio);
+        } else {
+            $query->where('fecha_termino', '>=', $hoy);
+        }
+
+        if ($request->has('fecha_fin') && $request->fecha_fin) {
+            $query->where('fecha_termino', '<=', $request->fecha_fin);
+        } else {
+            $query->where('fecha_termino', '<=', $limite);
+        }
+
+        // Búsqueda por nombre/email
+        if ($request->has('buscar') && $request->buscar) {
+            $buscar = $request->buscar;
+            $query->whereHas('user', function($q) use ($buscar) {
+                $q->where('nombre', 'LIKE', "%{$buscar}%")
+                  ->orWhere('apellido', 'LIKE', "%{$buscar}%")
+                  ->orWhere('email', 'LIKE', "%{$buscar}%");
+            });
+        }
+
+        $empleados = $query->orderBy('fecha_termino', 'asc')->get();
 
         $alertas = $empleados->map(function ($empleado) use ($hoy) {
             $diasRestantes = Carbon::parse($empleado->fecha_termino)->diffInDays($hoy);
@@ -46,10 +83,18 @@ class RRHHController extends Controller
             ];
         });
 
+        // Filtro por severidad (post-procesamiento)
+        if ($request->has('severidad') && $request->severidad) {
+            $alertas = $alertas->filter(function($alerta) use ($request) {
+                return $alerta['severidad'] === $request->severidad;
+            })->values();
+        }
+
         return response()->json([
             'success' => true,
             'data' => $alertas,
             'total' => $alertas->count(),
+            'filtros_aplicados' => $request->all(),
         ]);
     }
 
@@ -153,11 +198,29 @@ class RRHHController extends Controller
     /**
      * Resumen de contratos por tipo
      * Retorna conteo de empleados por tipo de contrato
+     * Filtros: estado_empleado, fecha_inicio, fecha_fin
      */
-    public function resumenContratos()
+    public function resumenContratos(Request $request)
     {
-        $resumen = Empleado::select('tipo_contrato', DB::raw('COUNT(*) as total'))
-            ->where('estado', '!=', 'terminado')
+        $query = Empleado::query();
+
+        // Filtro por estado del empleado
+        if ($request->has('estado_empleado') && $request->estado_empleado) {
+            $query->where('estado', $request->estado_empleado);
+        } else {
+            $query->where('estado', '!=', 'terminado');
+        }
+
+        // Filtro por rango de fechas de contratación
+        if ($request->has('fecha_inicio') && $request->fecha_inicio) {
+            $query->where('fecha_contratacion', '>=', $request->fecha_inicio);
+        }
+
+        if ($request->has('fecha_fin') && $request->fecha_fin) {
+            $query->where('fecha_contratacion', '<=', $request->fecha_fin);
+        }
+
+        $resumen = $query->select('tipo_contrato', DB::raw('COUNT(*) as total'))
             ->groupBy('tipo_contrato')
             ->get();
 
@@ -173,9 +236,11 @@ class RRHHController extends Controller
 
         $estadisticas['total_activos'] = array_sum($estadisticas);
 
-        // Contratos que vencen en 30 días
+        // Contratos que vencen en 30 días (o rango personalizado)
         $hoy = Carbon::now();
-        $limite = $hoy->copy()->addDays(30);
+        $diasVencimiento = $request->input('dias_vencimiento', 30);
+        $limite = $hoy->copy()->addDays($diasVencimiento);
+
         $vencenProximo = Empleado::where('tipo_contrato', 'plazo_fijo')
             ->where('estado', 'activo')
             ->whereNotNull('fecha_termino')
@@ -187,23 +252,41 @@ class RRHHController extends Controller
         return response()->json([
             'success' => true,
             'data' => $estadisticas,
+            'filtros_aplicados' => $request->all(),
         ]);
     }
 
     /**
      * Empleados con alto riesgo de no renovación
      * Cruza datos de contratos próximos a vencer + muchas licencias
+     * Filtros: dias_vencimiento, min_licencias, tipo_contrato, estado_empleado
      */
-    public function empleadosAltoRiesgo()
+    public function empleadosAltoRiesgo(Request $request)
     {
         $hoy = Carbon::now();
-        $limite = $hoy->copy()->addDays(60); // 60 días de anticipación
+        $diasVencimiento = $request->input('dias_vencimiento', 60);
+        $minLicencias = $request->input('min_licencias', 3);
+        $limite = $hoy->copy()->addDays($diasVencimiento);
 
-        $empleados = DB::table('empleados')
+        $query = DB::table('empleados')
             ->join('users', 'empleados.user_id', '=', 'users.id')
-            ->leftJoin('permisos_licencias', function($join) {
+            ->leftJoin('permisos_licencias', function($join) use ($request) {
                 $join->on('empleados.id', '=', 'permisos_licencias.empleado_id')
                      ->where('permisos_licencias.estado', '!=', 'rechazado');
+
+                // Filtro por tipo de licencia
+                if ($request->has('tipo_licencia') && $request->tipo_licencia) {
+                    $join->where('permisos_licencias.tipo', $request->tipo_licencia);
+                }
+
+                // Filtro por rango de fechas de licencias
+                if ($request->has('fecha_inicio') && $request->fecha_inicio) {
+                    $join->where('permisos_licencias.fecha_inicio', '>=', $request->fecha_inicio);
+                }
+
+                if ($request->has('fecha_fin') && $request->fecha_fin) {
+                    $join->where('permisos_licencias.fecha_inicio', '<=', $request->fecha_fin);
+                }
             })
             ->select(
                 'empleados.id',
@@ -218,11 +301,24 @@ class RRHHController extends Controller
                 DB::raw('COUNT(permisos_licencias.id) as total_licencias'),
                 DB::raw('COALESCE(SUM(permisos_licencias.dias_totales), 0) as total_dias_licencia')
             )
-            ->where('empleados.tipo_contrato', 'plazo_fijo')
-            ->where('empleados.estado', 'activo')
             ->whereNotNull('empleados.fecha_termino')
-            ->whereBetween('empleados.fecha_termino', [$hoy, $limite])
-            ->groupBy(
+            ->whereBetween('empleados.fecha_termino', [$hoy, $limite]);
+
+        // Filtro por tipo de contrato
+        if ($request->has('tipo_contrato') && $request->tipo_contrato) {
+            $query->where('empleados.tipo_contrato', $request->tipo_contrato);
+        } else {
+            $query->where('empleados.tipo_contrato', 'plazo_fijo');
+        }
+
+        // Filtro por estado del empleado
+        if ($request->has('estado_empleado') && $request->estado_empleado) {
+            $query->where('empleados.estado', $request->estado_empleado);
+        } else {
+            $query->where('empleados.estado', 'activo');
+        }
+
+        $empleados = $query->groupBy(
                 'empleados.id',
                 'empleados.numero_empleado',
                 'empleados.tipo_contrato',
@@ -233,7 +329,7 @@ class RRHHController extends Controller
                 'users.apellido',
                 'users.email'
             )
-            ->havingRaw('COUNT(permisos_licencias.id) >= 3') // Al menos 3 licencias
+            ->havingRaw("COUNT(permisos_licencias.id) >= {$minLicencias}")
             ->orderBy('empleados.fecha_termino', 'asc')
             ->get();
 
@@ -259,6 +355,7 @@ class RRHHController extends Controller
             'success' => true,
             'data' => $resultado,
             'total' => $resultado->count(),
+            'filtros_aplicados' => $request->all(),
         ]);
     }
 }
