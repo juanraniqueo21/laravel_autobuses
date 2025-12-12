@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, AlertTriangle, FileText, TrendingDown, Ban, Calendar, PieChart as PieChartIcon, BarChart3, RefreshCw } from 'lucide-react';
+import { Users, AlertTriangle, FileText, TrendingDown, Ban, Calendar, PieChart as PieChartIcon, BarChart3 } from 'lucide-react';
 import {
   fetchAlertasContratos,
   fetchRankingLicencias,
@@ -10,9 +10,6 @@ import {
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import MetricCard from '../components/cards/MetricCard';
 import { useNotifications } from '../context/NotificationContext';
-import AdvancedFilters from '../components/filters/AdvancedFilters';
-import { formatFecha, formatCurrency, buildFilterParams } from '../utils/formatters';
-import { getTipoContratoColor, getSeveridadColor, getCantidadLicenciasColor } from '../utils/colors';
 
 export default function AnalisisRRHHPage() {
   const [alertasContratos, setAlertasContratos] = useState([]);
@@ -21,31 +18,24 @@ export default function AnalisisRRHHPage() {
   const [empleadosAltoRiesgo, setEmpleadosAltoRiesgo] = useState([]);
   const [loading, setLoading] = useState(true);
   const [procesandoBaja, setProcesandoBaja] = useState(null);
-  const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
-
-  // Estado de filtros avanzados
-  const [filters, setFilters] = useState({
-    tipo_contrato: '',
-    estado_empleado: '',
-    fecha_inicio: '',
-    fecha_fin: '',
-    severidad: '',
-    buscar: '',
-    tipo_licencia: '',
-    dias_vencimiento: '30',
-    min_licencias: '3'
-  });
+  const [mes, setMes] = useState(new Date().getMonth() + 1);
+  const [anio, setAnio] = useState(new Date().getFullYear());
+  const [filtroActivo, setFiltroActivo] = useState(false);
 
   const { addNotification } = useNotifications();
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [mes, anio, filtroActivo]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const params = buildFilterParams(filters);
+      const params = {};
+      if (filtroActivo) {
+        params.mes = mes;
+        params.anio = anio;
+      }
 
       const [alertas, ranking, resumen, altoRiesgo] = await Promise.all([
         fetchAlertasContratos(params),
@@ -58,37 +48,12 @@ export default function AnalisisRRHHPage() {
       setRankingLicencias(ranking.data || []);
       setResumenContratos(resumen.data || {});
       setEmpleadosAltoRiesgo(altoRiesgo.data || []);
-      setUltimaActualizacion(new Date());
     } catch (error) {
       console.error('Error cargando datos de RRHH:', error);
       addNotification('error', 'Error', 'No se pudieron cargar los datos de RRHH.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleApplyFilters = () => {
-    loadData();
-  };
-
-  const handleClearFilters = () => {
-    setFilters({
-      tipo_contrato: '',
-      estado_empleado: '',
-      fecha_inicio: '',
-      fecha_fin: '',
-      severidad: '',
-      buscar: '',
-      tipo_licencia: '',
-      dias_vencimiento: '30',
-      min_licencias: '3'
-    });
-    setTimeout(() => loadData(), 100);
-  };
-
-  const handleRefresh = () => {
-    addNotification('info', 'Actualizando', 'Recargando datos de RRHH...');
-    loadData();
   };
 
   const handleDarDeBaja = async (empleadoId, nombreCompleto) => {
@@ -109,83 +74,38 @@ export default function AnalisisRRHHPage() {
     }
   };
 
-  // Configuración de filtros avanzados
-  const filterConfig = [
-    {
-      name: 'tipo_contrato',
-      label: 'Tipo de Contrato',
-      type: 'select',
-      options: [
-        { value: 'indefinido', label: 'Indefinido' },
-        { value: 'plazo_fijo', label: 'Plazo Fijo' },
-        { value: 'practicante', label: 'Practicante' }
-      ]
-    },
-    {
-      name: 'estado_empleado',
-      label: 'Estado Empleado',
-      type: 'select',
-      options: [
-        { value: 'activo', label: 'Activo' },
-        { value: 'licencia', label: 'En Licencia' },
-        { value: 'suspendido', label: 'Suspendido' },
-        { value: 'terminado', label: 'Terminado' }
-      ]
-    },
-    {
-      name: 'tipo_licencia',
-      label: 'Tipo de Licencia',
-      type: 'select',
-      options: [
-        { value: 'medica', label: 'Médica' },
-        { value: 'administrativa', label: 'Administrativa' },
-        { value: 'permiso', label: 'Permiso' }
-      ]
-    },
-    {
-      name: 'severidad',
-      label: 'Severidad',
-      type: 'select',
-      options: [
-        { value: 'critica', label: 'Crítica' },
-        { value: 'alta', label: 'Alta' },
-        { value: 'media', label: 'Media' },
-        { value: 'baja', label: 'Baja' }
-      ]
-    },
-    {
-      name: 'fecha_inicio',
-      label: 'Fecha Inicio',
-      type: 'date'
-    },
-    {
-      name: 'fecha_fin',
-      label: 'Fecha Fin',
-      type: 'date'
-    },
-    {
-      name: 'buscar',
-      label: 'Buscar Empleado',
-      type: 'text',
-      placeholder: 'Nombre, email...'
-    },
-    {
-      name: 'dias_vencimiento',
-      label: 'Días para Vencimiento',
-      type: 'number',
-      placeholder: '30',
-      min: 1,
-      max: 365
-    },
-    {
-      name: 'min_licencias',
-      label: 'Mínimo de Licencias',
-      type: 'number',
-      placeholder: '3',
-      min: 1,
-      max: 50
-    }
-  ];
+  const getSeveridadColor = (severidad) => {
+    const colors = {
+      'critica': 'bg-red-100 text-red-800 border-red-300',
+      'alta': 'bg-orange-100 text-orange-800 border-orange-300',
+      'media': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+      'baja': 'bg-green-100 text-green-800 border-green-300',
+    };
+    return colors[severidad] || 'bg-gray-100 text-gray-800 border-gray-300';
+  };
+
+  const getTipoContratoColor = (tipo) => {
+    const colors = {
+      'indefinido': 'bg-green-100 text-green-800',
+      'plazo_fijo': 'bg-yellow-100 text-yellow-800',
+      'practicante': 'bg-blue-100 text-blue-800',
+    };
+    return colors[tipo] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getMesNombre = (m) => {
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    return meses[m - 1];
+  };
+
+  const formatFecha = (fechaString) => {
+    if (!fechaString) return 'N/A';
+    // Si la fecha viene con formato ISO (2025-11-10T03:00:00.000000Z), extraer solo la fecha
+    const fecha = fechaString.split('T')[0];
+    // Convertir de YYYY-MM-DD a DD-MM-YYYY
+    const [anio, mes, dia] = fecha.split('-');
+    return `${dia}-${mes}-${anio}`;
+  };
 
   if (loading) {
     return <div className="p-10 text-center text-gray-500 animate-pulse">Cargando análisis de RRHH...</div>;
@@ -196,39 +116,61 @@ export default function AnalisisRRHHPage() {
 
       {/* Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-900 to-blue-800 p-8 text-white shadow-lg mb-8">
-        <div className="relative z-10 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Dashboard de Recursos Humanos</h1>
-            <p className="mt-2 text-blue-200 max-w-xl">
-              Gestión de contratos, análisis de rendimiento y alertas de personal
-            </p>
-            {ultimaActualizacion && (
-              <p className="mt-2 text-xs text-blue-300">
-                Última actualización: {ultimaActualizacion.toLocaleString('es-CL')}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium transition-colors flex items-center gap-2 border border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-            Actualizar
-          </button>
+        <div className="relative z-10">
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard de Recursos Humanos</h1>
+          <p className="mt-2 text-blue-200 max-w-xl">
+            Gestión de contratos, análisis de rendimiento y alertas de personal
+          </p>
         </div>
         <Users className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Filtros Avanzados */}
-      <AdvancedFilters
-        filters={filters}
-        onFilterChange={setFilters}
-        onApplyFilters={handleApplyFilters}
-        onClearFilters={handleClearFilters}
-        filterConfig={filterConfig}
-        isCollapsed={true}
-      />
+      {/* Filtros de Período */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
+        <div className="flex items-center gap-4">
+          <Calendar size={20} className="text-gray-500" />
+
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filtroActivo}
+                onChange={(e) => setFiltroActivo(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm font-semibold text-gray-700">Filtrar por período</span>
+            </label>
+          </div>
+
+          {filtroActivo && (
+            <>
+              <select
+                value={mes}
+                onChange={(e) => setMes(parseInt(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                  <option key={m} value={m}>{getMesNombre(m)}</option>
+                ))}
+              </select>
+
+              <select
+                value={anio}
+                onChange={(e) => setAnio(parseInt(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+              >
+                {[2024, 2025, 2026].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {!filtroActivo && (
+            <span className="text-sm text-gray-500 italic">Mostrando todos los datos disponibles</span>
+          )}
+        </div>
+      </div>
 
       {/* Métricas Resumen */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -381,7 +323,11 @@ export default function AnalisisRRHHPage() {
                     </span>
                   </td>
                   <td className="px-4 py-4 text-center">
-                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${getCantidadLicenciasColor(empleado.total_licencias)}`}>
+                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                      empleado.total_licencias >= 5 ? 'bg-red-100 text-red-800' :
+                      empleado.total_licencias >= 3 ? 'bg-orange-100 text-orange-800' :
+                      'bg-green-100 text-green-800'
+                    }`}>
                       {empleado.total_licencias}
                     </span>
                   </td>
