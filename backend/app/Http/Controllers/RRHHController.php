@@ -62,6 +62,14 @@ class RRHHController extends Controller
         // Parámetros opcionales para filtrar por fecha
         $fechaInicio = $request->input('fecha_inicio');
         $fechaFin = $request->input('fecha_fin');
+        $mes = $request->input('mes');
+        $anio = $request->input('anio');
+
+        // Si se proporciona mes y año, calcular el rango de fechas
+        if ($mes && $anio) {
+            $fechaInicio = Carbon::create($anio, $mes, 1)->startOfMonth()->toDateString();
+            $fechaFin = Carbon::create($anio, $mes, 1)->endOfMonth()->toDateString();
+        }
 
         $query = DB::table('empleados')
             ->join('users', 'empleados.user_id', '=', 'users.id')
@@ -69,11 +77,16 @@ class RRHHController extends Controller
                 $join->on('empleados.id', '=', 'permisos_licencias.empleado_id')
                      ->where('permisos_licencias.estado', '!=', 'rechazado');
 
-                if ($fechaInicio) {
-                    $join->where('permisos_licencias.fecha_inicio', '>=', $fechaInicio);
-                }
-                if ($fechaFin) {
-                    $join->where('permisos_licencias.fecha_inicio', '<=', $fechaFin);
+                if ($fechaInicio && $fechaFin) {
+                    // Filtrar licencias que se solapen con el período seleccionado
+                    $join->where(function($query) use ($fechaInicio, $fechaFin) {
+                        $query->whereBetween('permisos_licencias.fecha_inicio', [$fechaInicio, $fechaFin])
+                              ->orWhereBetween('permisos_licencias.fecha_fin', [$fechaInicio, $fechaFin])
+                              ->orWhere(function($q) use ($fechaInicio, $fechaFin) {
+                                  $q->where('permisos_licencias.fecha_inicio', '<=', $fechaInicio)
+                                    ->where('permisos_licencias.fecha_fin', '>=', $fechaFin);
+                              });
+                    });
                 }
             })
             ->select(

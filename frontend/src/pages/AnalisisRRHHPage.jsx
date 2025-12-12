@@ -247,14 +247,14 @@ export default function AnalisisRRHHPage() {
         </div>
       </div>
 
-      {/* Top 5 Empleados con Más Licencias */}
+      {/* Top 10 Empleados con Más Licencias */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <TrendingDown size={20} className="text-orange-600" />
-            Top 5 - Empleados con Más Licencias
+            Top 10 - Empleados con Más Licencias
           </h2>
-          {rankingLicencias.length > 5 && (
+          {rankingLicencias.length > 10 && (
             <button
               onClick={() => abrirModalConDatos('Ranking Completo de Licencias', rankingLicencias)}
               className="text-sm text-blue-600 hover:text-blue-800 font-medium"
@@ -264,8 +264,8 @@ export default function AnalisisRRHHPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          {rankingFiltrado.slice(0, 5).map((empleado, index) => (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {rankingFiltrado.slice(0, 10).map((empleado, index) => (
             <div
               key={empleado.id}
               className={`border-2 rounded-lg p-3 ${
@@ -312,7 +312,7 @@ export default function AnalisisRRHHPage() {
       </div>
 
       {/* Gráficos en Grid Compacto */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
 
         {/* Distribución de Contratos */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
@@ -343,19 +343,111 @@ export default function AnalisisRRHHPage() {
           </ResponsiveContainer>
         </div>
 
-        {/* Top Licencias */}
+        {/* Top 10 Licencias */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Top 5 - Días de Licencia</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Top 10 - Licencias y Días</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={rankingLicencias.slice(0, 5)}>
+            <BarChart data={rankingLicencias.slice(0, 10)}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="nombre_completo" angle={-45} textAnchor="end" height={80} tick={{ fontSize: 10 }} />
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="total_dias_licencia" fill="#ef4444" name="Días Totales" />
+              <Bar dataKey="total_licencias" fill="#3b82f6" name="Cantidad de Licencias" />
+              <Bar dataKey="total_dias_licencia" fill="#ef4444" name="Total Días" />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Gráficos Adicionales para Gerencia */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Distribución de Licencias por Tipo */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Tipos de Licencias</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie
+                data={[
+                  {
+                    name: 'Médicas',
+                    value: rankingLicencias.reduce((sum, emp) => sum + (emp.licencias_medicas || 0), 0)
+                  },
+                  {
+                    name: 'Administrativas',
+                    value: rankingLicencias.reduce((sum, emp) => sum + (emp.licencias_administrativas || 0), 0)
+                  },
+                  {
+                    name: 'Permisos',
+                    value: rankingLicencias.reduce((sum, emp) => sum + (emp.permisos || 0), 0)
+                  }
+                ]}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, value }) => value > 0 ? `${name}: ${value}` : null}
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                <Cell fill="#ef4444" />
+                <Cell fill="#3b82f6" />
+                <Cell fill="#10b981" />
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Empleados de Alto Riesgo */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900">Empleados de Alto Riesgo</h3>
+            {empleadosAltoRiesgo.length > 0 && (
+              <span className="px-3 py-1 bg-red-100 text-red-800 text-sm font-bold rounded-full">
+                {empleadosAltoRiesgo.length} alertas
+              </span>
+            )}
+          </div>
+          {empleadosAltoRiesgo.length === 0 ? (
+            <div className="flex items-center justify-center h-[250px] text-gray-400">
+              <div className="text-center">
+                <AlertTriangle size={48} className="mx-auto mb-2" />
+                <p>No hay empleados de alto riesgo</p>
+              </div>
+            </div>
+          ) : (
+            <div className="max-h-[250px] overflow-y-auto space-y-2">
+              {empleadosAltoRiesgo.slice(0, 5).map((emp) => (
+                <div key={emp.id} className="p-3 border-l-4 border-red-500 bg-red-50 rounded">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-sm text-gray-900">{emp.nombre_completo}</p>
+                      <p className="text-xs text-gray-600">
+                        {emp.total_licencias} licencias • {emp.total_dias_licencia} días
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-semibold text-red-700">
+                        Vence en {emp.dias_restantes} días
+                      </p>
+                      <p className="text-xs text-gray-500">{formatFecha(emp.fecha_termino)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {empleadosAltoRiesgo.length > 5 && (
+                <button
+                  onClick={() => abrirModalConDatos('Empleados de Alto Riesgo - Completo', empleadosAltoRiesgo)}
+                  className="w-full py-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Ver todos ({empleadosAltoRiesgo.length})
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
