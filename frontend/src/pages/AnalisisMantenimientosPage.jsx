@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wrench, AlertTriangle, DollarSign, Calendar, TrendingUp, Power, PieChart as PieChartIcon, BarChart3, MapPin } from 'lucide-react';
+import { Wrench, AlertTriangle, DollarSign, Calendar, TrendingUp, Power, PieChart as PieChartIcon, BarChart3, MapPin, RefreshCw } from 'lucide-react';
 import {
   fetchBusesConMasMantenimientos,
   fetchTiposFallasMasComunes,
@@ -12,6 +12,9 @@ import {
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import MetricCard from '../components/cards/MetricCard';
 import { useNotifications } from '../context/NotificationContext';
+import AdvancedFilters from '../components/filters/AdvancedFilters';
+import { formatFecha, formatCurrency, buildFilterParams, getMesNombre } from '../utils/formatters';
+import { getTipoServicioColor, getTipoMantenimientoColor } from '../utils/colors';
 
 export default function AnalisisMantenimientosPage() {
   const [busesMantenimientos, setBusesMantenimientos] = useState([]);
@@ -21,25 +24,30 @@ export default function AnalisisMantenimientosPage() {
   const [alertasData, setAlertasData] = useState({ alertas: [], por_tipo: {} });
   const [topsData, setTopsData] = useState({ top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] });
   const [loading, setLoading] = useState(true);
-  const [mes, setMes] = useState(new Date().getMonth() + 1);
-  const [anio, setAnio] = useState(new Date().getFullYear());
   const [activandoBus, setActivandoBus] = useState(null);
-  const [filtroActivo, setFiltroActivo] = useState(false);
+  const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
+
+  // Estado de filtros avanzados
+  const [filters, setFilters] = useState({
+    tipo_mantenimiento: '',
+    estado: '',
+    fecha_inicio: '',
+    fecha_fin: '',
+    patente: '',
+    costo_min: '',
+    costo_max: ''
+  });
 
   const { addNotification } = useNotifications();
 
   useEffect(() => {
     loadData();
-  }, [mes, anio, filtroActivo]);
+  }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const params = {};
-      if (filtroActivo) {
-        params.mes = mes;
-        params.anio = anio;
-      }
+      const params = buildFilterParams(filters);
 
       const [busesData, fallasData, costosData, emergenciaData, alertas, tops] = await Promise.all([
         fetchBusesConMasMantenimientos(params),
@@ -56,12 +64,35 @@ export default function AnalisisMantenimientosPage() {
       setBusesEmergencia(emergenciaData || []);
       setAlertasData(alertas || { alertas: [], por_tipo: {} });
       setTopsData(tops || { top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] });
+      setUltimaActualizacion(new Date());
     } catch (error) {
       console.error('Error cargando análisis de mantenimientos:', error);
       addNotification('error', 'Error', 'No se pudieron cargar los datos de mantenimiento.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleApplyFilters = () => {
+    loadData();
+  };
+
+  const handleClearFilters = () => {
+    setFilters({
+      tipo_mantenimiento: '',
+      estado: '',
+      fecha_inicio: '',
+      fecha_fin: '',
+      patente: '',
+      costo_min: '',
+      costo_max: ''
+    });
+    setTimeout(() => loadData(), 100);
+  };
+
+  const handleRefresh = () => {
+    addNotification('info', 'Actualizando', 'Recargando datos de mantenimiento...');
+    loadData();
   };
 
   const handleActivarBusEmergencia = async (busId, patente) => {
@@ -73,7 +104,7 @@ export default function AnalisisMantenimientosPage() {
       setActivandoBus(busId);
       await activarBusEmergencia(busId);
       addNotification('success', 'Bus Activado', `El bus ${patente} ha sido activado para servicio de emergencia.`);
-      loadData(); // Recargar datos
+      loadData();
     } catch (error) {
       console.error('Error activando bus:', error);
       addNotification('error', 'Error', 'No se pudo activar el bus en emergencia.');
@@ -82,33 +113,59 @@ export default function AnalisisMantenimientosPage() {
     }
   };
 
-  const getTipoServicioColor = (tipo) => {
-    const colors = {
-      'clasico': 'bg-gray-100 text-gray-800 border-gray-300',
-      'semicama': 'bg-blue-100 text-blue-800 border-blue-300',
-      'cama': 'bg-purple-100 text-purple-800 border-purple-300',
-      'premium': 'bg-amber-100 text-amber-800 border-amber-300'
-    };
-    return colors[tipo?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-300';
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount || 0);
-  };
-
-  const getMesNombre = (m) => {
-    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    return meses[m - 1];
-  };
-
-  const formatFecha = (fechaString) => {
-    if (!fechaString) return 'N/A';
-    // Si la fecha viene con formato ISO (2025-11-10T03:00:00.000000Z), extraer solo la fecha
-    const fecha = fechaString.split('T')[0];
-    // Convertir de YYYY-MM-DD a DD-MM-YYYY
-    const [anio, mes, dia] = fecha.split('-');
-    return `${dia}-${mes}-${anio}`;
-  };
+  // Configuración de filtros avanzados
+  const filterConfig = [
+    {
+      name: 'tipo_mantenimiento',
+      label: 'Tipo de Mantenimiento',
+      type: 'select',
+      options: [
+        { value: 'preventivo', label: 'Preventivo' },
+        { value: 'correctivo', label: 'Correctivo' },
+        { value: 'revision', label: 'Revisión Técnica' }
+      ]
+    },
+    {
+      name: 'estado',
+      label: 'Estado',
+      type: 'select',
+      options: [
+        { value: 'en_proceso', label: 'En Proceso' },
+        { value: 'completado', label: 'Completado' },
+        { value: 'cancelado', label: 'Cancelado' }
+      ]
+    },
+    {
+      name: 'fecha_inicio',
+      label: 'Fecha Inicio',
+      type: 'date'
+    },
+    {
+      name: 'fecha_fin',
+      label: 'Fecha Fin',
+      type: 'date'
+    },
+    {
+      name: 'patente',
+      label: 'Buscar por Patente',
+      type: 'text',
+      placeholder: 'Ej: AB-1234'
+    },
+    {
+      name: 'costo_min',
+      label: 'Costo Mínimo',
+      type: 'number',
+      placeholder: '0',
+      min: 0
+    },
+    {
+      name: 'costo_max',
+      label: 'Costo Máximo',
+      type: 'number',
+      placeholder: '10000000',
+      min: 0
+    }
+  ];
 
   // Calcular métricas totales
   const totalMantenimientos = busesMantenimientos.reduce((sum, bus) => sum + (bus.total_mantenimientos || 0), 0);
@@ -126,63 +183,39 @@ export default function AnalisisMantenimientosPage() {
 
       {/* Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-orange-900 to-orange-800 p-8 text-white shadow-lg mb-8">
-        <div className="relative z-10">
-          <h1 className="text-3xl font-bold tracking-tight">Análisis de Mantenimientos</h1>
-          <p className="mt-2 text-orange-200 max-w-xl">
-            Análisis detallado del historial de mantenimientos, fallas y costos de la flota
-          </p>
+        <div className="relative z-10 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Análisis de Mantenimientos</h1>
+            <p className="mt-2 text-orange-200 max-w-xl">
+              Análisis detallado del historial de mantenimientos, fallas y costos de la flota
+            </p>
+            {ultimaActualizacion && (
+              <p className="mt-2 text-xs text-orange-300">
+                Última actualización: {ultimaActualizacion.toLocaleString('es-CL')}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium transition-colors flex items-center gap-2 border border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            Actualizar
+          </button>
         </div>
         <Wrench className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Filtros de Período */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
-        <div className="flex items-center gap-4">
-          <Calendar size={20} className="text-gray-500" />
-
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={filtroActivo}
-                onChange={(e) => setFiltroActivo(e.target.checked)}
-                className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
-              />
-              <span className="text-sm font-semibold text-gray-700">Filtrar por período</span>
-            </label>
-          </div>
-
-          {filtroActivo && (
-            <>
-              <select
-                value={mes}
-                onChange={(e) => setMes(parseInt(e.target.value))}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
-              >
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-                  <option key={m} value={m}>{getMesNombre(m)}</option>
-                ))}
-              </select>
-
-              <select
-                value={anio}
-                onChange={(e) => setAnio(parseInt(e.target.value))}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
-              >
-                {[2024, 2025, 2026].map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </>
-          )}
-
-          {filtroActivo && (
-            <div className="ml-auto px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800 font-medium">
-              Mostrando: {getMesNombre(mes)} {anio}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Filtros Avanzados */}
+      <AdvancedFilters
+        filters={filters}
+        onFilterChange={setFilters}
+        onApplyFilters={handleApplyFilters}
+        onClearFilters={handleClearFilters}
+        filterConfig={filterConfig}
+        isCollapsed={true}
+      />
 
       {/* Métricas Resumen */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
