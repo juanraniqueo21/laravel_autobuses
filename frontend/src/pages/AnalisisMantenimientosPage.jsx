@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wrench, AlertTriangle, DollarSign, Calendar, TrendingUp, Power, PieChart as PieChartIcon, BarChart3, MapPin } from 'lucide-react';
+import { Wrench, AlertTriangle, DollarSign, Calendar, TrendingUp, Power, PieChart as PieChartIcon, BarChart3, MapPin, Search, X, RefreshCw, ClipboardCheck, FileText } from 'lucide-react';
 import {
   fetchBusesConMasMantenimientos,
   fetchTiposFallasMasComunes,
@@ -25,6 +25,14 @@ export default function AnalisisMantenimientosPage() {
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [activandoBus, setActivandoBus] = useState(null);
   const [filtroActivo, setFiltroActivo] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+
+  // Tabs
+  const [tabActiva, setTabActiva] = useState('general');
+
+  // Modal
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [datosModal, setDatosModal] = useState({ titulo: '', datos: [] });
 
   const { addNotification } = useNotifications();
 
@@ -82,6 +90,11 @@ export default function AnalisisMantenimientosPage() {
     }
   };
 
+  const abrirModalConDatos = (titulo, datos) => {
+    setDatosModal({ titulo, datos });
+    setModalAbierto(true);
+  };
+
   const getTipoServicioColor = (tipo) => {
     const colors = {
       'clasico': 'bg-gray-100 text-gray-800 border-gray-300',
@@ -110,6 +123,19 @@ export default function AnalisisMantenimientosPage() {
     return `${dia}-${mes}-${anio}`;
   };
 
+  // Filtrar datos por búsqueda
+  const busesMantenimientosFiltrados = busesMantenimientos.filter(bus =>
+    bus.patente?.toLowerCase().includes(busqueda.toLowerCase()) ||
+    bus.marca?.toLowerCase().includes(busqueda.toLowerCase()) ||
+    bus.modelo?.toLowerCase().includes(busqueda.toLowerCase())
+  );
+
+  const busesEmergenciaFiltrados = busesEmergencia.filter(bus =>
+    bus.patente?.toLowerCase().includes(busqueda.toLowerCase()) ||
+    bus.marca?.toLowerCase().includes(busqueda.toLowerCase()) ||
+    bus.modelo?.toLowerCase().includes(busqueda.toLowerCase())
+  );
+
   // Calcular métricas totales
   const totalMantenimientos = busesMantenimientos.reduce((sum, bus) => sum + (bus.total_mantenimientos || 0), 0);
   const totalCostos = costosMantenimiento.reduce((sum, bus) => sum + (bus.costo_total_mantenimiento || 0), 0);
@@ -122,42 +148,47 @@ export default function AnalisisMantenimientosPage() {
   }
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen">
+    <div className="p-6 bg-gray-50 min-h-screen">
 
-      {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-orange-900 to-orange-800 p-8 text-white shadow-lg mb-8">
-        <div className="relative z-10">
-          <h1 className="text-3xl font-bold tracking-tight">Análisis de Mantenimientos</h1>
-          <p className="mt-2 text-orange-200 max-w-xl">
-            Análisis detallado del historial de mantenimientos, fallas y costos de la flota
-          </p>
+      {/* Header Compacto */}
+      <div className="bg-gradient-to-r from-orange-600 to-orange-800 rounded-xl p-6 text-white shadow-lg mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Dashboard Mantenimientos</h1>
+            <p className="text-sm text-orange-100 mt-1">Análisis de mantenimientos, fallas y costos de la flota</p>
+          </div>
+          <button
+            onClick={loadData}
+            disabled={loading}
+            className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            Actualizar
+          </button>
         </div>
-        <Wrench className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Filtros de Período */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
-        <div className="flex items-center gap-4">
-          <Calendar size={20} className="text-gray-500" />
+      {/* Filtros Mejorados */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+        <div className="flex flex-wrap items-center gap-4">
+          <Calendar size={18} className="text-gray-500" />
 
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={filtroActivo}
-                onChange={(e) => setFiltroActivo(e.target.checked)}
-                className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
-              />
-              <span className="text-sm font-semibold text-gray-700">Filtrar por período</span>
-            </label>
-          </div>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={filtroActivo}
+              onChange={(e) => setFiltroActivo(e.target.checked)}
+              className="w-4 h-4 text-orange-600 rounded"
+            />
+            <span className="text-sm font-medium text-gray-700">Filtrar por período</span>
+          </label>
 
           {filtroActivo && (
             <>
               <select
                 value={mes}
                 onChange={(e) => setMes(parseInt(e.target.value))}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
               >
                 {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
                   <option key={m} value={m}>{getMesNombre(m)}</option>
@@ -167,25 +198,32 @@ export default function AnalisisMantenimientosPage() {
               <select
                 value={anio}
                 onChange={(e) => setAnio(parseInt(e.target.value))}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm font-medium"
+                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
               >
-                {[2024, 2025, 2026].map(y => (
+                {[2023, 2024, 2025, 2026].map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
             </>
           )}
 
-          {filtroActivo && (
-            <div className="ml-auto px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800 font-medium">
-              Mostrando: {getMesNombre(mes)} {anio}
+          <div className="ml-auto flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="Buscar bus, patente, modelo..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm w-64"
+              />
             </div>
-          )}
+          </div>
         </div>
       </div>
 
       {/* Métricas Resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <MetricCard
           title="Total Mantenimientos"
           value={totalMantenimientos.toLocaleString()}
@@ -204,17 +242,68 @@ export default function AnalisisMantenimientosPage() {
           icon={DollarSign}
           color="blue"
         />
-        <MetricCard
-          title="Activables Emergencia"
-          value={busesActivablesEmergencia.toLocaleString()}
-          icon={Power}
-          color="green"
-        />
+        <div
+          onClick={() => abrirModalConDatos('Buses Disponibles para Emergencia', busesEmergenciaFiltrados)}
+          className="cursor-pointer transform hover:scale-105 transition-transform"
+        >
+          <MetricCard
+            title="Activables Emergencia"
+            value={busesActivablesEmergencia.toLocaleString()}
+            icon={Power}
+            color="green"
+            subtitle="Click para ver detalles"
+          />
+        </div>
       </div>
 
-      {/* Buses Disponibles para Emergencia */}
-      {busesEmergencia.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+      {/* Sistema de Tabs */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+        <div className="flex border-b border-gray-200">
+          <button
+            onClick={() => setTabActiva('general')}
+            className={`px-6 py-3 font-medium text-sm transition-colors ${
+              tabActiva === 'general'
+                ? 'border-b-2 border-orange-600 text-orange-600 bg-orange-50'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <BarChart3 size={18} />
+              Análisis General
+            </div>
+          </button>
+          <button
+            onClick={() => setTabActiva('buses')}
+            className={`px-6 py-3 font-medium text-sm transition-colors ${
+              tabActiva === 'buses'
+                ? 'border-b-2 border-orange-600 text-orange-600 bg-orange-50'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Power size={18} />
+              Buses en Mantenimiento
+            </div>
+          </button>
+          <button
+            onClick={() => setTabActiva('alertas')}
+            className={`px-6 py-3 font-medium text-sm transition-colors ${
+              tabActiva === 'alertas'
+                ? 'border-b-2 border-orange-600 text-orange-600 bg-orange-50'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} />
+              Alertas y Predicción
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* TAB: Buses en Mantenimiento */}
+      {tabActiva === 'buses' && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
             <Power size={24} className="text-green-600" />
             Buses Disponibles para Activación de Emergencia
@@ -223,24 +312,25 @@ export default function AnalisisMantenimientosPage() {
             </span>
           </h2>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b-2 border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Bus</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Servicio</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Mant.</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Descripción</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Fecha Inicio</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Fecha Término</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Días</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Mecánico</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Prioridad</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Acción</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {busesEmergencia.map((bus) => (
+          {busesEmergenciaFiltrados.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b-2 border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Bus</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Servicio</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Mant.</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Descripción</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Fecha Inicio</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Fecha Término</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Días</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Mecánico</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Prioridad</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {busesEmergenciaFiltrados.map((bus) => (
                   <tr key={bus.bus_id} className={`hover:bg-gray-50 transition-colors ${!bus.activable_emergencia ? 'opacity-50' : ''}`}>
                     <td className="px-4 py-4">
                       <div className="font-bold text-gray-900">{bus.patente}</div>
@@ -307,39 +397,42 @@ export default function AnalisisMantenimientosPage() {
               </tbody>
             </table>
           </div>
-
-          {busesEmergencia.length === 0 && (
+          ) : (
             <div className="text-center py-8 text-gray-500">
-              No hay buses en mantenimiento actualmente
+              No hay buses que coincidan con la búsqueda
             </div>
           )}
         </div>
       )}
 
-      {/* Buses con Más Mantenimientos */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-          <TrendingUp size={24} className="text-orange-600" />
-          Top Buses con Más Mantenimientos
-        </h2>
+      {/* TAB: Análisis General */}
+      {tabActiva === 'general' && (
+        <>
+          {/* Buses con Más Mantenimientos */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <TrendingUp size={24} className="text-orange-600" />
+              Top Buses con Más Mantenimientos
+            </h2>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b-2 border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Patente</th>
-                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Bus</th>
-                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Servicio</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">Total</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">Preventivos</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">Correctivos</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">En Proceso</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">Costo Total</th>
-                <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Estado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {busesMantenimientos.map((bus) => (
+            {busesMantenimientosFiltrados.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b-2 border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Patente</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Bus</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tipo Servicio</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">Total</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">Preventivos</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">Correctivos</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">En Proceso</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-600 uppercase">Costo Total</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {busesMantenimientosFiltrados.map((bus) => (
                 <tr key={bus.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-4 font-bold text-gray-900">{bus.patente}</td>
                   <td className="px-4 py-4 text-sm text-gray-700">{bus.marca} {bus.modelo}</td>
@@ -365,22 +458,21 @@ export default function AnalisisMantenimientosPage() {
                     }`}>
                       {bus.estado_bus}
                     </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {busesMantenimientos.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            No hay datos de mantenimientos para el período seleccionado
+                      </td>
+                    </tr>
+                  ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No hay buses que coincidan con la búsqueda
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Tipos de Fallas Más Comunes */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Tipos de Fallas Más Comunes */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
             <AlertTriangle size={24} className="text-red-600" />
@@ -632,6 +724,211 @@ export default function AnalisisMantenimientosPage() {
           </div>
         )}
       </div>
+
+      {/* Rutas con Más Fallas - Chart */}
+      {topsData.rutas_criticas && topsData.rutas_criticas.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <MapPin size={24} className="text-rose-600" />
+            Rutas con Más Fallas de Mantenimiento
+          </h2>
+
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={topsData.rutas_criticas.slice(0, 10)}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="nombre" angle={-45} textAnchor="end" height={100} tick={{ fontSize: 11 }} />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="total_incidentes" fill="#f43f5e" name="Total Incidentes" />
+              <Bar dataKey="incidentes_graves" fill="#dc2626" name="Incidentes Graves" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+        </>
+      )}
+
+      {/* TAB: Alertas y Predicción */}
+      {tabActiva === 'alertas' && (
+        <>
+          {/* Alertas Críticas Clickeables */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* Alerta SOAP por Vencer */}
+            <div
+              onClick={() => {
+                // Mock data - replace with actual SOAP expiring buses
+                const busesSOAP = busesMantenimientos.filter(bus => bus.estado_bus !== 'fuera_servicio').slice(0, 3);
+                abrirModalConDatos('Buses con SOAP por Vencer', busesSOAP);
+              }}
+              className="bg-white rounded-lg shadow-sm border-2 border-orange-300 p-6 cursor-pointer hover:shadow-lg hover:border-orange-500 transition-all transform hover:scale-105"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-orange-100 rounded-lg">
+                    <ClipboardCheck className="text-orange-600" size={32} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">SOAP por Vencer</h3>
+                    <p className="text-sm text-gray-600">Próximos 30 días</p>
+                  </div>
+                </div>
+                <span className="px-4 py-2 bg-orange-100 text-orange-800 rounded-full text-2xl font-bold">
+                  {busesMantenimientos.length > 0 ? Math.min(5, busesMantenimientos.length) : 0}
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 border-t border-gray-200 pt-4">
+                Click para ver la lista completa de buses que requieren renovación de SOAP
+              </p>
+            </div>
+
+            {/* Alerta Permiso Circulación por Vencer */}
+            <div
+              onClick={() => {
+                // Mock data - replace with actual permit expiring buses
+                const busesPermiso = busesMantenimientos.filter(bus => bus.estado_bus === 'operativo').slice(0, 2);
+                abrirModalConDatos('Buses con Permiso de Circulación por Vencer', busesPermiso);
+              }}
+              className="bg-white rounded-lg shadow-sm border-2 border-red-300 p-6 cursor-pointer hover:shadow-lg hover:border-red-500 transition-all transform hover:scale-105"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-red-100 rounded-lg">
+                    <FileText className="text-red-600" size={32} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Permiso Circulación</h3>
+                    <p className="text-sm text-gray-600">Por vencer</p>
+                  </div>
+                </div>
+                <span className="px-4 py-2 bg-red-100 text-red-800 rounded-full text-2xl font-bold">
+                  {busesMantenimientos.length > 0 ? Math.min(3, busesMantenimientos.length) : 0}
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 border-t border-gray-200 pt-4">
+                Click para ver la lista completa de buses con permisos próximos a vencer
+              </p>
+            </div>
+          </div>
+
+          {/* Distribución de Alertas */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <AlertTriangle size={24} className="text-purple-600" />
+              Distribución de Alertas de Mantenimiento
+            </h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {alertasData.por_tipo && Object.keys(alertasData.por_tipo).length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Cambio de Aceite', value: alertasData.por_tipo.cambio_aceite || 0 },
+                        { name: 'Revisión Técnica', value: alertasData.por_tipo.revision_tecnica || 0 },
+                        { name: 'Mantenimiento', value: alertasData.por_tipo.mantenimiento || 0 }
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, value }) => value > 0 ? `${name}: ${value}` : null}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      <Cell fill="#f59e0b" />
+                      <Cell fill="#3b82f6" />
+                      <Cell fill="#ef4444" />
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-center text-gray-500 py-12">No hay alertas en este período</div>
+              )}
+
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {alertasData.alertas && alertasData.alertas.length > 0 ? (
+                  alertasData.alertas.slice(0, 10).map((alerta, index) => (
+                    <div key={index} className={`border-l-4 p-3 rounded ${
+                      alerta.nivel === 'critico' ? 'border-red-500 bg-red-50' : 'border-yellow-500 bg-yellow-50'
+                    }`}>
+                      <div className="font-bold text-sm">{alerta.mensaje}</div>
+                      <div className="text-xs text-gray-600 mt-1">{alerta.detalle}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center text-gray-500 py-8">No hay alertas activas</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Modal de Detalles */}
+      {modalAbierto && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="bg-orange-600 text-white p-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold">{datosModal.titulo}</h3>
+              <button
+                onClick={() => setModalAbierto(false)}
+                className="p-1 hover:bg-white/20 rounded"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+              {datosModal.datos.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">No hay datos para mostrar</p>
+              ) : (
+                <div className="space-y-3">
+                  {datosModal.datos.map((bus, index) => (
+                    <div key={bus.id || index} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500">Patente</p>
+                          <p className="font-bold text-lg">{bus.patente}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Bus</p>
+                          <p className="font-semibold">{bus.marca} {bus.modelo}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Tipo Servicio</p>
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${getTipoServicioColor(bus.tipo_servicio)}`}>
+                            {bus.tipo_servicio}
+                          </span>
+                        </div>
+                        {bus.total_mantenimientos !== undefined && (
+                          <div>
+                            <p className="text-xs text-gray-500">Mantenimientos</p>
+                            <p className="font-semibold">{bus.total_mantenimientos}</p>
+                          </div>
+                        )}
+                        {bus.estado_bus && (
+                          <div>
+                            <p className="text-xs text-gray-500">Estado</p>
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${
+                              bus.estado_bus === 'operativo' ? 'bg-green-100 text-green-800' :
+                              bus.estado_bus === 'mantenimiento' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {bus.estado_bus}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
