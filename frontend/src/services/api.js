@@ -1101,6 +1101,18 @@ export const descargarReportePDF = async (mes, anio) => {
   }
 };
 
+/**
+ * Obtener cantidad de licencias activas (dashboard)
+ */
+export const fetchAusenciasActivas = async () => {
+  const response = await fetch(`${API_URL}/licencias/activas`, fetchOptions('GET'));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
 // ============================================
 // PANEL MECANICO (Vista Personal)
 // ============================================
@@ -1168,6 +1180,26 @@ export const fetchReportes = async (filtros = {}) => {
  */
 export const fetchMisReportes = async () => {
   const response = await fetch(`${API_URL}/reportes/mis-reportes`, fetchOptions('GET'));
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
+/**
+ * Obtener historial de descargas de reportes
+ */
+export const fetchHistorialReportes = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+      queryParams.append(key, params[key]);
+    }
+  });
+
+  const url = `${API_URL}/reportes/historial${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions('GET'));
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.message || `HTTP error! status: ${response.status}`);
@@ -1376,6 +1408,11 @@ export const fetchResumenEjecutivo = async (params = {}) => {
 // ANÁLISIS DE MANTENIMIENTOS
 // ============================================
 
+const appendMesAnio = (queryParams, params) => {
+  if (params.mes) queryParams.append('mes', params.mes);
+  if (params.anio) queryParams.append('anio', params.anio);
+};
+
 /**
  * Obtener buses con más mantenimientos
  */
@@ -1385,6 +1422,7 @@ export const fetchBusesConMasMantenimientos = async (params = {}) => {
   if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
   if (params.tipo_servicio) queryParams.append('tipo_servicio', params.tipo_servicio);
   if (params.limit) queryParams.append('limit', params.limit);
+  appendMesAnio(queryParams, params);
 
   const url = `${API_URL}/reportes/buses-con-mas-mantenimientos?${queryParams.toString()}`;
   const response = await fetch(url, fetchOptions());
@@ -1394,12 +1432,33 @@ export const fetchBusesConMasMantenimientos = async (params = {}) => {
 };
 
 /**
+ * Descargar PDF del top de mantenimientos
+ */
+export const fetchBusesConMasMantenimientosPdf = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+  if (params.tipo_servicio) queryParams.append('tipo_servicio', params.tipo_servicio);
+  if (params.limit) queryParams.append('limit', params.limit);
+  appendMesAnio(queryParams, params);
+
+  const url = `${API_URL}/reportes/mantenimientos/top/pdf${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.blob();
+};
+
+/**
  * Obtener tipos de fallas más comunes
  */
 export const fetchTiposFallasMasComunes = async (params = {}) => {
   const queryParams = new URLSearchParams();
   if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
   if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+  appendMesAnio(queryParams, params);
 
   const url = `${API_URL}/reportes/tipos-fallas-mas-comunes?${queryParams.toString()}`;
   const response = await fetch(url, fetchOptions());
@@ -1417,6 +1476,7 @@ export const fetchCostosMantenimientoPorBus = async (params = {}) => {
   if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
   if (params.tipo_servicio) queryParams.append('tipo_servicio', params.tipo_servicio);
   if (params.limit) queryParams.append('limit', params.limit);
+  appendMesAnio(queryParams, params);
 
   const url = `${API_URL}/reportes/costos-mantenimiento-por-bus?${queryParams.toString()}`;
   const response = await fetch(url, fetchOptions());
@@ -1584,6 +1644,20 @@ export const fetchRankingLicencias = async (params = {}) => {
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
   return result;
+};
+
+/**
+ * Descargar ranking de licencias en PDF
+ */
+export const fetchRankingLicenciasPdf = async (params = {}) => {
+  const queryParams = new URLSearchParams(params);
+  const url = `${API_URL}/rrhh/ranking-licencias/pdf${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.blob();
 };
 
 /**

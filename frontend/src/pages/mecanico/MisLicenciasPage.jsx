@@ -6,6 +6,7 @@ import {
   actualizarLicencia,
   descargarPdfLicencia,
 } from '../../services/api';
+import { emitLicenciasActualizadas } from '../../utils/licenseEvents';
 import Header from '../../components/common/Header';
 import { 
   FileText, Plus, AlertCircle, CheckCircle, XCircle, Clock, 
@@ -153,7 +154,8 @@ const MisLicenciasPage = () => {
         setSuccess('Licencia solicitada correctamente');
       }
       cerrarModal();
-      cargarDatos();
+      await cargarDatos();
+      emitLicenciasActualizadas();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError(err.message);

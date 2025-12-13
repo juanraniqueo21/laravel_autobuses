@@ -6,6 +6,7 @@ import {
   actualizarLicencia,
   descargarPdfLicencia,
 } from '../../services/api';
+import { emitLicenciasActualizadas } from '../../utils/licenseEvents';
 
 const MisLicenciasPage = () => {
   const [licencias, setLicencias] = useState([]);
@@ -177,7 +178,8 @@ const MisLicenciasPage = () => {
       }
 
       cerrarModal();
-      cargarDatos();
+      await cargarDatos();
+      emitLicenciasActualizadas();
     } catch (err) {
       setError(err.message);
     }

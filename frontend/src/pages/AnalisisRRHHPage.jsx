@@ -3,10 +3,12 @@ import { Users, AlertTriangle, FileText, Calendar, RefreshCw, X, TrendingDown, U
 import {
   fetchAlertasContratos,
   fetchRankingLicencias,
+  fetchRankingLicenciasPdf,
   fetchResumenContratos,
   fetchEmpleadosAltoRiesgo,
   fetchEvolucionLicencias,
-  updateEmpleado
+  updateEmpleado,
+  fetchHistorialReportes
 } from '../services/api';
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import MetricCard from '../components/cards/MetricCard';
@@ -21,11 +23,13 @@ export default function AnalisisRRHHPage() {
   const [evolucionLicencias, setEvolucionLicencias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [procesandoBaja, setProcesandoBaja] = useState(null);
+  const [descargandoRanking, setDescargandoRanking] = useState(false);
+  const [historialReportes, setHistorialReportes] = useState([]);
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
 
   // Filtros
   const [mes, setMes] = useState(new Date().getMonth() + 1);
   const [anio, setAnio] = useState(new Date().getFullYear());
-  const [filtroActivo, setFiltroActivo] = useState(false);
   const [busqueda, setBusqueda] = useState('');
 
   // UI
@@ -35,19 +39,36 @@ export default function AnalisisRRHHPage() {
 
   const { addNotification } = useNotifications();
 
+  const getFiltroParams = () => ({
+    mes,
+    anio,
+  });
+
+  const descargarBlob = (blob, nombreArchivo) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nombreArchivo;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
   // --- CARGA DE DATOS ---
   useEffect(() => {
     loadData();
-  }, [mes, anio, filtroActivo]);
+  }, [mes, anio]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const params = {};
-      if (filtroActivo) {
-        params.mes = mes;
-        params.anio = anio;
-      }
+      const params = getFiltroParams();
+      const historialPromise = fetchHistorialReportes({
+        tipo: 'rrhh',
+        mes,
+        anio,
+      });
 
       const [alertas, ranking, resumen, altoRiesgo] = await Promise.all([
         fetchAlertasContratos(params),
@@ -66,11 +87,30 @@ export default function AnalisisRRHHPage() {
         setEvolucionLicencias(evolucion.data || []);
       } catch (e) { console.warn("Error Evolución", e); setEvolucionLicencias([]); }
 
+      const historial = await historialPromise;
+      setHistorialReportes(historial.data || []);
+
     } catch (error) {
       console.error(error);
       addNotification('error', 'Error', 'No se pudieron cargar los datos de RRHH.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDescargarRankingLicencias = async () => {
+    try {
+      setDescargandoRanking(true);
+      const params = getFiltroParams();
+      const blob = await fetchRankingLicenciasPdf(params);
+      const nombreArchivo = `ranking-licencias-${new Date().toISOString().slice(0, 10)}.pdf`;
+      descargarBlob(blob, nombreArchivo);
+      addNotification('success', 'Reporte generado', 'Se descargó el ranking de licencias.');
+    } catch (error) {
+      console.error(error);
+      addNotification('error', 'Error', 'No se pudo descargar el PDF de licencias.');
+    } finally {
+      setDescargandoRanking(false);
     }
   };
 
@@ -97,6 +137,25 @@ export default function AnalisisRRHHPage() {
   const getMesNombre = (m) => ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][m - 1];
   const formatFecha = (f) => f ? f.split('T')[0].split('-').reverse().join('-') : 'N/A';
   const getTipoContratoColor = (t) => ({ 'indefinido': 'bg-green-100 text-green-800', 'plazo_fijo': 'bg-yellow-100 text-yellow-800', 'practicante': 'bg-blue-100 text-blue-800' }[t] || 'bg-gray-100');
+  const formatHistorialFecha = (value) =>
+    value ? new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '-';
+  const formatHistorialMes = (entry) => {
+    if (entry?.mes && entry?.anio) {
+      return `${getMesNombre(Number(entry.mes))} ${entry.anio}`;
+    }
+    return 'Mes desconocido';
+  };
+  const formatHistorialUsuario = (entry) => {
+    const nombre = entry?.user?.nombre;
+    const apellido = entry?.user?.apellido;
+    if (nombre || apellido) {
+      return `${nombre ?? ''} ${apellido ?? ''}`.trim();
+    }
+    if (entry.user_id) {
+      return `Usuario ${entry.user_id}`;
+    }
+    return 'Sistema';
+  };
 
   // Filtrado
   const rankingFiltrado = rankingLicencias.filter(emp =>
@@ -119,21 +178,15 @@ export default function AnalisisRRHHPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 select-none cursor-pointer">
-            <input type="checkbox" checked={filtroActivo} onChange={(e) => setFiltroActivo(e.target.checked)} className="text-blue-600 rounded" />
-            <span className="text-sm font-medium">Filtrar Fecha</span>
-          </label>
-
-          {filtroActivo && (
-            <div className="flex gap-2">
-              <select value={mes} onChange={(e) => setMes(Number(e.target.value))} className="text-sm border-gray-300 rounded-lg py-1.5 focus:ring-blue-500">
-                {[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{getMesNombre(i+1)}</option>)}
-              </select>
-              <select value={anio} onChange={(e) => setAnio(Number(e.target.value))} className="text-sm border-gray-300 rounded-lg py-1.5 focus:ring-blue-500">
-                {[2023, 2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">Mes:</span>
+            <select value={mes} onChange={(e) => setMes(Number(e.target.value))} className="text-sm border-gray-300 rounded-lg py-1.5 focus:ring-blue-500">
+              {[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{getMesNombre(i+1)}</option>)}
+            </select>
+            <select value={anio} onChange={(e) => setAnio(Number(e.target.value))} className="text-sm border-gray-300 rounded-lg py-1.5 focus:ring-blue-500">
+              {[2023, 2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
 
           <input 
             type="text" 
@@ -145,6 +198,14 @@ export default function AnalisisRRHHPage() {
           
           <button onClick={loadData} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors">
             <RefreshCw size={18} />
+          </button>
+          <button
+            onClick={handleDescargarRankingLicencias}
+            disabled={descargandoRanking}
+            className="flex items-center gap-2 px-3 py-1 text-sm rounded-full border border-dashed border-blue-300 bg-white text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40"
+          >
+            <FileText size={16} />
+            <span>{descargandoRanking ? 'Generando...' : 'Descargar PDF'}</span>
           </button>
         </div>
       </div>
@@ -332,6 +393,42 @@ export default function AnalisisRRHHPage() {
           </div>
         </div>
       )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mt-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-gray-800">Historial de descargas</p>
+            <p className="text-xs text-gray-500">Últimos reportes de RRHH generados</p>
+          </div>
+          <button
+            onClick={() => setMostrarHistorial(prev => !prev)}
+            className="text-xs font-semibold uppercase tracking-wide text-blue-600 px-3 py-1 border border-blue-100 rounded-full hover:bg-blue-50 transition"
+          >
+            {mostrarHistorial ? 'Ocultar' : 'Mostrar'}
+          </button>
+        </div>
+        {mostrarHistorial && (
+          <div className="mt-3 space-y-2">
+            {historialReportes.length === 0 ? (
+              <p className="text-xs text-gray-400">No hay registros para el período seleccionado.</p>
+            ) : (
+              historialReportes.map(entry => (
+                <div key={`hist-rrhh-${entry.id}`} className="flex flex-col gap-1 rounded-lg border border-gray-100 px-3 py-2 bg-gray-50 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">
+                      {formatHistorialMes(entry)} · {entry.archivo || 'Ranking de RRHH'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Generado {formatHistorialFecha(entry.created_at)} · {formatHistorialUsuario(entry)}
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold uppercase text-blue-600">{entry.tipo}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       {/* --- MODAL DETALLES --- */}
       {modalAbierto && (

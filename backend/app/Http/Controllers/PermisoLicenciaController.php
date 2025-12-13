@@ -312,12 +312,7 @@ class PermisoLicenciaController extends Controller
         $licencia->fecha_respuesta = now();
         $licencia->save();
 
-    
-        $empleado = Empleado::find($licencia->empleado_id);
-        if ($empleado) {
-            $empleado->estado = 'licencia';
-            $empleado->save();
-        }
+        $this->marcarEmpleadoEnLicencia($licencia->empleado_id);
 
         $licencia->load(['empleado', 'aprobador']);
 
@@ -372,6 +367,17 @@ class PermisoLicenciaController extends Controller
         ]);
     }
 
+    public function ausenciasActivas(Request $request)
+    {
+        $fecha = Carbon::now()->toDateString();
+
+        $count = PermisoLicencia::where('estado', 'aprobado')
+            ->activasEnRango($fecha, $fecha)
+            ->count();
+
+        return response()->json(['count' => $count]);
+    }
+
     /**
      * Eliminar una licencia (solo en estado "solicitado")
      */
@@ -421,5 +427,14 @@ class PermisoLicenciaController extends Controller
         }
 
         return response()->download($rutaCompleta, $licencia->nombre_archivo);
+    }
+
+    private function marcarEmpleadoEnLicencia($empleadoId)
+    {
+        $empleado = Empleado::find($empleadoId);
+        if ($empleado) {
+            $empleado->estado = 'licencia';
+            $empleado->save();
+        }
     }
 }

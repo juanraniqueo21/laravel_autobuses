@@ -10,9 +10,10 @@ import {
   fetchViajesPorTurno,
   fetchMantenimientos, 
   fetchReportes,       
-  fetchLicencias,      
-  fetchConductores     
+  fetchConductores,
+  fetchAusenciasActivas     
 } from '../services/api';
+import { LICENCIAS_ACTUALIZADAS_EVENT } from '../utils/licenseEvents';
 
 export default function DashboardPage({ onNavigate }) {
   // --- ESTADOS ---
@@ -39,6 +40,12 @@ export default function DashboardPage({ onNavigate }) {
     loadDashboardData();
   }, []);
 
+  useEffect(() => {
+    const handleLicenciasActualizadas = () => loadDashboardData();
+    window.addEventListener(LICENCIAS_ACTUALIZADAS_EVENT, handleLicenciasActualizadas);
+    return () => window.removeEventListener(LICENCIAS_ACTUALIZADAS_EVENT, handleLicenciasActualizadas);
+  }, []);
+
   const loadDashboardData = async () => {
     try {
       // --- CORRECCIÓN DE FECHA (LOCAL) ---
@@ -51,7 +58,6 @@ export default function DashboardPage({ onNavigate }) {
         turnosHoy, 
         mantenimientos, 
         reportes, 
-        licenciasMedicas,
         conductores
       ] = await Promise.all([
         fetchBuses(),
@@ -59,7 +65,6 @@ export default function DashboardPage({ onNavigate }) {
         fetchTurnos({ fecha: today }),
         fetchMantenimientos(),
         fetchReportes(),
-        fetchLicencias(),
         fetchConductores()
       ]);
 
@@ -100,13 +105,8 @@ export default function DashboardPage({ onNavigate }) {
       
       // Normalizar "hoy" a medianoche local
       now.setHours(0,0,0,0);
-      const personalAusente = licenciasMedicas.filter(l => {
-          const inicio = new Date(l.fecha_inicio);
-          const fin = new Date(l.fecha_termino);
-          inicio.setMinutes(inicio.getMinutes() + inicio.getTimezoneOffset());
-          fin.setMinutes(fin.getMinutes() + fin.getTimezoneOffset());
-          return l.estado === 'aprobado' && now >= inicio && now <= fin;
-      }).length;
+      const ausencias = await fetchAusenciasActivas();
+      const personalAusente = ausencias.count || 0;
 
       // 4. GENERACIÓN DE ALERTAS
       const nuevasAlertas = [];

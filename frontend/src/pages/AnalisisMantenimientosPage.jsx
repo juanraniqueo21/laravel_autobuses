@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Wrench, AlertTriangle, DollarSign, Calendar, TrendingUp, Power, PieChart as PieChartIcon, BarChart3, MapPin, Search, X, RefreshCw, ClipboardCheck, FileText, ArrowRight } from 'lucide-react';
 import {
   fetchBusesConMasMantenimientos,
+  fetchBusesConMasMantenimientosPdf,
   fetchTiposFallasMasComunes,
   fetchCostosMantenimientoPorBus,
   fetchBusesDisponiblesEmergencia,
@@ -9,7 +10,8 @@ import {
   fetchMantenimientoTops,
   fetchBusesSOAPPorVencer,
   fetchBusesPermisoCirculacionPorVencer,
-  activarBusEmergencia
+  activarBusEmergencia,
+  fetchHistorialReportes
 } from '../services/api';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import MetricCard from '../components/cards/MetricCard';
@@ -26,11 +28,12 @@ export default function AnalisisMantenimientosPage() {
   const [busesSOAP, setBusesSOAP] = useState([]);
   const [busesPermiso, setBusesPermiso] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [historialReportes, setHistorialReportes] = useState([]);
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
   
   // Filtros
   const [mes, setMes] = useState(new Date().getMonth() + 1);
   const [anio, setAnio] = useState(new Date().getFullYear());
-  const [filtroActivo, setFiltroActivo] = useState(false);
   const [busqueda, setBusqueda] = useState('');
 
   // UI States
@@ -38,30 +41,49 @@ export default function AnalisisMantenimientosPage() {
   const [tabActiva, setTabActiva] = useState('general'); // general, taller, costos, alertas
   const [modalAbierto, setModalAbierto] = useState(false);
   const [datosModal, setDatosModal] = useState({ titulo: '', datos: [] });
+  const [descargandoPdf, setDescargandoPdf] = useState(false);
 
   const { addNotification } = useNotifications();
 
   // --- CARGA DE DATOS ---
   useEffect(() => {
     loadData();
-  }, [mes, anio, filtroActivo]);
+  }, [mes, anio]);
+
+  const getFiltroParams = () => ({
+    mes,
+    anio,
+  });
+
+  const descargarBlob = (blob, nombreArchivo) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nombreArchivo;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const params = {};
-      if (filtroActivo) {
-        params.mes = mes;
-        params.anio = anio;
-      }
+      const params = getFiltroParams();
+      const historialPromise = fetchHistorialReportes({
+        tipo: 'mantenimientos',
+        mes,
+        anio,
+      });
 
-      const [busesData, fallasData, costosData, emergenciaData, alertas, tops] = await Promise.all([
+      const [busesData, fallasData, costosData, emergenciaData, alertas, tops, historial] = await Promise.all([
         fetchBusesConMasMantenimientos(params),
         fetchTiposFallasMasComunes(params),
         fetchCostosMantenimientoPorBus(params),
         fetchBusesDisponiblesEmergencia(params),
         fetchMantenimientoAlertas(params),
-        fetchMantenimientoTops(params)
+        fetchMantenimientoTops(params),
+        historialPromise
       ]);
 
       setBusesMantenimientos(busesData || []);
@@ -70,6 +92,7 @@ export default function AnalisisMantenimientosPage() {
       setBusesEmergencia(emergenciaData || []);
       setAlertasData(alertas || { alertas: [], por_tipo: {} });
       setTopsData(tops || { top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] });
+      setHistorialReportes((historial?.data) || []);
 
       // Carga tolerante a fallos para SOAP y Permisos
       try {
@@ -87,6 +110,22 @@ export default function AnalisisMantenimientosPage() {
       addNotification('error', 'Error', 'No se pudieron cargar los datos de mantenimiento.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDescargarAnalisisMantenimientos = async () => {
+    try {
+      setDescargandoPdf(true);
+      const params = getFiltroParams();
+      const blob = await fetchBusesConMasMantenimientosPdf(params);
+      const nombreArchivo = `analisis-mantenimientos-${new Date().toISOString().slice(0, 10)}.pdf`;
+      descargarBlob(blob, nombreArchivo);
+      addNotification('success', 'Reporte generado', 'Se descargó el PDF de mantenimiento.');
+    } catch (error) {
+      console.error(error);
+      addNotification('error', 'Error', 'No se pudo descargar el PDF de mantenimiento.');
+    } finally {
+      setDescargandoPdf(false);
     }
   };
 
@@ -118,6 +157,25 @@ export default function AnalisisMantenimientosPage() {
   const formatCurrency = (amount) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount || 0);
   const getMesNombre = (m) => ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][m - 1];
   const formatFecha = (f) => f ? f.split('T')[0].split('-').reverse().join('-') : 'N/A';
+  const formatHistorialFecha = (value) =>
+    value ? new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '-';
+  const formatHistorialMes = (entry) => {
+    if (entry?.mes && entry?.anio) {
+      return `${getMesNombre(Number(entry.mes))} ${entry.anio}`;
+    }
+    return 'Mes desconocido';
+  };
+  const formatHistorialUsuario = (entry) => {
+    const nombre = entry?.user?.nombre;
+    const apellido = entry?.user?.apellido;
+    if (nombre || apellido) {
+      return `${nombre ?? ''} ${apellido ?? ''}`.trim();
+    }
+    if (entry.user_id) {
+      return `Usuario ${entry.user_id}`;
+    }
+    return 'Sistema';
+  };
 
   // --- FILTROS ---
   const busesEmergenciaFiltrados = busesEmergencia.filter(bus => 
@@ -144,21 +202,15 @@ export default function AnalisisMantenimientosPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer select-none">
-            <input type="checkbox" checked={filtroActivo} onChange={(e) => setFiltroActivo(e.target.checked)} className="text-orange-600 rounded" />
-            <span className="text-sm font-medium">Filtrar Fecha</span>
-          </label>
-
-          {filtroActivo && (
-            <div className="flex gap-2">
-              <select value={mes} onChange={(e) => setMes(Number(e.target.value))} className="text-sm border-gray-300 rounded-lg py-1.5 focus:ring-orange-500">
-                {[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{getMesNombre(i+1)}</option>)}
-              </select>
-              <select value={anio} onChange={(e) => setAnio(Number(e.target.value))} className="text-sm border-gray-300 rounded-lg py-1.5 focus:ring-orange-500">
-                {[2023, 2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">Mes:</span>
+            <select value={mes} onChange={(e) => setMes(Number(e.target.value))} className="text-sm border-gray-300 rounded-lg py-1.5 focus:ring-orange-500">
+              {[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{getMesNombre(i+1)}</option>)}
+            </select>
+            <select value={anio} onChange={(e) => setAnio(Number(e.target.value))} className="text-sm border-gray-300 rounded-lg py-1.5 focus:ring-orange-500">
+              {[2023, 2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
 
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -173,6 +225,14 @@ export default function AnalisisMantenimientosPage() {
 
           <button onClick={loadData} className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-full transition-colors">
             <RefreshCw size={18} />
+          </button>
+          <button
+            onClick={handleDescargarAnalisisMantenimientos}
+            disabled={descargandoPdf}
+            className="flex items-center gap-2 px-3 py-1 text-sm rounded-full border border-dashed border-orange-300 bg-white text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-40"
+          >
+            <FileText size={16} />
+            <span>{descargandoPdf ? 'Generando...' : 'Descargar PDF'}</span>
           </button>
         </div>
       </div>
@@ -399,6 +459,43 @@ export default function AnalisisMantenimientosPage() {
           </div>
         </div>
       )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mt-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-gray-800">Historial de descargas</p>
+            <p className="text-xs text-gray-500">Últimos archivos generados para este mes</p>
+          </div>
+          <button
+            onClick={() => setMostrarHistorial(prev => !prev)}
+            className="text-xs font-semibold uppercase tracking-wide text-orange-600 px-3 py-1 border border-orange-100 rounded-full hover:bg-orange-50 transition"
+          >
+            {mostrarHistorial ? 'Ocultar' : 'Mostrar'}
+          </button>
+        </div>
+        {mostrarHistorial && (
+          <div className="mt-3 space-y-2">
+            {historialReportes.length === 0 ? (
+              <p className="text-xs text-gray-400">Aún no hay descargas registradas.</p>
+            ) : (
+              historialReportes.map(entry => (
+                <div key={`hist-${entry.id}`} className="flex flex-col gap-1 rounded-lg border border-gray-100 px-3 py-2 bg-gray-50 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">
+                      {formatHistorialMes(entry)} · {entry.archivo || 'Reporte mensual'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Generado {formatHistorialFecha(entry.created_at)} · {formatHistorialUsuario(entry)}
+                      {entry.filtros?.tipo_mantenimiento ? ` · ${entry.filtros.tipo_mantenimiento}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold uppercase text-orange-600">{entry.tipo}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       {/* --- MODAL DE DETALLE --- */}
       {modalAbierto && (

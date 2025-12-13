@@ -4,12 +4,59 @@ namespace App\Http\Controllers;
 
 use App\Models\Empleado;
 use App\Models\PermisoLicencia;
+use App\Models\ReportHistory;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class RRHHController extends Controller
 {
+    private function registrarHistorialReporte(Request $request, string $tipo, string $archivo, array $extras = [])
+    {
+        $mes = $request->input('mes', Carbon::now()->month);
+        $anio = $request->input('anio', Carbon::now()->year);
+
+        ReportHistory::create([
+            'tipo' => $tipo,
+            'mes' => (int) $mes,
+            'anio' => (int) $anio,
+            'filtros' => array_merge([
+                'mes' => (int) $mes,
+                'anio' => (int) $anio,
+            ], array_filter($extras, fn ($value) => $value !== null && $value !== '')),
+            'archivo' => $archivo,
+            'user_id' => Auth::id(),
+        ]);
+    }
+
+    private function generarNotasRRHH(array $resumen, array $comparativa): array
+    {
+        $notas = [];
+
+        if (($comparativa['licencias_actual'] ?? 0) > ($comparativa['licencias_anterior'] ?? 0)) {
+            $notas[] = 'Las licencias aumentaron respecto al mes anterior.';
+        } elseif (($comparativa['licencias_actual'] ?? 0) < ($comparativa['licencias_anterior'] ?? 0)) {
+            $notas[] = 'Las licencias disminuyeron y se mantiene el control de ausentismo.';
+        }
+
+        if (($resumen['total_licencias'] ?? 0) > 0) {
+            $promedioDias = ($resumen['total_dias'] ?? 0) / max(1, $resumen['total_licencias']);
+            if ($promedioDias > 5) {
+                $notas[] = 'Alta duración promedio de licencias por empleado (' . round($promedioDias, 1) . ' días).';
+            }
+        }
+
+        if (($resumen['medicas'] ?? 0) > ($resumen['administrativas'] ?? 0)) {
+            $notas[] = 'Las licencias médicas concentran la mayor parte del ausentismo.';
+        } else {
+            $notas[] = 'Las licencias administrativas y permisos representan un apoyo operativo relevante.';
+        }
+
+        return $notas;
+    }
+
     /**
      * Alertas de contratos próximos a vencer
      * Retorna empleados con contrato "plazo_fijo" que vencen en los próximos 30 días
@@ -59,13 +106,22 @@ class RRHHController extends Controller
      */
     public function rankingLicencias(Request $request)
     {
-        // Parámetros opcionales para filtrar por fecha
+        $ranking = $this->obtenerRankingLicenciasData($request);
+
+        return response()->json([
+            'success' => true,
+            'data' => $ranking,
+            'total' => $ranking->count(),
+        ]);
+    }
+
+    private function obtenerRankingLicenciasData(Request $request)
+    {
         $fechaInicio = $request->input('fecha_inicio');
         $fechaFin = $request->input('fecha_fin');
         $mes = $request->input('mes');
         $anio = $request->input('anio');
 
-        // Si se proporciona mes y año, calcular el rango de fechas
         if ($mes && $anio) {
             $fechaInicio = Carbon::create($anio, $mes, 1)->startOfMonth()->toDateString();
             $fechaFin = Carbon::create($anio, $mes, 1)->endOfMonth()->toDateString();
@@ -78,7 +134,6 @@ class RRHHController extends Controller
                      ->where('permisos_licencias.estado', '!=', 'rechazado');
 
                 if ($fechaInicio && $fechaFin) {
-                    // Filtrar licencias que se solapen con el período seleccionado
                     $join->where(function($query) use ($fechaInicio, $fechaFin) {
                         $query->whereBetween('permisos_licencias.fecha_inicio', [$fechaInicio, $fechaFin])
                               ->orWhereBetween('permisos_licencias.fecha_termino', [$fechaInicio, $fechaFin])
@@ -118,11 +173,10 @@ class RRHHController extends Controller
             ->orderByDesc('total_licencias')
             ->get();
 
-        $ranking = $query->map(function ($item) {
-            // Calcular alerta de rendimiento
+        return $query->map(function ($item) {
             $esPlazofijo = $item->tipo_contrato === 'plazo_fijo';
-            $tieneMuchasLicencias = $item->total_licencias >= 3; // Umbral configurable
-            $diasExcesivos = $item->total_dias_licencia >= 15; // Umbral configurable
+            $tieneMuchasLicencias = $item->total_licencias >= 3;
+            $diasExcesivos = $item->total_dias_licencia >= 15;
 
             $alerta_rendimiento = false;
             $motivo_alerta = [];
@@ -134,7 +188,7 @@ class RRHHController extends Controller
 
             if ($diasExcesivos) {
                 $alerta_rendimiento = true;
-                $motivo_alerta[] = "Excede {$item->total_dias_licencia} días de licencia";
+                $motivo_alerta[] = "Excede {$item->total_dias_licencia} d�as de licencia";
             }
 
             return [
@@ -152,21 +206,82 @@ class RRHHController extends Controller
                 'permisos' => (int) $item->permisos,
                 'alerta_rendimiento' => $alerta_rendimiento,
                 'motivo_alerta' => $motivo_alerta,
-                'accion_sugerida' => $alerta_rendimiento ? 'Evaluar renovación de contrato' : null,
+                'accion_sugerida' => $alerta_rendimiento ? 'Evaluar renovacion de contrato' : null,
             ];
         });
-
-        return response()->json([
-            'success' => true,
-            'data' => $ranking,
-            'total' => $ranking->count(),
-        ]);
     }
 
-    /**
-     * Resumen de contratos por tipo
-     * Retorna conteo de empleados por tipo de contrato
-     */
+    private function crearRequestParaMes($mes, $anio)
+    {
+        return Request::create('/', 'GET', ['mes' => $mes, 'anio' => $anio]);
+    }
+
+    private function calcularResumenRRHH($ranking)
+    {
+        $coleccion = collect($ranking);
+        return [
+            'total_licencias' => $coleccion->sum('total_licencias'),
+            'total_dias' => $coleccion->sum('total_dias_licencia'),
+            'medicas' => $coleccion->sum('licencias_medicas'),
+            'administrativas' => $coleccion->sum('licencias_administrativas'),
+            'permisos' => $coleccion->sum('permisos'),
+        ];
+    }
+
+    private function obtenerComparativaRRHH(Request $request, $rankingActual)
+    {
+        $mes = $request->input('mes', Carbon::now()->month);
+        $anio = $request->input('anio', Carbon::now()->year);
+
+        $periodoActual = Carbon::create($anio, $mes, 1)->locale('es');
+        $periodoAnterior = $periodoActual->copy()->subMonth()->locale('es');
+
+        $rankingAnterior = $this->obtenerRankingLicenciasData(
+            $this->crearRequestParaMes($periodoAnterior->month, $periodoAnterior->year)
+        );
+
+        return [
+            'periodo_actual' => $periodoActual->isoFormat('MMMM YYYY'),
+            'periodo_anterior' => $periodoAnterior->isoFormat('MMMM YYYY'),
+            'licencias_actual' => collect($rankingActual)->sum('total_licencias'),
+            'dias_actual' => collect($rankingActual)->sum('total_dias_licencia'),
+            'licencias_anterior' => collect($rankingAnterior)->sum('total_licencias'),
+            'dias_anterior' => collect($rankingAnterior)->sum('total_dias_licencia'),
+        ];
+    }
+
+    private function obtenerAlertasCriticasRRHH($ranking, $limite = 4)
+    {
+        return collect($ranking)->filter(fn ($item) => $item['alerta_rendimiento'])->take($limite);
+    }
+
+    public function rankingLicenciasPdf(Request $request)
+    {
+        $ranking = $this->obtenerRankingLicenciasData($request);
+        $resumen = $this->calcularResumenRRHH($ranking);
+        $comparativa = $this->obtenerComparativaRRHH($request, $ranking);
+        $alertasCriticas = $this->obtenerAlertasCriticasRRHH($ranking);
+        $notas = $this->generarNotasRRHH($resumen, $comparativa);
+
+        $pdf = Pdf::loadView('pdf.rrhh_ranking_licencias', [
+            'ranking' => $ranking,
+            'resumen' => $resumen,
+            'comparativa' => $comparativa,
+            'alertasCriticas' => $alertasCriticas,
+            'notas' => $notas,
+            'filtros' => [
+                'mes' => $request->input('mes'),
+                'anio' => $request->input('anio'),
+            ],
+        ])->setPaper('a4', 'landscape');
+
+        $mes = $request->input('mes', Carbon::now()->month);
+        $anio = $request->input('anio', Carbon::now()->year);
+        $archivoHistorial = sprintf('rrhh-licencias-%04d-%02d.pdf', $anio, $mes);
+        $this->registrarHistorialReporte($request, 'rrhh', $archivoHistorial);
+
+        return $pdf->stream('ranking-licencias.pdf');
+    }
     public function resumenContratos()
     {
         $resumen = Empleado::select('tipo_contrato', DB::raw('COUNT(*) as total'))
@@ -289,8 +404,9 @@ class RRHHController extends Controller
 
             for ($i = $mesesAtras - 1; $i >= 0; $i--) {
                 $fecha = Carbon::now()->subMonths($i);
-                $mes = $fecha->month;
-                $year = $fecha->year;
+            $mes = $fecha->month;
+            $year = $fecha->year;
+            $mesTexto = $fecha->copy()->locale('es')->isoFormat('MMM YYYY');
 
                 $inicioMes = Carbon::create($year, $mes, 1)->startOfMonth()->format('Y-m-d');
                 $finMes = Carbon::create($year, $mes, 1)->endOfMonth()->format('Y-m-d');
@@ -323,7 +439,7 @@ class RRHHController extends Controller
                     ->count();
 
                 $resultado[] = [
-                    'mes' => $fecha->format('M Y'),
+                'mes' => $mesTexto,
                     'mes_numero' => $mes,
                     'anio' => $year,
                     'total_licencias' => (int) ($licencias->total_licencias ?? 0),

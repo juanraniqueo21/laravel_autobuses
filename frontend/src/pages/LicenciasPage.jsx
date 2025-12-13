@@ -13,6 +13,7 @@ import {
   eliminarLicencia,
   descargarPdfLicencia,
 } from '../services/api';
+import { emitLicenciasActualizadas } from '../utils/licenseEvents';
 
 import Table from '../components/tables/Table';
 import Button from '../components/common/Button';
@@ -296,7 +297,8 @@ const LicenciasPage = () => {
           }
 
           cerrarModal();
-          cargarDatos();
+          await cargarDatos();
+          emitLicenciasActualizadas();
         } catch (err) {
           setError(err.message);
           showAlert('error', 'Error al guardar', err.message);
@@ -315,7 +317,8 @@ const LicenciasPage = () => {
           setError(null);
           await aprobarLicencia(id);
           setSuccess('Licencia aprobada. El empleado ha sido marcado como "en licencia".');
-          cargarDatos();
+          await cargarDatos();
+          emitLicenciasActualizadas();
         } catch (err) {
           setError('Error al aprobar: ' + err.message);
           showAlert('error', 'Error al aprobar', err.message);
@@ -355,7 +358,8 @@ const LicenciasPage = () => {
           await rechazarLicencia(currentLicencia.id, motivoRechazo);
           setSuccess('Licencia rechazada exitosamente');
           cerrarModalRechazar();
-          cargarDatos();
+          await cargarDatos();
+          emitLicenciasActualizadas();
         } catch (err) {
           setError('Error al rechazar: ' + err.message);
           showAlert('error', 'Error al rechazar', err.message);
@@ -374,7 +378,8 @@ const LicenciasPage = () => {
           setError(null);
           await eliminarLicencia(id);
           setSuccess('Licencia eliminada exitosamente');
-          cargarDatos();
+          await cargarDatos();
+          emitLicenciasActualizadas();
         } catch (err) {
           setError('Error al eliminar: ' + err.message);
           showAlert('error', 'Error al eliminar', err.message);

@@ -140,6 +140,7 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/', [PermisoLicenciaController::class, 'index']);
         Route::get('/mis-licencias', [PermisoLicenciaController::class, 'misLicencias']);
         Route::get('/{id}', [PermisoLicenciaController::class, 'show']);
+        Route::get('/activas', [PermisoLicenciaController::class, 'ausenciasActivas']);
         Route::post('/', [PermisoLicenciaController::class, 'store']);
         Route::put('/{id}', [PermisoLicenciaController::class, 'update']);
         Route::post('/{id}/aprobar', [PermisoLicenciaController::class, 'aprobar']);
@@ -213,10 +214,12 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/mantenimiento-tops', [ReporteController::class, 'mantenimientoTops']);
         Route::get('/buses-soap-por-vencer', [ReporteController::class, 'busesSOAPPorVencer']);
         Route::get('/buses-permiso-circulacion-por-vencer', [ReporteController::class, 'busesPermisoCirculacionPorVencer']);
+        Route::get('/historial', [ReporteController::class, 'historialReportes']);
 
         // Dashboard operativo y SLA
         Route::get('/dashboard-operativo', [ReporteController::class, 'dashboardOperativo']);
         Route::get('/puntualidad-sla', [ReporteController::class, 'puntualidadSLA']);
+        Route::get('/mantenimientos/top/pdf', [ReporteController::class, 'busesConMasMantenimientosPdf']);
 
         Route::get('/{id}', [ReporteController::class, 'show']);
         Route::post('/', [ReporteController::class, 'store']);
@@ -253,6 +256,7 @@ Route::middleware('jwt.auth')->group(function () {
 
         // Evolución temporal de licencias
         Route::get('/evolucion-licencias', [RRHHController::class, 'evolucionLicenciasPorMes']);
+        Route::get('/ranking-licencias/pdf', [RRHHController::class, 'rankingLicenciasPdf']);
     });
 
 });

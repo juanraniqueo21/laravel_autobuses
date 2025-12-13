@@ -4,10 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Reporte;
 use App\Models\Empleado;
+use App\Models\ReportHistory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class ReporteController extends Controller
 {
@@ -20,22 +24,199 @@ class ReporteController extends Controller
         $fechaInicio = null;
         $fechaFin = null;
 
-        // Si se envía mes y año, convertir a rango de fechas
         if ($request->has('mes') && $request->has('anio')) {
             $mes = $request->mes;
             $anio = $request->anio;
 
-            // Primer día del mes
-            $fechaInicio = \Carbon\Carbon::createFromDate($anio, $mes, 1)->startOfDay()->format('Y-m-d');
-            // Último día del mes
-            $fechaFin = \Carbon\Carbon::createFromDate($anio, $mes, 1)->endOfMonth()->endOfDay()->format('Y-m-d');
+            $fechaInicio = Carbon::createFromDate($anio, $mes, 1)->startOfDay()->format('Y-m-d');
+            $fechaFin = Carbon::createFromDate($anio, $mes, 1)->endOfMonth()->endOfDay()->format('Y-m-d');
         } else {
-            // Si no hay mes/año, usar fecha_inicio y fecha_fin directamente
             $fechaInicio = $request->input('fecha_inicio');
             $fechaFin = $request->input('fecha_fin');
         }
 
         return ['fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin];
+    }
+
+    private function registrarHistorialReporte(Request $request, string $tipo, string $archivo, array $extras = [])
+    {
+        $mes = $request->input('mes', Carbon::now()->month);
+        $anio = $request->input('anio', Carbon::now()->year);
+
+        ReportHistory::create([
+            'tipo' => $tipo,
+            'mes' => (int) $mes,
+            'anio' => (int) $anio,
+            'filtros' => array_merge([
+                'mes' => (int) $mes,
+                'anio' => (int) $anio,
+            ], array_filter($extras, fn ($value) => $value !== null && $value !== '')),
+            'archivo' => $archivo,
+            'user_id' => Auth::id(),
+        ]);
+    }
+
+    private function crearRequestParaMes($mes, $anio)
+    {
+        return Request::create('/', 'GET', ['mes' => $mes, 'anio' => $anio]);
+    }
+
+    private function calcularResumenMantenimientos($fuente)
+    {
+        if (!$fuente) {
+            $fuente = (object) [
+                'total_mantenimientos' => 0,
+                'preventivos' => 0,
+                'correctivos' => 0,
+                'en_proceso' => 0,
+                'total_costos' => 0,
+            ];
+        }
+
+        if (is_object($fuente) && property_exists($fuente, 'total_mantenimientos')) {
+            $totalMantenimientos = (int) ($fuente->total_mantenimientos ?? 0);
+            $preventivos = (int) ($fuente->preventivos ?? 0);
+            $correctivos = (int) ($fuente->correctivos ?? 0);
+            $enProceso = (int) ($fuente->en_proceso ?? 0);
+            $totalCostos = (int) ($fuente->total_costos ?? 0);
+        } else {
+            $coleccion = collect($fuente);
+            $totalMantenimientos = $coleccion->sum('total_mantenimientos');
+            $preventivos = $coleccion->sum('preventivos');
+            $correctivos = $coleccion->sum('correctivos');
+            $enProceso = $coleccion->sum('en_proceso');
+            $totalCostos = $coleccion->sum('costo_total_mantenimientos');
+        }
+
+        $porcentajePreventivos = $totalMantenimientos ? round(($preventivos / $totalMantenimientos) * 100, 1) : 0;
+        $porcentajeCorrectivos = $totalMantenimientos ? round(($correctivos / $totalMantenimientos) * 100, 1) : 0;
+        $costoPromedio = $totalMantenimientos ? round($totalCostos / $totalMantenimientos) : 0;
+
+        return [
+            'total_mantenimientos' => $totalMantenimientos,
+            'preventivos' => $preventivos,
+            'correctivos' => $correctivos,
+            'en_proceso' => $enProceso,
+            'total_costos' => $totalCostos,
+            'porcentaje_preventivos' => $porcentajePreventivos,
+            'porcentaje_correctivos' => $porcentajeCorrectivos,
+            'costo_promedio' => $costoPromedio,
+        ];
+    }
+
+    private function obtenerResumenMantenimientosTotales(Request $request)
+    {
+        $fechas = $this->procesarFiltrosFecha($request);
+
+        $query = DB::table('mantenimientos')
+            ->select(
+                DB::raw('COUNT(*) as total_mantenimientos'),
+                DB::raw("SUM(CASE WHEN tipo_mantenimiento = 'preventivo' THEN 1 ELSE 0 END) as preventivos"),
+                DB::raw("SUM(CASE WHEN tipo_mantenimiento = 'correctivo' THEN 1 ELSE 0 END) as correctivos"),
+                DB::raw("SUM(CASE WHEN estado = 'en_proceso' THEN 1 ELSE 0 END) as en_proceso"),
+                DB::raw("COALESCE(SUM(CASE WHEN estado = 'completado' THEN costo_total ELSE 0 END), 0) as total_costos")
+            );
+
+        if ($fechas['fecha_inicio']) {
+            $query->where('fecha_inicio', '>=', $fechas['fecha_inicio']);
+        }
+        if ($fechas['fecha_fin']) {
+            $query->where('fecha_inicio', '<=', $fechas['fecha_fin']);
+        }
+        if ($request->has('tipo_mantenimiento') && $request->input('tipo_mantenimiento')) {
+            $query->where('tipo_mantenimiento', $request->input('tipo_mantenimiento'));
+        }
+
+        return $query->first();
+    }
+
+    private function obtenerComparativaMantenimientos(Request $request, $resumenActual = null)
+    {
+        $mes = $request->input('mes', Carbon::now()->month);
+        $anio = $request->input('anio', Carbon::now()->year);
+
+        $periodoActual = Carbon::create($anio, $mes, 1)->locale('es');
+        $periodoAnterior = $periodoActual->copy()->subMonth()->locale('es');
+
+        $resumenActual = $resumenActual ?? $this->obtenerResumenMantenimientosTotales($request);
+        $resumenAnterior = $this->obtenerResumenMantenimientosTotales(
+            $this->crearRequestParaMes($periodoAnterior->month, $periodoAnterior->year)
+        );
+
+        $sumActual = (int) ($resumenActual->total_mantenimientos ?? 0);
+        $sumAnterior = (int) ($resumenAnterior->total_mantenimientos ?? 0);
+
+        $costActual = (int) ($resumenActual->total_costos ?? 0);
+        $costAnterior = (int) ($resumenAnterior->total_costos ?? 0);
+
+        return [
+            'periodo_actual' => $periodoActual->isoFormat('MMMM YYYY'),
+            'periodo_anterior' => $periodoAnterior->isoFormat('MMMM YYYY'),
+            'total_actual' => $sumActual,
+            'total_anterior' => $sumAnterior,
+            'costo_actual' => $costActual,
+            'costo_anterior' => $costAnterior,
+        ];
+    }
+
+    private function generarNotasMantenimientos($resumen)
+    {
+        $notas = [];
+
+        if ($resumen['porcentaje_preventivos'] >= 60) {
+            $notas[] = 'Más del 60% de los mantenimientos fueron preventivos, lo cual indica foco en prevención.';
+        } elseif ($resumen['porcentaje_correctivos'] >= 60) {
+            $notas[] = 'El mantenimiento correctivo domina el mes y podría implicar problemas recurrentes.';
+        }
+
+        if ($resumen['en_proceso'] > 3) {
+            $notas[] = 'Hay varios mantenimientos en curso, revisar tiempos de ejecución.';
+        }
+
+        if ($resumen['costo_promedio'] > 600000) {
+            $notas[] = 'El costo promedio por mantenimiento está por encima de $600.000.';
+        }
+
+        return $notas;
+    }
+
+    private function calcularResumenRRHH($ranking)
+    {
+        $coleccion = collect($ranking);
+        return [
+            'total_licencias' => $coleccion->sum('total_licencias'),
+            'total_dias' => $coleccion->sum('total_dias_licencia'),
+            'medicas' => $coleccion->sum('licencias_medicas'),
+            'administrativas' => $coleccion->sum('licencias_administrativas'),
+            'permisos' => $coleccion->sum('permisos'),
+        ];
+    }
+
+    private function obtenerComparativaRRHH(Request $request, $rankingActual)
+    {
+        $mes = $request->input('mes', Carbon::now()->month);
+        $anio = $request->input('anio', Carbon::now()->year);
+
+        $periodoActual = Carbon::create($anio, $mes, 1)->locale('es');
+        $periodoAnterior = $periodoActual->copy()->subMonth()->locale('es');
+
+        $rankingAnterior = $this->obtenerRankingLicenciasData(
+            $this->crearRequestParaMes($periodoAnterior->month, $periodoAnterior->year)
+        );
+
+        return [
+            'periodo_actual' => $periodoActual->isoFormat('MMMM YYYY'),
+            'periodo_anterior' => $periodoAnterior->isoFormat('MMMM YYYY'),
+            'licencias_actual' => collect($rankingActual)->sum('total_licencias'),
+            'dias_actual' => collect($rankingActual)->sum('total_dias_licencia'),
+            'licencias_anterior' => collect($rankingAnterior)->sum('total_licencias'),
+            'dias_anterior' => collect($rankingAnterior)->sum('total_dias_licencia'),
+        ];
+    }
+
+    private function obtenerAlertasCriticasRRHH($ranking, $limite = 4)
+    {
+        return collect($ranking)->filter(fn ($item) => $item['alerta_rendimiento'])->take($limite);
     }
 
     /**
@@ -498,9 +679,8 @@ class ReporteController extends Controller
      * - fecha_fin: filtrar hasta fecha
      * - tipo_mantenimiento: 'preventivo' o 'correctivo'
      */
-    public function busesConMasMantenimientos(Request $request)
+    private function obtenerAnalisisBusesConMasMantenimientos(Request $request)
     {
-        // Procesar filtros de fecha (mes/año o fecha_inicio/fecha_fin)
         $fechas = $this->procesarFiltrosFecha($request);
 
         $query = DB::table('mantenimientos')
@@ -519,7 +699,6 @@ class ReporteController extends Controller
                 DB::raw('COALESCE(SUM(mantenimientos.costo_total), 0) as costo_total_mantenimientos')
             );
 
-        // Filtros de fecha
         if ($fechas['fecha_inicio']) {
             $query->where('mantenimientos.fecha_inicio', '>=', $fechas['fecha_inicio']);
         }
@@ -536,9 +715,9 @@ class ReporteController extends Controller
             ->limit(10)
             ->get();
 
-        $analisis = $resultados->map(function ($item) {
+        return $resultados->map(function ($item) {
             return [
-                'id' => $item->id, // Agregado id
+                'id' => $item->id,
                 'bus_id' => $item->id,
                 'patente' => $item->patente,
                 'marca' => $item->marca,
@@ -549,13 +728,73 @@ class ReporteController extends Controller
                 'preventivos' => (int) $item->preventivos,
                 'correctivos' => (int) $item->correctivos,
                 'en_proceso' => (int) $item->en_proceso,
-                'costo_total_mantenimientos' => (int) $item->costo_total_mantenimientos, // Corregido nombre del campo
+                'costo_total_mantenimientos' => (int) $item->costo_total_mantenimientos,
             ];
         });
+    }
 
+    public function busesConMasMantenimientos(Request $request)
+    {
+        $analisis = $this->obtenerAnalisisBusesConMasMantenimientos($request);
         return response()->json($analisis);
     }
 
+    public function busesConMasMantenimientosPdf(Request $request)
+    {
+        $analisis = $this->obtenerAnalisisBusesConMasMantenimientos($request);
+
+        $resumenTotales = $this->obtenerResumenMantenimientosTotales($request);
+        $resumen = $this->calcularResumenMantenimientos($resumenTotales);
+        $comparativa = $this->obtenerComparativaMantenimientos($request, $resumenTotales);
+        $notas = $this->generarNotasMantenimientos($resumen);
+
+        $pdf = Pdf::loadView('pdf.analisis_mantenimientos', [
+            'analisis' => $analisis,
+            'resumen' => $resumen,
+            'comparativa' => $comparativa,
+            'notas' => $notas,
+            'resumenTotales' => $resumenTotales,
+            'filtros' => [
+                'mes' => $request->input('mes'),
+                'anio' => $request->input('anio'),
+                'tipo_mantenimiento' => $request->input('tipo_mantenimiento'),
+            ],
+        ])->setPaper('a4', 'landscape');
+        $mes = $request->input('mes', Carbon::now()->month);
+        $anio = $request->input('anio', Carbon::now()->year);
+        $archivoHistorial = sprintf('analisis-mantenimientos-%04d-%02d.pdf', $anio, $mes);
+        $this->registrarHistorialReporte($request, 'mantenimientos', $archivoHistorial, [
+            'tipo_mantenimiento' => $request->input('tipo_mantenimiento'),
+        ]);
+
+        return $pdf->stream('analisis-mantenimientos.pdf');
+    }
+
+    public function historialReportes(Request $request)
+    {
+        $tipo = $request->input('tipo');
+        $mes = $request->input('mes');
+        $anio = $request->input('anio');
+
+        $query = ReportHistory::with('user')->orderByDesc('created_at');
+
+        if ($tipo) {
+            $query->where('tipo', $tipo);
+        }
+        if ($mes) {
+            $query->where('mes', $mes);
+        }
+        if ($anio) {
+            $query->where('anio', $anio);
+        }
+
+        $historial = $query->limit(12)->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $historial,
+        ]);
+    }
     /**
      * Tipos de fallas más comunes
      * Análisis de las descripciones de mantenimientos correctivos
