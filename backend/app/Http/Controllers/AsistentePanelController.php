@@ -108,6 +108,11 @@ class AsistentePanelController extends Controller
             // Información del asistente
             $asistente->load('empleado.user');
 
+            // Obtener notificaciones
+            $notificationController = new \App\Http\Controllers\NotificationController();
+            $notificationsResponse = $notificationController->index();
+            $notificationsData = json_decode($notificationsResponse->getContent(), true);
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -149,6 +154,7 @@ class AsistentePanelController extends Controller
                             'modelo' => $proximoTurno->bus->modelo,
                         ] : null,
                     ] : null,
+                    'notifications' => $notificationsData['data'] ?? []
                 ]
             ]);
 

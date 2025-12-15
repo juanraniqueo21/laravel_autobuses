@@ -74,6 +74,11 @@ class MecanicoPanelController extends Controller
                 $email = $mecanico->empleado->user->email;
             }
 
+            // Obtener notificaciones
+            $notificationController = new \App\Http\Controllers\NotificationController();
+            $notificationsResponse = $notificationController->index();
+            $notificationsData = json_decode($notificationsResponse->getContent(), true);
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -100,7 +105,8 @@ class MecanicoPanelController extends Controller
                         'estado' => $proximaMantencion->estado,
                         'bus' => $proximaMantencion->bus,
                         'descripcion' => $proximaMantencion->descripcion
-                    ] : null
+                    ] : null,
+                    'notifications' => $notificationsData['data'] ?? []
                 ]
             ]);
 

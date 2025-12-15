@@ -22,6 +22,9 @@ use App\Http\Controllers\ReportController; // Controlador de Logística
 use App\Http\Controllers\ReporteController; // Controlador de Reportes (Nuevo)
 use App\Http\Controllers\RRHHController; // Controlador de RRHH
 use App\Http\Controllers\ProfileController; // Controlador de Perfil de Usuario
+use App\Http\Controllers\NotificationController; // Controlador de Notificaciones
+use App\Http\Controllers\GerentePanelController; // Dashboard Gerente
+use App\Http\Controllers\RRHHPanelController; // Dashboard RRHH
 
 // ============================================
 // RUTAS PÚBLICAS (sin autenticación)
@@ -45,6 +48,9 @@ Route::middleware('jwt.auth')->group(function () {
         Route::put('/profile', [ProfileController::class, 'updateProfile']);
         Route::put('/password', [ProfileController::class, 'updatePassword']);
     });
+
+    // NOTIFICACIONES
+    Route::get('/notifications', [NotificationController::class, 'index']);
 
     // ROLES (solo Admin)
     Route::middleware('role:admin')->group(function () {
@@ -192,10 +198,20 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/mis-viajes/{id}', [AsistentePanelController::class, 'verViaje']);
     });
 
-    // PANEL MECÁNICO (del api.php de tu amigo)
+    // PANEL MECÁNICO
     Route::prefix('mecanico')->group(function () {
         Route::get('/dashboard', [MecanicoPanelController::class, 'dashboard']);
         Route::get('/mis-mantenciones', [MecanicoPanelController::class, 'misMantenciones']);
+    });
+
+    // PANEL GERENTE
+    Route::prefix('gerente')->middleware('role:admin,gerente')->group(function () {
+        Route::get('/dashboard', [GerentePanelController::class, 'dashboard']);
+    });
+
+    // PANEL RRHH
+    Route::prefix('rrhh-panel')->middleware('role:admin,rrhh')->group(function () {
+        Route::get('/dashboard', [RRHHPanelController::class, 'dashboard']);
     });
 
     // LIQUIDACIONES (Admin, RRHH)
