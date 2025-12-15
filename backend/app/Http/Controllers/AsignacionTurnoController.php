@@ -59,12 +59,16 @@ class AsignacionTurnoController extends Controller
             $query->orderBy('fecha_turno', 'desc')
                   ->orderBy('hora_inicio', 'desc');
 
-            $turnos = $query->get();
+            $perPage = $request->get('per_page', 50);
+            $turnos = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,
-                'data' => $turnos,
-                'total' => $turnos->count()
+                'data' => $turnos->items(),
+                'total' => $turnos->total(),
+                'per_page' => $turnos->perPage(),
+                'current_page' => $turnos->currentPage(),
+                'last_page' => $turnos->lastPage()
             ]);
         } catch (\Exception $e) {
             return response()->json([

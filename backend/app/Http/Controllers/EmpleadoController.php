@@ -12,12 +12,14 @@ class EmpleadoController extends Controller
     // ============================================
     // GET - Obtener todos los empleados
     // ============================================
-    public function index()
+    public function index(Request $request)
     {
+        $perPage = $request->get('per_page', 50);
+
         $empleados = Empleado::with('user', 'afp', 'isapre', 'conductor', 'mecanico', 'asistente')
             ->orderBy('id', 'asc')
-            ->get();
-        
+            ->paginate($perPage);
+
         return response()->json($empleados);
     }
 

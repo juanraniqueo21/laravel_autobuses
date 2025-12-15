@@ -38,52 +38,65 @@ Route::middleware('jwt.auth')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/refresh', [AuthController::class, 'refresh']);
 
-    // ROLES
-    Route::get('/roles', [RolController::class, 'index']);
-    Route::get('/roles/{id}', [RolController::class, 'show']);
-    Route::post('/roles', [RolController::class, 'store']);
-    Route::put('/roles/{id}', [RolController::class, 'update']);
-    Route::delete('/roles/{id}', [RolController::class, 'destroy']);
+    // ROLES (solo Admin)
+    Route::middleware('role:admin')->group(function () {
+        Route::get('/roles', [RolController::class, 'index']);
+        Route::get('/roles/{id}', [RolController::class, 'show']);
+        Route::post('/roles', [RolController::class, 'store']);
+        Route::put('/roles/{id}', [RolController::class, 'update']);
+        Route::delete('/roles/{id}', [RolController::class, 'destroy']);
+    });
 
-    // USUARIOS
-    Route::get('/users', [UserController::class, 'index']);
-    Route::get('/users/{id}', [UserController::class, 'show']);
-    Route::post('/users', [UserController::class, 'store']);
-    Route::put('/users/{id}', [UserController::class, 'update']);
-    Route::delete('/users/{id}', [UserController::class, 'destroy']);
+    // USUARIOS (Admin, Gerente, RRHH)
+    Route::middleware('role:admin,gerente,rrhh')->group(function () {
+        Route::get('/users', [UserController::class, 'index']);
+        Route::get('/users/{id}', [UserController::class, 'show']);
+        Route::post('/users', [UserController::class, 'store']);
+        Route::put('/users/{id}', [UserController::class, 'update']);
+        Route::delete('/users/{id}', [UserController::class, 'destroy']);
+    });
 
-    // EMPLEADOS - RUTAS ESPECÍFICAS PRIMERO
-    Route::get('/empleados/afps', [EmpleadoController::class, 'getAfps']);
-    Route::get('/empleados/isapres', [EmpleadoController::class, 'getIsapres']);
-    Route::get('/empleados/activos', [EmpleadoController::class, 'getActivos']);
+    // EMPLEADOS (Admin, Gerente, RRHH pueden gestionar)
+    Route::middleware('role:admin,gerente,rrhh')->group(function () {
+        // EMPLEADOS - RUTAS ESPECÍFICAS PRIMERO
+        Route::get('/empleados/afps', [EmpleadoController::class, 'getAfps']);
+        Route::get('/empleados/isapres', [EmpleadoController::class, 'getIsapres']);
+        Route::get('/empleados/activos', [EmpleadoController::class, 'getActivos']);
 
-    // EMPLEADOS - RUTAS GENÉRICAS DESPUÉS
-    Route::get('/empleados', [EmpleadoController::class, 'index']);
-    Route::get('/empleados/{id}', [EmpleadoController::class, 'show']);
-    Route::post('/empleados', [EmpleadoController::class, 'store']);
-    Route::put('/empleados/{id}', [EmpleadoController::class, 'update']);
-    Route::delete('/empleados/{id}', [EmpleadoController::class, 'destroy']);
-    Route::post('/empleados/{id}/baja', [EmpleadoController::class, 'darDeBaja']);
+        // EMPLEADOS - RUTAS GENÉRICAS DESPUÉS
+        Route::get('/empleados', [EmpleadoController::class, 'index']);
+        Route::get('/empleados/{id}', [EmpleadoController::class, 'show']);
+        Route::post('/empleados', [EmpleadoController::class, 'store']);
+        Route::put('/empleados/{id}', [EmpleadoController::class, 'update']);
+        Route::delete('/empleados/{id}', [EmpleadoController::class, 'destroy']);
+        Route::post('/empleados/{id}/baja', [EmpleadoController::class, 'darDeBaja']);
+    });
 
-    // CONDUCTORES
-    Route::get('/conductores', [ConductorController::class, 'index']);
-    Route::get('/conductores/{id}', [ConductorController::class, 'show']);
-    Route::post('/conductores', [ConductorController::class, 'store']);
-    Route::put('/conductores/{id}', [ConductorController::class, 'update']);
-    Route::delete('/conductores/{id}', [ConductorController::class, 'destroy']);
+    // CONDUCTORES (Admin, Gerente, RRHH)
+    Route::middleware('role:admin,gerente,rrhh')->group(function () {
+        Route::get('/conductores', [ConductorController::class, 'index']);
+        Route::get('/conductores/{id}', [ConductorController::class, 'show']);
+        Route::post('/conductores', [ConductorController::class, 'store']);
+        Route::put('/conductores/{id}', [ConductorController::class, 'update']);
+        Route::delete('/conductores/{id}', [ConductorController::class, 'destroy']);
+    });
 
-    // CATÁLOGOS BUSES
-    Route::get('/buses/catalogos/todos', [BusController::class, 'getCatalogosCompletos']);
-    Route::get('/buses/catalogos/marcas/{tipo}', [BusController::class, 'getMarcas']);
-    Route::get('/buses/catalogos/modelos/{marcaId}', [BusController::class, 'getModelos']);
+    // CATÁLOGOS BUSES (Admin, Gerente)
+    Route::middleware('role:admin,gerente')->group(function () {
+        Route::get('/buses/catalogos/todos', [BusController::class, 'getCatalogosCompletos']);
+        Route::get('/buses/catalogos/marcas/{tipo}', [BusController::class, 'getMarcas']);
+        Route::get('/buses/catalogos/modelos/{marcaId}', [BusController::class, 'getModelos']);
+    });
 
-    // BUSES
-    Route::get('/buses', [BusController::class, 'index']);
-    Route::get('/buses/{id}', [BusController::class, 'show']);
-    Route::post('/buses', [BusController::class, 'store']);
-    Route::put('/buses/{id}', [BusController::class, 'update']);
-    Route::post('/buses/{id}/activar-emergencia', [BusController::class, 'activarEmergencia']);
-    Route::delete('/buses/{id}', [BusController::class, 'destroy']);
+    // BUSES (Admin, Gerente)
+    Route::middleware('role:admin,gerente')->group(function () {
+        Route::get('/buses', [BusController::class, 'index']);
+        Route::get('/buses/{id}', [BusController::class, 'show']);
+        Route::post('/buses', [BusController::class, 'store']);
+        Route::put('/buses/{id}', [BusController::class, 'update']);
+        Route::post('/buses/{id}/activar-emergencia', [BusController::class, 'activarEmergencia']);
+        Route::delete('/buses/{id}', [BusController::class, 'destroy']);
+    });
 
     // RUTAS
     Route::get('/rutas', [RutaController::class, 'index']);
@@ -99,12 +112,14 @@ Route::middleware('jwt.auth')->group(function () {
     Route::put('/rutas/{rutaId}/paradas/{paradaId}', [RutaController::class, 'actualizarParada']);
     Route::delete('/rutas/{rutaId}/paradas/{paradaId}', [RutaController::class, 'eliminarParada']);
 
-    // ASISTENTES
-    Route::get('/asistentes', [AsistenteController::class, 'index']);
-    Route::get('/asistentes/{id}', [AsistenteController::class, 'show']);
-    Route::post('/asistentes', [AsistenteController::class, 'store']);
-    Route::put('/asistentes/{id}', [AsistenteController::class, 'update']);
-    Route::delete('/asistentes/{id}', [AsistenteController::class, 'destroy']);
+    // ASISTENTES (Admin, Gerente, RRHH)
+    Route::middleware('role:admin,gerente,rrhh')->group(function () {
+        Route::get('/asistentes', [AsistenteController::class, 'index']);
+        Route::get('/asistentes/{id}', [AsistenteController::class, 'show']);
+        Route::post('/asistentes', [AsistenteController::class, 'store']);
+        Route::put('/asistentes/{id}', [AsistenteController::class, 'update']);
+        Route::delete('/asistentes/{id}', [AsistenteController::class, 'destroy']);
+    });
 
     // VIAJES
     Route::get('/viajes', [ViajeController::class, 'index']);
@@ -125,12 +140,14 @@ Route::middleware('jwt.auth')->group(function () {
     Route::put('/turnos/{id}', [AsignacionTurnoController::class, 'update']);
     Route::delete('/turnos/{id}', [AsignacionTurnoController::class, 'destroy']);
 
-    // MECANICOS
-    Route::get('/mecanicos', [MecanicoController::class, 'index']);
-    Route::get('/mecanicos/{id}', [MecanicoController::class, 'show']);
-    Route::post('/mecanicos', [MecanicoController::class, 'store']);
-    Route::put('/mecanicos/{id}', [MecanicoController::class, 'update']);
-    Route::delete('/mecanicos/{id}', [MecanicoController::class, 'destroy']);
+    // MECANICOS (Admin, Gerente)
+    Route::middleware('role:admin,gerente')->group(function () {
+        Route::get('/mecanicos', [MecanicoController::class, 'index']);
+        Route::get('/mecanicos/{id}', [MecanicoController::class, 'show']);
+        Route::post('/mecanicos', [MecanicoController::class, 'store']);
+        Route::put('/mecanicos/{id}', [MecanicoController::class, 'update']);
+        Route::delete('/mecanicos/{id}', [MecanicoController::class, 'destroy']);
+    });
 
     // MANTENIMIENTOS
     Route::apiResource('mantenimientos', MantenimientoController::class);
@@ -173,8 +190,8 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/mis-mantenciones', [MecanicoPanelController::class, 'misMantenciones']);
     });
 
-    // LIQUIDACIONES
-    Route::prefix('liquidaciones')->group(function () {
+    // LIQUIDACIONES (Admin, RRHH)
+    Route::prefix('liquidaciones')->middleware('role:admin,rrhh')->group(function () {
         Route::get('/', [LiquidacionController::class, 'index']);
         Route::get('/estadisticas', [LiquidacionController::class, 'estadisticas']);
         Route::post('/calcular', [LiquidacionController::class, 'calcularLiquidacion']);
@@ -234,10 +251,11 @@ Route::middleware('jwt.auth')->group(function () {
     // ============================================
     // ALERTAS INTELIGENTES Y PREDICCIONES
     // ============================================
-    Route::prefix('alertas')->group(function () {
-        Route::get('/', [App\Http\Controllers\AlertasInteligentesController::class, 'obtenerAlertas']);
-        Route::get('/predicciones', [App\Http\Controllers\AlertasInteligentesController::class, 'predicciones']);
-    });
+    // TODO: Implementar AlertasInteligentesController
+    // Route::prefix('alertas')->group(function () {
+    //     Route::get('/', [App\Http\Controllers\AlertasInteligentesController::class, 'obtenerAlertas']);
+    //     Route::get('/predicciones', [App\Http\Controllers\AlertasInteligentesController::class, 'predicciones']);
+    // });
 
     // ============================================
     // RECURSOS HUMANOS - ANÁLISIS Y GESTIÓN

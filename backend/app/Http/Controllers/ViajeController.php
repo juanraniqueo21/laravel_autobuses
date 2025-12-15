@@ -35,7 +35,8 @@ class ViajeController extends Controller
             $query->where('estado', $request->estado);
         }
 
-        $viajes = $query->orderBy('fecha_hora_salida', 'desc')->get();
+        $perPage = $request->get('per_page', 50);
+        $viajes = $query->orderBy('fecha_hora_salida', 'desc')->paginate($perPage);
         return response()->json($viajes);
     }
 

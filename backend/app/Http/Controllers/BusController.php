@@ -31,20 +31,26 @@ class BusController extends Controller
                 $query->where('estado', $request->estado);
             }
 
-            $buses = $query->get();
+            $perPage = $request->get('per_page', 50);
+            $buses = $query->paginate($perPage);
 
             // Agregar nombre descriptivo del tipo de servicio
-            $busesConAnalisis = $buses->map(function ($bus) {
+            $busesConAnalisis = $buses->getCollection()->map(function ($bus) {
                 $busData = $bus->toArray();
                 $busData['nombre_tipo_servicio'] = $bus->nombre_tipo_servicio;
                 $busData['es_servicio_premium'] = $bus->esServicioPremium();
                 return $busData;
             });
 
+            $buses->setCollection($busesConAnalisis);
+
             return response()->json([
                 'success' => true,
-                'data' => $busesConAnalisis,
-                'total' => $buses->count()
+                'data' => $buses->items(),
+                'total' => $buses->total(),
+                'per_page' => $buses->perPage(),
+                'current_page' => $buses->currentPage(),
+                'last_page' => $buses->lastPage()
             ]);
         } catch (\Exception $e) {
             return response()->json([
