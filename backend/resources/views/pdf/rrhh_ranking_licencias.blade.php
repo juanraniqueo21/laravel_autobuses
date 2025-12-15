@@ -1,186 +1,238 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="es">
 <head>
-  <meta charset="utf-8">
-  <title>Ranking de licencias</title>
-  <style>
-    body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; color: #111827; margin: 16px; }
-    h1 { margin: 0; font-size: 22px; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
-    .header .meta { font-size: 12px; color: #475569; margin-top: 6px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
-    .card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; background: #f9fafb; }
-    .card .label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; margin-bottom: 4px; }
-    .card .value { font-size: 18px; font-weight: 600; }
-    .comparativa { border: 1px dashed #cbd5f5; border-radius: 10px; padding: 10px; background: #f8fafc; margin-bottom: 16px; }
-    .comparativa table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    .comparativa th, .comparativa td { padding: 4px 6px; text-align: left; }
-    .comparativa th { color: #1d4ed8; font-weight: 600; }
-    .alertas { margin-bottom: 16px; }
-    .alerta-item { background: #fff; border: 1px solid #fee2e2; border-left: 4px solid #f87171; padding: 6px 10px; margin-bottom: 6px; border-radius: 6px; font-size: 11px; }
-    .table-wrapper { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    th, td { border: 1px solid #e2e8f0; padding: 6px 8px; }
-    th { background: #f8fafc; text-transform: uppercase; font-size: 10px; letter-spacing: 0.03em; }
-    tbody tr:nth-child(even) { background: #f9fafb; }
-    .badge { display: inline-block; padding: 2px 6px; border-radius: 999px; font-size: 10px; }
-    .badge-danger { background: #fee2e2; color: #b91c1c; }
-    .badge-info { background: #e0f2fe; color: #0c4a6e; }
-    .top-empleados { border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; padding: 12px; margin-bottom: 16px; }
-    .top-empleados .empleado-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
-    .top-empleados .empleado-item:last-child { border-bottom: none; }
-    .empleado-info { font-size: 12px; }
-    .empleado-info .nombre { font-weight: 600; margin: 0; }
-    .empleado-info .meta { margin: 0; font-size: 10px; color: #6b7280; }
-    .top-metric { text-align: right; }
-    .top-metric span { display: block; font-size: 12px; font-weight: 600; }
-    .notas { margin-bottom: 16px; border: 1px dashed #cbd5f5; border-radius: 10px; padding: 10px 12px; background: #f8fafc; }
-    .notas ul { padding-left: 16px; margin: 6px 0 0; color: #0f172a; font-size: 11px; }
-    .summary-subtitle { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; margin-bottom: 8px; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Ranking de Licencias RRHH</title>
+    <style>
+        @page { margin: 30px; }
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 11px;
+            color: #334155;
+            line-height: 1.4;
+        }
+
+        /* Encabezado */
+        .header-table { width: 100%; margin-bottom: 20px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; }
+        .company-name { font-size: 20px; font-weight: bold; color: #0f172a; }
+        .doc-title { font-size: 16px; color: #2563eb; font-weight: bold; text-align: right; text-transform: uppercase; }
+        .doc-meta { font-size: 10px; color: #64748b; text-align: right; }
+
+        /* Secciones */
+        .section-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #0f172a;
+            border-bottom: 1px solid #94a3b8;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            padding-bottom: 4px;
+            text-transform: uppercase;
+        }
+
+        /* KPIs */
+        .kpi-table { width: 100%; border-collapse: separate; border-spacing: 4px; margin-bottom: 15px; }
+        .kpi-cell { 
+            background: #f8fafc; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 4px; 
+            padding: 8px; 
+            text-align: center; 
+            width: 25%;
+        }
+        .kpi-label { font-size: 9px; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
+        .kpi-value { font-size: 16px; font-weight: bold; color: #0f172a; display: block; }
+        .kpi-hint { font-size: 9px; color: #2563eb; margin-top: 2px; }
+
+        /* Tablas */
+        .details-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        .details-table th {
+            background-color: #f1f5f9;
+            color: #1e293b;
+            padding: 6px 8px;
+            text-align: left;
+            font-size: 10px;
+            text-transform: uppercase;
+            border-bottom: 2px solid #cbd5e1;
+        }
+        .details-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 10px;
+        }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+
+        /* Alertas */
+        .alert-box {
+            background-color: #fef2f2;
+            border-left: 3px solid #ef4444;
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            font-size: 10px;
+            color: #7f1d1d;
+        }
+
+        /* Badges */
+        .badge { padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; }
+        .badge-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+        .badge-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    </style>
 </head>
 <body>
-  @php
-    use Carbon\Carbon;
-    $mesNombre = '-';
-    if (!empty($filtros['mes']) && !empty($filtros['anio'])) {
-        $mesNombre = Carbon::createFromDate($filtros['anio'], $filtros['mes'], 1)->locale('es')->isoFormat('MMMM');
-    } elseif (!empty($comparativa['periodo_actual'])) {
-        $mesNombre = $comparativa['periodo_actual'];
-    }
-    $topEmpleados = collect($ranking)->sortByDesc('total_dias_licencia')->take(3);
-  @endphp
-  <div class="header">
-    <div>
-      <h1>RRHH · Ranking de licencias</h1>
-      <p class="meta">Periodo actual: {{ $comparativa['periodo_actual'] ?? '-' }} · Periodo anterior: {{ $comparativa['periodo_anterior'] ?? '-' }}</p>
-    </div>
-    <div class="meta">
-      Mes: {{ $mesNombre }} · Año: {{ $filtros['anio'] ?? '-' }}
-    </div>
-  </div>
+    @php
+        use Carbon\Carbon;
+        $mesNombre = '-';
+        if (!empty($filtros['mes']) && !empty($filtros['anio'])) {
+            $mesNombre = Carbon::createFromDate($filtros['anio'], $filtros['mes'], 1)->locale('es')->isoFormat('MMMM');
+        }
+        $topEmpleados = collect($ranking)->sortByDesc('total_dias_licencia')->take(5);
+    @endphp
 
-  <section class="grid">
-    <div class="card">
-      <div class="label">Licencias totales</div>
-      <div class="value">{{ number_format($resumen['total_licencias'] ?? 0, 0, ',', '.') }}</div>
-      <div class="label" style="font-size: 9px; margin-top: 4px;">+{{ $comparativa['licencias_actual'] ?? 0 }} actual / {{ $comparativa['licencias_anterior'] ?? 0 }} anterior</div>
-    </div>
-    <div class="card">
-      <div class="label">Días totales</div>
-      <div class="value">{{ number_format($resumen['total_dias'] ?? 0, 0, ',', '.') }}</div>
-      <div class="label" style="font-size: 9px; margin-top: 4px;">{{ $comparativa['dias_actual'] ?? 0 }} vs {{ $comparativa['dias_anterior'] ?? 0 }}</div>
-    </div>
-    <div class="card">
-      <div class="label">Licencias médicas</div>
-      <div class="value">{{ number_format($resumen['medicas'] ?? 0, 0, ',', '.') }}</div>
-    </div>
-    <div class="card">
-      <div class="label">Administrativas + permisos</div>
-      <div class="value">{{ number_format(($resumen['administrativas'] ?? 0) + ($resumen['permisos'] ?? 0), 0, ',', '.') }}</div>
-    </div>
-  </section>
-
-  <section class="comparativa">
-    <p style="margin-bottom: 6px; font-weight: 600;">Comparativa mensual</p>
-    <table>
-      <thead>
+    <table class="header-table">
         <tr>
-          <th>Indicador</th>
-          <th>{{ $comparativa['periodo_anterior'] ?? 'Mes anterior' }}</th>
-          <th>{{ $comparativa['periodo_actual'] ?? 'Mes actual' }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Licencias</td>
-          <td>{{ number_format($comparativa['licencias_anterior'] ?? 0, 0, ',', '.') }}</td>
-          <td>{{ number_format($comparativa['licencias_actual'] ?? 0, 0, ',', '.') }}</td>
-        </tr>
-        <tr>
-          <td>Días</td>
-          <td>{{ number_format($comparativa['dias_anterior'] ?? 0, 0, ',', '.') }}</td>
-          <td>{{ number_format($comparativa['dias_actual'] ?? 0, 0, ',', '.') }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section class="top-empleados">
-    <p class="summary-subtitle">Top 3 ausentismos en días</p>
-    @if($topEmpleados->isEmpty())
-      <p class="empty-note">No hay licencias registradas para el período.</p>
-    @else
-      @foreach($topEmpleados as $emp)
-        <div class="empleado-item">
-          <div class="empleado-info">
-            <p class="nombre">{{ $emp['nombre_completo'] ?? 'Empleado' }}</p>
-            <p class="meta">{{ ucfirst($emp['tipo_contrato'] ?? 'Contrato') }} · {{ $emp['total_licencias'] ?? 0 }} licencias</p>
-          </div>
-          <div class="top-metric">
-            <span>{{ $emp['total_dias_licencia'] ?? 0 }}d</span>
-            <small>{{ $emp['alerta_rendimiento'] ? 'Alerta crítica' : 'Estable' }}</small>
-          </div>
-        </div>
-      @endforeach
-    @endif
-  </section>
-
-  @if(!empty($notas))
-    <section class="notas">
-      <p class="summary-subtitle">Notas clave</p>
-      <ul>
-        @foreach($notas as $nota)
-          <li>{{ $nota }}</li>
-        @endforeach
-      </ul>
-    </section>
-  @endif
-
-  @if($alertasCriticas->count())
-    <section class="alertas">
-      <p style="font-weight: 600; margin-bottom: 6px;">Alertas críticas</p>
-      @foreach($alertasCriticas as $alerta)
-        <div class="alerta-item">
-          <strong>{{ $alerta['nombre_completo'] ?? 'Empleado' }}</strong> · {{ ucfirst($alerta['tipo_contrato'] ?? 'N/A') }} · {{ $alerta['total_dias_licencia'] ?? 0 }} días · {{ $alerta['motivo_alerta'][0] ?? 'Sin motivo' }}
-        </div>
-      @endforeach
-    </section>
-  @endif
-
-  <section class="table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Empleado</th>
-          <th>Contrato</th>
-          <th>Total licencias</th>
-          <th>Días sumados</th>
-          <th>Alertas</th>
-          <th>Sugerencia</th>
-        </tr>
-      </thead>
-      <tbody>
-        @foreach($ranking as $item)
-          <tr>
-            <td>{{ $loop->iteration }}</td>
-            <td>{{ $item['nombre_completo'] ?? 'N/A' }}</td>
-            <td>{{ $item['tipo_contrato'] ?? 'N/A' }}</td>
-            <td>{{ $item['total_licencias'] }}</td>
-            <td>{{ $item['total_dias_licencia'] }}</td>
-            <td>
-              @if($item['alerta_rendimiento'])
-                <span class="badge badge-danger">Crítica</span>
-              @else
-                <span class="badge badge-info">Estable</span>
-              @endif
+            <td style="vertical-align: bottom;">
+                <div class="company-name">ConectaFlota</div>
+                <div style="font-size: 10px; color: #64748b;">Recursos Humanos</div>
             </td>
-            <td>{{ $item['accion_sugerida'] ?? 'Sin sugerencia' }}</td>
-          </tr>
-        @endforeach
-      </tbody>
+            <td style="vertical-align: bottom;">
+                <div class="doc-title">INFORME DE AUSENTISMO</div>
+                <div class="doc-meta">PERÍODO: {{ ucfirst($mesNombre) }} {{ $filtros['anio'] ?? '' }}</div>
+                <div class="doc-meta">EMISIÓN: {{ now()->format('d/m/Y') }}</div>
+            </td>
+        </tr>
     </table>
-  </section>
+
+    <table class="kpi-table">
+        <tr>
+            <td class="kpi-cell">
+                <span class="kpi-label">Licencias Totales</span>
+                <span class="kpi-value">{{ number_format($resumen['total_licencias'] ?? 0, 0, ',', '.') }}</span>
+                <span class="kpi-hint">{{ $comparativa['licencias_actual'] > 0 ? '+' : '' }}{{ $comparativa['licencias_actual'] }} vs mes anterior</span>
+            </td>
+            <td class="kpi-cell">
+                <span class="kpi-label">Días Perdidos</span>
+                <span class="kpi-value">{{ number_format($resumen['total_dias'] ?? 0, 0, ',', '.') }}</span>
+                <span class="kpi-hint">Días hábiles calculados</span>
+            </td>
+            <td class="kpi-cell">
+                <span class="kpi-label">Licencias Médicas</span>
+                <span class="kpi-value">{{ number_format($resumen['medicas'] ?? 0, 0, ',', '.') }}</span>
+                <span class="kpi-hint">Mayor incidencia</span>
+            </td>
+            <td class="kpi-cell">
+                <span class="kpi-label">Otros Permisos</span>
+                <span class="kpi-value">{{ number_format(($resumen['administrativas'] ?? 0) + ($resumen['permisos'] ?? 0), 0, ',', '.') }}</span>
+            </td>
+        </tr>
+    </table>
+
+    <div class="section-title">Comparativa Mensual</div>
+    <table class="details-table">
+        <thead>
+            <tr>
+                <th style="width: 30%;">Indicador</th>
+                <th class="text-right">Mes Anterior ({{ $comparativa['periodo_anterior'] ?? '-' }})</th>
+                <th class="text-right">Mes Actual ({{ $comparativa['periodo_actual'] ?? '-' }})</th>
+                <th class="text-right">Variación</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Cantidad de Licencias</td>
+                <td class="text-right">{{ number_format($comparativa['licencias_anterior'] ?? 0, 0, ',', '.') }}</td>
+                <td class="text-right font-bold">{{ number_format($comparativa['licencias_actual'] ?? 0, 0, ',', '.') }}</td>
+                <td class="text-right">
+                    @php $diffLic = ($comparativa['licencias_actual'] ?? 0) - ($comparativa['licencias_anterior'] ?? 0); @endphp
+                    <span style="color: {{ $diffLic > 0 ? '#dc2626' : '#166534' }}; font-weight: bold;">
+                        {{ $diffLic > 0 ? '+' : '' }}{{ $diffLic }}
+                    </span>
+                </td>
+            </tr>
+            <tr>
+                <td>Total Días de Ausencia</td>
+                <td class="text-right">{{ number_format($comparativa['dias_anterior'] ?? 0, 0, ',', '.') }}</td>
+                <td class="text-right font-bold">{{ number_format($comparativa['dias_actual'] ?? 0, 0, ',', '.') }}</td>
+                <td class="text-right">
+                    @php $diffDias = ($comparativa['dias_actual'] ?? 0) - ($comparativa['dias_anterior'] ?? 0); @endphp
+                    <span style="color: {{ $diffDias > 0 ? '#dc2626' : '#166534' }}; font-weight: bold;">
+                        {{ $diffDias > 0 ? '+' : '' }}{{ $diffDias }}
+                    </span>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="section-title">Ranking de Ausentismo (Top 5)</div>
+    <table class="details-table">
+        <thead>
+            <tr>
+                <th style="width: 5%;">#</th>
+                <th style="width: 35%;">Colaborador</th>
+                <th style="width: 25%;">Tipo Contrato</th>
+                <th class="text-center" style="width: 15%;">Cant. Licencias</th>
+                <th class="text-center" style="width: 20%;">Total Días</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse($topEmpleados as $emp)
+                <tr>
+                    <td>{{ $loop->iteration }}</td>
+                    <td style="font-weight: bold;">{{ $emp['nombre_completo'] ?? 'N/A' }}</td>
+                    <td>{{ ucfirst(str_replace('_', ' ', $emp['tipo_contrato'] ?? '-')) }}</td>
+                    <td class="text-center">{{ $emp['total_licencias'] }}</td>
+                    <td class="text-center">
+                        <span style="font-weight: bold; color: #dc2626;">{{ $emp['total_dias_licencia'] }} días</span>
+                    </td>
+                </tr>
+            @empty
+                <tr><td colspan="5" class="text-center">No hay registros de ausentismo para este período.</td></tr>
+            @endforelse
+        </tbody>
+    </table>
+
+    @if($alertasCriticas->count())
+        <div class="section-title" style="color: #dc2626; border-color: #fecaca;">Alertas de Riesgo Detectadas</div>
+        @foreach($alertasCriticas as $alerta)
+            <div class="alert-box">
+                <strong>{{ $alerta['nombre_completo'] }}:</strong> {{ $alerta['motivo_alerta'][0] ?? 'Patrón de ausentismo inusual detectado.' }}
+                (Acumulado: {{ $alerta['total_dias_licencia'] }} días)
+            </div>
+        @endforeach
+    @endif
+
+    <div class="section-title">Detalle Completo por Empleado</div>
+    <table class="details-table">
+        <thead>
+            <tr>
+                <th>Empleado</th>
+                <th>Licencias</th>
+                <th>Días</th>
+                <th>Estado</th>
+                <th>Acción Sugerida</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($ranking as $item)
+                <tr>
+                    <td>{{ $item['nombre_completo'] }}</td>
+                    <td>{{ $item['total_licencias'] }}</td>
+                    <td>{{ $item['total_dias_licencia'] }}</td>
+                    <td>
+                        @if($item['alerta_rendimiento'])
+                            <span class="badge badge-danger">CRÍTICO</span>
+                        @else
+                            <span class="badge badge-success">NORMAL</span>
+                        @endif
+                    </td>
+                    <td style="font-size: 9px; color: #64748b;">{{ $item['accion_sugerida'] ?? '-' }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+
+    <div style="margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 10px; text-align: center; font-size: 9px; color: #94a3b8;">
+        Documento confidencial de uso interno. Generado el {{ now()->format('d/m/Y H:i') }}
+    </div>
 </body>
 </html>

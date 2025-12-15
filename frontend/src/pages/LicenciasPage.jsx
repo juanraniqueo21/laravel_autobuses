@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   FileText, Plus, Filter, Search, Check, X, 
-  Trash2, Edit2, Download, AlertCircle, User 
+  Trash2, Edit2, Download, AlertCircle, User, Calendar
 } from 'lucide-react';
 import {
   fetchLicencias,
@@ -15,20 +15,28 @@ import {
 } from '../services/api';
 import { emitLicenciasActualizadas } from '../utils/licenseEvents';
 
+// --- IMPORTS COMPONENTES ---
 import Table from '../components/tables/Table';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
 import FormDialog from '../components/forms/FormDialog';
-// --- IMPORTS ALERTAS ---
+import Pagination from '../components/common/Pagination';
 import AlertDialog from '../components/common/AlertDialog';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 
-// Helper para formatear fecha (evita el desfase de un día)
+// --- IMPORT HOOKS ---
+import usePagination from '../hooks/usePagination';
+
+// Helper para formatear fecha
 const formatDate = (dateString) => {
   if (!dateString) return '-';
-  const [year, month, day] = dateString.split('T')[0].split('-');
-  return `${day}/${month}/${year}`;
+  try {
+    const [year, month, day] = dateString.split('T')[0].split('-');
+    return `${day}/${month}/${year}`;
+  } catch (e) {
+    return dateString;
+  }
 };
 
 const LicenciasPage = () => {
@@ -40,10 +48,26 @@ const LicenciasPage = () => {
   const [success, setSuccess] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Filtros de Tabla
+  // --- FILTROS DE TABLA ---
   const [filtroEmpleado, setFiltroEmpleado] = useState(''); 
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
+  const [filtroFechaInicio, setFiltroFechaInicio] = useState('');
+  const [filtroFechaFin, setFiltroFechaFin] = useState('');
+  const [soloActivas, setSoloActivas] = useState(false);
+
+  // --- PAGINACIÓN (ADAPTADA A TU HOOK) ---
+  const { 
+    currentPage, 
+    setCurrentPage, 
+    totalPages, 
+    paginatedData // Tu hook devuelve esto, es un ARRAY, no una función
+  } = usePagination(licenciasFiltradas, 10);
+
+  // Helpers de navegación manual (ya que tu hook no los devuelve)
+  const goToPage = (page) => setCurrentPage(page);
+  const nextPage = () => setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+  const prevPage = () => setCurrentPage((prev) => Math.max(prev - 1, 1));
 
   // Estados para modales
   const [showModal, setShowModal] = useState(false);
@@ -52,12 +76,12 @@ const LicenciasPage = () => {
   const [currentLicencia, setCurrentLicencia] = useState(null);
   const [motivoRechazo, setMotivoRechazo] = useState('');
 
-  // --- ESTADOS PARA BUSCADOR DE EMPLEADO (AUTOCOMPLETADO EN FORMULARIO) ---
+  // Estados para buscador de empleado
   const [empleadoSearchTerm, setEmpleadoSearchTerm] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionsRef = useRef(null);
 
-  // --- SISTEMA ALERTAS ---
+  // Sistema de Alertas
   const [dialogs, setDialogs] = useState({
     alert: { isOpen: false, type: 'success', title: '', message: '' },
     confirm: { isOpen: false, type: 'warning', title: '', message: '', onConfirm: null }
@@ -66,7 +90,6 @@ const LicenciasPage = () => {
   const showConfirm = (type, title, message, onConfirm) => setDialogs(prev => ({ ...prev, confirm: { isOpen: true, type, title, message, onConfirm } }));
   const closeAlert = () => setDialogs(prev => ({ ...prev, alert: { ...prev.alert, isOpen: false } }));
   const closeConfirm = () => setDialogs(prev => ({ ...prev, confirm: { ...prev.confirm, isOpen: false } }));
-  // ---------------------
 
   // Estado del formulario
   const [formData, setFormData] = useState({
@@ -92,9 +115,10 @@ const LicenciasPage = () => {
 
   useEffect(() => {
     aplicarFiltros();
-  }, [licencias, filtroEmpleado, filtroEstado, filtroTipo]);
+    setCurrentPage(1); // Resetear a página 1 al filtrar
+  }, [licencias, filtroEmpleado, filtroEstado, filtroTipo, filtroFechaInicio, filtroFechaFin, soloActivas]);
 
-  // Cerrar sugerencias al hacer clic fuera (Igual que en Liquidaciones)
+  // Cerrar sugerencias al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (suggestionsRef.current && !suggestionsRef.current.contains(event.target)) {
@@ -117,8 +141,10 @@ const LicenciasPage = () => {
         fetchEmpleados(),
       ]);
 
+      licenciasData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
       setLicencias(licenciasData);
-      setEmpleados(empleadosData);
+      setEmpleados(empleadosData || []);
     } catch (err) {
       setError(err.message);
       showAlert('error', 'Error de Carga', err.message);
@@ -129,18 +155,20 @@ const LicenciasPage = () => {
 
   // --- HELPERS PARA DATOS ---
   const getEmpleadoNombre = (empleadoId) => {
+    if (!empleados || empleados.length === 0) return 'Cargando...';
     const empleado = empleados.find((e) => e.id === empleadoId);
     if (!empleado) return 'Desconocido';
     return `${empleado.user?.nombre || ''} ${empleado.user?.apellido || ''}`.trim();
   };
 
   const getEmpleadoRut = (empleadoId) => {
+    if (!empleados || empleados.length === 0) return '-';
     const empleado = empleados.find((e) => e.id === empleadoId);
     if (!empleado || !empleado.user) return '-';
-    return `${empleado.user.rut}-${empleado.user.rut_verificador}`;
+    return `${empleado.user.rut || ''}-${empleado.user.rut_verificador || ''}`;
   };
 
-  // --- LÓGICA DE FILTROS TABLA ---
+  // --- LÓGICA DE FILTROS ---
   const aplicarFiltros = () => {
     let resultado = [...licencias];
 
@@ -161,6 +189,26 @@ const LicenciasPage = () => {
       resultado = resultado.filter((l) => l.tipo === filtroTipo);
     }
 
+    if (filtroFechaInicio) {
+        resultado = resultado.filter(l => l.fecha_inicio >= filtroFechaInicio);
+    }
+    if (filtroFechaFin) {
+        resultado = resultado.filter(l => l.fecha_inicio <= filtroFechaFin);
+    }
+
+    if (soloActivas) {
+        const today = new Date();
+        // Ajuste zona horaria local simple para comparar string
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        
+        resultado = resultado.filter(l => {
+            if(!l.fecha_inicio || !l.fecha_termino) return false;
+            const inicio = l.fecha_inicio.split('T')[0];
+            const termino = l.fecha_termino.split('T')[0];
+            return l.estado === 'aprobado' && todayStr >= inicio && todayStr <= termino;
+        });
+    }
+
     setLicenciasFiltradas(resultado);
   };
 
@@ -168,19 +216,24 @@ const LicenciasPage = () => {
     setFiltroEmpleado('');
     setFiltroEstado('');
     setFiltroTipo('');
+    setFiltroFechaInicio('');
+    setFiltroFechaFin('');
+    setSoloActivas(false);
+    setCurrentPage(1);
   };
 
-  // --- LÓGICA DEL BUSCADOR DE EMPLEADOS EN FORMULARIO (NUEVO) ---
+  // --- LÓGICA BUSCADOR EMPLEADOS ---
   const getEmpleadosSugeridos = () => {
-    if (!empleadoSearchTerm) return [];
+    if (!empleadoSearchTerm || !empleados) return [];
     const term = empleadoSearchTerm.toLowerCase();
+    
     return empleados
-      .filter(emp => emp.estado === 'activo') // Solo empleados activos
+      .filter(emp => emp && emp.estado === 'activo')
       .filter(emp => {
-        const nombre = getEmpleadoNombre(emp.id).toLowerCase();
-        const rut = getEmpleadoRut(emp.id).toLowerCase();
+        const nombre = `${emp.user?.nombre || ''} ${emp.user?.apellido || ''}`.toLowerCase();
+        const rut = `${emp.user?.rut || ''}-${emp.user?.rut_verificador || ''}`.toLowerCase();
         return nombre.includes(term) || rut.includes(term);
-      }).slice(0, 5); // Limitar a 5 sugerencias
+      }).slice(0, 5);
   };
 
   const seleccionarEmpleado = (empleado) => {
@@ -189,7 +242,6 @@ const LicenciasPage = () => {
     setShowSuggestions(false);
   };
 
-  // --- MANEJADORES DE FORMULARIOS Y ACCIONES ---
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -215,7 +267,7 @@ const LicenciasPage = () => {
   const abrirModalCrear = () => {
     setIsEditing(false);
     setCurrentLicencia(null);
-    setEmpleadoSearchTerm(''); // Limpiar buscador
+    setEmpleadoSearchTerm('');
     setFormData({
       empleado_id: '',
       tipo: 'licencia_medica',
@@ -237,7 +289,6 @@ const LicenciasPage = () => {
 
     setIsEditing(true);
     setCurrentLicencia(licencia);
-    // Cargar nombre del empleado en el buscador
     setEmpleadoSearchTerm(getEmpleadoNombre(licencia.empleado_id));
     
     setFormData({
@@ -341,13 +392,11 @@ const LicenciasPage = () => {
 
   const handleRechazar = (e) => {
     if(e) e.preventDefault();
-    
     if (!motivoRechazo || motivoRechazo.trim().length < 10) {
       setError('El motivo de rechazo debe tener al menos 10 caracteres');
       showAlert('warning', 'Motivo insuficiente', 'El motivo de rechazo debe tener al menos 10 caracteres');
       return;
     }
-
     showConfirm(
       'danger',
       '¿Rechazar Licencia?',
@@ -419,15 +468,10 @@ const LicenciasPage = () => {
     return tipos[tipo] || tipo;
   };
 
-  const puedeAprobarRechazar = () => {
-    return currentUser && [1, 2, 6].includes(currentUser.rol_id);
-  };
+  const puedeAprobarRechazar = () => currentUser && [1, 2, 6].includes(currentUser.rol_id);
+  const puedeEliminar = () => currentUser && [1, 6].includes(currentUser.rol_id);
 
-  const puedeEliminar = () => {
-    return currentUser && [1, 6].includes(currentUser.rol_id);
-  };
-
-  // Definición de columnas para la tabla reutilizable
+  // Columnas para la tabla
   const columns = useMemo(() => [
     {
       label: 'Empleado',
@@ -533,12 +577,15 @@ const LicenciasPage = () => {
     }
   ], [empleados, currentUser]); 
 
+  // Protección para la tabla: asegurarse de que data sea un array
+  const safeData = Array.isArray(paginatedData) ? paginatedData : [];
+
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       <AlertDialog isOpen={dialogs.alert.isOpen} type={dialogs.alert.type} title={dialogs.alert.title} message={dialogs.alert.message} onClose={closeAlert} />
       <ConfirmDialog isOpen={dialogs.confirm.isOpen} type={dialogs.confirm.type} title={dialogs.confirm.title} message={dialogs.confirm.message} onConfirm={() => { if(dialogs.confirm.onConfirm) dialogs.confirm.onConfirm(); closeConfirm(); }} onCancel={closeConfirm} />
 
-      {/* Header con estilo de proyecto */}
+      {/* Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white shadow-lg mb-8">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -558,7 +605,7 @@ const LicenciasPage = () => {
         <FileText className="absolute right-6 bottom-[-20px] h-40 w-40 text-white/5 rotate-12" />
       </div>
 
-      {/* Mensajes de feedback */}
+      {/* Feedbacks */}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 flex items-center gap-2">
           <AlertCircle size={20} />
@@ -572,12 +619,12 @@ const LicenciasPage = () => {
         </div>
       )}
 
-      {/* Filtros en tarjeta blanca */}
+      {/* FILTROS MEJORADOS */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
         <div className="flex flex-col space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            
-            {/* Input de búsqueda en la TABLA (No confundir con el formulario) */}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Filtro Empleado */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Buscar Empleado</label>
               <div className="relative">
@@ -600,12 +647,13 @@ const LicenciasPage = () => {
               </div>
             </div>
 
+            {/* Filtro Estado */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Estado</label>
               <select
                 value={filtroEstado}
                 onChange={(e) => setFiltroEstado(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700 cursor-pointer"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700"
               >
                 <option value="">Todos</option>
                 <option value="solicitado">Solicitado</option>
@@ -615,12 +663,13 @@ const LicenciasPage = () => {
               </select>
             </div>
 
+            {/* Filtro Tipo */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tipo</label>
               <select
                 value={filtroTipo}
                 onChange={(e) => setFiltroTipo(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700 cursor-pointer"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-700"
               >
                 <option value="">Todos</option>
                 <option value="licencia_medica">Licencia Médica</option>
@@ -631,30 +680,84 @@ const LicenciasPage = () => {
               </select>
             </div>
 
+            {/* Filtro Solo Activas (Botón Toggle) */}
             <div className="flex items-end">
-              {(filtroEmpleado || filtroEstado || filtroTipo) && (
-                <button
-                  onClick={limpiarFiltros}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 border border-gray-200 hover:border-red-200 rounded-lg transition-colors text-sm font-medium h-[38px]"
-                >
-                  <Filter size={16} />
-                  Limpiar
-                </button>
-              )}
+               <button
+                 onClick={() => setSoloActivas(!soloActivas)}
+                 className={`w-full flex items-center justify-center gap-2 px-4 py-2 border rounded-lg transition-colors text-sm font-bold h-[38px] ${
+                   soloActivas 
+                     ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' 
+                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                 }`}
+               >
+                 {soloActivas ? <Check size={16} /> : <Calendar size={16} />}
+                 {soloActivas ? 'Mostrando Activas' : 'Ver Activas Hoy'}
+               </button>
             </div>
           </div>
+
+          {/* Segunda Fila: Rango de Fechas */}
+          {!soloActivas && (
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2 border-t border-gray-100">
+               <div>
+                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Fecha Inicio (Desde)</label>
+                 <input 
+                   type="date" 
+                   value={filtroFechaInicio}
+                   onChange={(e) => setFiltroFechaInicio(e.target.value)}
+                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-700"
+                 />
+               </div>
+               <div>
+                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Fecha Inicio (Hasta)</label>
+                 <input 
+                   type="date" 
+                   value={filtroFechaFin}
+                   onChange={(e) => setFiltroFechaFin(e.target.value)}
+                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-700"
+                 />
+               </div>
+               
+               {/* Espaciador */}
+               <div className="hidden lg:block"></div>
+
+               {/* Botón Limpiar */}
+               <div className="flex items-end">
+                 {(filtroEmpleado || filtroEstado || filtroTipo || filtroFechaInicio || filtroFechaFin || soloActivas) && (
+                   <button
+                     onClick={limpiarFiltros}
+                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600 border border-gray-200 hover:border-red-200 rounded-lg transition-colors text-sm font-medium h-[38px]"
+                   >
+                     <Filter size={16} />
+                     Limpiar Filtros
+                   </button>
+                 )}
+               </div>
+             </div>
+          )}
         </div>
       </div>
 
-      {/* Tabla reutilizable */}
+      {/* Tabla reutilizable CON DATA PAGINADA Y PROTECCIÓN */}
       <Table 
         columns={columns} 
-        data={licenciasFiltradas} 
+        data={safeData} // <--- Usamos el array seguro
         loading={loading}
         emptyMessage="No se encontraron licencias con los filtros seleccionados"
       />
 
-      {/* Modal Crear/Editar usando FormDialog */}
+      {/* Componente de Paginación */}
+      {!loading && licenciasFiltradas.length > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={goToPage}
+          onNext={nextPage}
+          onPrev={prevPage}
+        />
+      )}
+
+      {/* Modal Crear/Editar */}
       <FormDialog
         isOpen={showModal}
         title={isEditing ? 'Editar Licencia' : 'Nueva Licencia'}
@@ -664,7 +767,6 @@ const LicenciasPage = () => {
       >
         <div className="grid grid-cols-1 gap-4">
           
-          {/* --- AQUÍ ESTÁ EL NUEVO BUSCADOR DE EMPLEADOS --- */}
           <div className="space-y-1 relative" ref={suggestionsRef}>
             <label className="block text-sm font-medium text-gray-700 mb-1">Buscar Empleado *</label>
             <div className="relative">
@@ -678,11 +780,9 @@ const LicenciasPage = () => {
                   setShowSuggestions(true);
                 }}
                 onFocus={() => setShowSuggestions(true)}
-                disabled={isEditing} // Deshabilitar si se está editando
+                disabled={isEditing}
               />
               <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
-              
-              {/* Botón borrar búsqueda */}
               {empleadoSearchTerm && !isEditing && (
                 <button 
                   type="button"
@@ -694,7 +794,6 @@ const LicenciasPage = () => {
               )}
             </div>
 
-            {/* Lista de sugerencias */}
             {showSuggestions && !isEditing && empleadoSearchTerm && (
               <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto mt-1">
                 {getEmpleadosSugeridos().length > 0 ? (
@@ -708,8 +807,11 @@ const LicenciasPage = () => {
                           <User size={16} />
                        </div>
                        <div>
-                          <div className="font-medium text-gray-800">{getEmpleadoNombre(emp.id)}</div>
-                          <div className="text-xs text-gray-500">RUT: {getEmpleadoRut(emp.id)}</div>
+                          <div className="font-medium text-gray-800">
+                            {/* Protección adicional para renderizado */}
+                            {emp.user?.nombre} {emp.user?.apellido}
+                          </div>
+                          <div className="text-xs text-gray-500">RUT: {emp.user?.rut}-{emp.user?.rut_verificador}</div>
                        </div>
                     </li>
                   ))
@@ -719,7 +821,6 @@ const LicenciasPage = () => {
               </ul>
             )}
           </div>
-          {/* --- FIN BUSCADOR --- */}
 
           <Select
             label="Tipo *"
@@ -797,7 +898,7 @@ const LicenciasPage = () => {
         </div>
       </FormDialog>
 
-      {/* Modal Rechazar usando FormDialog */}
+      {/* Modal Rechazar */}
       <FormDialog
         isOpen={showRechazarModal}
         title="Rechazar Licencia"
@@ -819,8 +920,6 @@ const LicenciasPage = () => {
           />
           <p className="text-xs text-gray-500 mt-1">Mínimo 10 caracteres</p>
         </div>
-        
-        {/* Footer personalizado para rechazo */}
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100"></div>
       </FormDialog>
     </div>

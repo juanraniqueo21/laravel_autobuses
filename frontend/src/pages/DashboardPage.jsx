@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Bus, MapPin, Users, Wrench, TrendingUp, AlertCircle, CheckCircle, Clock, 
-  ArrowRight, Activity, Bell, ChevronDown, ChevronUp, FileText, Calendar, AlertTriangle
+  ArrowRight, Activity, Bell, ChevronDown, ChevronUp, FileText, Calendar, AlertTriangle, X
 } from 'lucide-react';
 import { 
   fetchBuses, 
@@ -11,7 +11,8 @@ import {
   fetchMantenimientos, 
   fetchReportes,       
   fetchConductores,
-  fetchAusenciasActivas     
+  fetchLicencias, 
+  fetchEmpleados
 } from '../services/api';
 import { LICENCIAS_ACTUALIZADAS_EVENT } from '../utils/licenseEvents';
 
@@ -33,8 +34,17 @@ export default function DashboardPage({ onNavigate }) {
   const [alertas, setAlertas] = useState([]); 
   const [loading, setLoading] = useState(true);
   
-  // Estado para el acordeón de alertas (Inicia cerrado 'false')
   const [isAlertasOpen, setIsAlertasOpen] = useState(false);
+
+  // --- ESTADOS PARA MODALES ---
+  const [busesEnTaller, setBusesEnTaller] = useState([]);
+  const [showModalMantenimiento, setShowModalMantenimiento] = useState(false);
+  
+  const [personalAusenteList, setPersonalAusenteList] = useState([]);
+  const [showModalLicencias, setShowModalLicencias] = useState(false);
+
+  // Estado auxiliar para cruzar datos de empleados
+  const [listaEmpleados, setListaEmpleados] = useState([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -48,7 +58,7 @@ export default function DashboardPage({ onNavigate }) {
 
   const loadDashboardData = async () => {
     try {
-      // --- CORRECCIÓN DE FECHA (LOCAL) ---
+      // Obtenemos la fecha local actual en formato YYYY-MM-DD
       const now = new Date();
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       
@@ -58,19 +68,26 @@ export default function DashboardPage({ onNavigate }) {
         turnosHoy, 
         mantenimientos, 
         reportes, 
-        conductores
+        conductores,
+        todasLasLicencias,
+        todosLosEmpleados
       ] = await Promise.all([
         fetchBuses(),
         fetchRutas(),
         fetchTurnos({ fecha: today }),
         fetchMantenimientos(),
         fetchReportes(),
-        fetchConductores()
+        fetchConductores(),
+        fetchLicencias(),
+        fetchEmpleados()
       ]);
+
+      setListaEmpleados(todosLosEmpleados);
 
       // 1. PROCESAMIENTO FLOTA
       const operativos = buses.filter(b => b.estado === 'operativo' || b.estado === 'activo').length;
-      const mantenimientoCount = buses.filter(b => b.estado === 'mantenimiento').length;
+      const listaMantenimiento = buses.filter(b => b.estado === 'mantenimiento');
+      setBusesEnTaller(listaMantenimiento);
 
       // 2. PROCESAMIENTO VIAJES
       let totalViajes = 0;
@@ -96,22 +113,54 @@ export default function DashboardPage({ onNavigate }) {
         }
       }));
 
-      // Ordenar por hora de inicio
       turnosEnriquecidos.sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
 
       // 3. PROCESAMIENTO GERENCIAL
       const reportesPendientes = reportes.filter(r => r.estado === 'pendiente').length;
       const mantActivos = mantenimientos.filter(m => m.estado === 'en_proceso').length;
       
-      // Normalizar "hoy" a medianoche local
-      now.setHours(0,0,0,0);
-      const ausencias = await fetchAusenciasActivas();
-      const personalAusente = ausencias.count || 0;
+      // --- LOGICA DE FILTRADO DE LICENCIAS ACTIVAS (CORREGIDA) ---
+      // Comparamos strings YYYY-MM-DD directamente para evitar problemas de hora/zona horaria
+      
+      // A) Filtrar las activas
+      const licenciasActivas = todasLasLicencias.filter(l => {
+          // Extraemos solo la parte YYYY-MM-DD
+          const inicioStr = l.fecha_inicio ? l.fecha_inicio.substring(0, 10) : '';
+          const finStr = l.fecha_termino ? l.fecha_termino.substring(0, 10) : '';
+          
+          // Comparación alfanumérica de fechas ISO funciona correctamente
+          // "2025-12-15" >= "2025-12-15" es true
+          return l.estado === 'aprobado' && today >= inicioStr && today <= finStr;
+      });
+
+      // B) Cruzar con empleados para asegurar el nombre
+      const licenciasEnriquecidas = licenciasActivas.map(licencia => {
+          const empleadoEncontrado = todosLosEmpleados.find(e => e.id === licencia.empleado_id);
+          
+          let nombreCompleto = 'Funcionario Desconocido';
+          let cargo = 'Sin cargo';
+
+          if (empleadoEncontrado && empleadoEncontrado.user) {
+             nombreCompleto = `${empleadoEncontrado.user.nombre} ${empleadoEncontrado.user.apellido}`;
+             cargo = empleadoEncontrado.cargo;
+          } else if (licencia.empleado && licencia.empleado.user) {
+             nombreCompleto = `${licencia.empleado.user.nombre} ${licencia.empleado.user.apellido}`;
+             cargo = licencia.empleado.cargo;
+          }
+
+          return {
+            ...licencia,
+            nombreCompleto,
+            cargo
+          };
+      });
+
+      setPersonalAusenteList(licenciasEnriquecidas);
 
       // 4. GENERACIÓN DE ALERTAS
       const nuevasAlertas = [];
 
-      // --- ALERTAS SOAP (BUSES) ---
+      // --- ALERTAS SOAP ---
       buses.forEach(bus => {
         if (bus.vencimiento_soap) {
            const venc = new Date(bus.vencimiento_soap);
@@ -161,7 +210,6 @@ export default function DashboardPage({ onNavigate }) {
         }
       });
 
-      // Ordenar alertas (críticas primero, luego por días)
       nuevasAlertas.sort((a, b) => {
         if (a.nivel === 'critical' && b.nivel !== 'critical') return -1;
         if (a.nivel !== 'critical' && b.nivel === 'critical') return 1;
@@ -173,12 +221,12 @@ export default function DashboardPage({ onNavigate }) {
       setStats({
         busesTotal: buses.length,
         busesOperativos: operativos,
-        busesMantenimiento: mantenimientoCount,
+        busesMantenimiento: listaMantenimiento.length, 
         rutasActivas: rutas.filter(r => r.estado === 'activa').length,
         viajesHoy: totalViajes,
         viajesCompletadosHoy: completados,
         reportesPendientes,
-        personalEnLicencia: personalAusente,
+        personalEnLicencia: licenciasEnriquecidas.length, 
         mantenimientosActivos: mantActivos
       });
       
@@ -201,7 +249,7 @@ export default function DashboardPage({ onNavigate }) {
   return (
     <div className="p-8 bg-gray-50/50 min-h-screen font-sans text-slate-800">
       
-      {/* HEADER (fusionado: versión amigo + botones rápidos tuyos) */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Panel de Operaciones</h1>
@@ -216,7 +264,6 @@ export default function DashboardPage({ onNavigate }) {
           </div>
         </div>
 
-        {/* Botones de acciones rápidas (tomados de tu versión) */}
         <div className="flex gap-3">
           <button 
             onClick={() => onNavigate('viajes')}
@@ -257,7 +304,7 @@ export default function DashboardPage({ onNavigate }) {
            </button>
 
            {isAlertasOpen && (
-             <div className="p-6 border-t border-red-100 bg-white">
+             <div className="p-6 border-t border-red-100 bg-white max-h-[500px] overflow-y-auto custom-scrollbar">
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {alertas.map((alerta, idx) => {
                      const isCritical = alerta.nivel === 'critical';
@@ -317,7 +364,7 @@ export default function DashboardPage({ onNavigate }) {
           <div 
             onClick={(e) => {
               e.stopPropagation();
-              onNavigate('mantenciones');
+              if(stats.busesMantenimiento > 0) setShowModalMantenimiento(true);
             }}
             className="mt-6 flex items-center gap-2 text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg w-fit border border-amber-100 cursor-pointer hover:bg-amber-100 transition-colors z-20 relative"
           >
@@ -395,8 +442,15 @@ export default function DashboardPage({ onNavigate }) {
            </div>
         </div>
 
+        {/* TARJETA EN TALLER */}
         <div 
-          onClick={() => onNavigate('mantenciones')} 
+          onClick={() => {
+            if (stats.busesMantenimiento > 0) {
+               setShowModalMantenimiento(true);
+            } else {
+               onNavigate('mantenciones');
+            }
+          }} 
           className="bg-gradient-to-br from-white to-orange-50 p-5 rounded-2xl shadow-sm border border-orange-100 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all group"
         >
            <div className="flex justify-between items-center">
@@ -405,7 +459,7 @@ export default function DashboardPage({ onNavigate }) {
                     <Wrench size={20} />
                  </div>
                  <div>
-                    <h4 className="text-2xl font-bold text-gray-800">{stats.mantenimientosActivos}</h4>
+                    <h4 className="text-2xl font-bold text-gray-800">{stats.busesMantenimiento}</h4>
                     <p className="text-xs text-orange-600 font-bold uppercase tracking-wide">En Taller</p>
                  </div>
               </div>
@@ -413,8 +467,15 @@ export default function DashboardPage({ onNavigate }) {
            </div>
         </div>
 
+        {/* TARJETA AUSENCIAS ACTIVAS */}
         <div 
-          onClick={() => onNavigate('licencias')} 
+          onClick={() => {
+            if (stats.personalEnLicencia > 0) {
+               setShowModalLicencias(true);
+            } else {
+               onNavigate('licencias');
+            }
+          }}
           className="bg-gradient-to-br from-white to-indigo-50 p-5 rounded-2xl shadow-sm border border-indigo-100 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all group"
         >
            <div className="flex justify-between items-center">
@@ -431,7 +492,6 @@ export default function DashboardPage({ onNavigate }) {
            </div>
         </div>
 
-        {/* Tarjeta de Personal (de tu versión) */}
         <div 
           onClick={() => onNavigate('empleados')}
           className="bg-gradient-to-br from-slate-800 to-slate-900 p-5 rounded-2xl shadow-lg text-white cursor-pointer hover:-translate-y-1 transition-transform"
@@ -451,7 +511,7 @@ export default function DashboardPage({ onNavigate }) {
         </div>
       </div>
 
-      {/* --- MONITOR DE TURNOS (CORREGIDO) --- */}
+      {/* --- MONITOR DE TURNOS --- */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-8">
         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
           <div className="flex items-center gap-3">
@@ -499,7 +559,6 @@ export default function DashboardPage({ onNavigate }) {
                     </td>
                     <td className="px-6 py-4 capitalize font-medium text-gray-800">{turno.tipo_turno}</td>
                     
-                    {/* Usamos turno.bus?.patente para evitar errores si no viene cargado */}
                     <td className="px-6 py-4">
                       {turno.bus?.patente ? (
                         <span className="bg-gray-100 text-gray-700 px-2.5 py-1 rounded-md font-mono text-xs font-bold border border-gray-200">
@@ -537,6 +596,149 @@ export default function DashboardPage({ onNavigate }) {
           </div>
         )}
       </div>
+
+      {/* --- MODAL FLOTA EN MANTENIMIENTO --- */}
+      {showModalMantenimiento && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-xl">
+              <div className="flex items-center gap-3">
+                <div className="bg-orange-100 p-2 rounded-lg text-orange-600">
+                   <Wrench size={20} />
+                </div>
+                <h3 className="text-lg font-bold text-gray-800">Flota en Mantenimiento</h3>
+              </div>
+              <button 
+                onClick={() => setShowModalMantenimiento(false)} 
+                className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
+              >
+                <X size={20}/>
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto p-0">
+               {busesEnTaller.length === 0 ? (
+                 <div className="p-10 text-center text-gray-500">
+                    <CheckCircle size={40} className="mx-auto text-green-500 mb-2" />
+                    <p className="font-medium">No hay buses en mantenimiento actualmente.</p>
+                 </div>
+               ) : (
+                 <table className="w-full text-sm text-left">
+                   <thead className="bg-gray-50 text-gray-600 font-semibold border-b sticky top-0">
+                     <tr>
+                       <th className="px-6 py-3">Bus (Patente)</th>
+                       <th className="px-6 py-3">Marca / Modelo</th>
+                       <th className="px-6 py-3">Año</th>
+                       <th className="px-6 py-3 text-center">Estado</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-gray-100">
+                     {busesEnTaller.map((bus, index) => (
+                       <tr key={index} className="hover:bg-orange-50/30 transition-colors">
+                         <td className="px-6 py-4 font-bold text-gray-800 font-mono">{bus.patente}</td>
+                         <td className="px-6 py-4 text-gray-600">{bus.marca} {bus.modelo}</td>
+                         <td className="px-6 py-4 text-gray-600">{bus.anio}</td>
+                         <td className="px-6 py-4 text-center">
+                           <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold uppercase border border-orange-200">
+                             MANTENIMIENTO
+                           </span>
+                         </td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               )}
+            </div>
+            
+            <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end">
+               <button 
+                 onClick={() => setShowModalMantenimiento(false)}
+                 className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 text-sm font-medium hover:bg-gray-50"
+               >
+                 Cerrar
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL AUSENCIAS ACTIVAS (CORREGIDO) --- */}
+      {showModalLicencias && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-xl">
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600">
+                   <Users size={20} />
+                </div>
+                <h3 className="text-lg font-bold text-gray-800">Personal en Licencia</h3>
+              </div>
+              <button 
+                onClick={() => setShowModalLicencias(false)} 
+                className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors"
+              >
+                <X size={20}/>
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto p-0">
+               {personalAusenteList.length === 0 ? (
+                 <div className="p-10 text-center text-gray-500">
+                    <CheckCircle size={40} className="mx-auto text-green-500 mb-2" />
+                    <p className="font-medium">No hay ausencias activas en este momento.</p>
+                 </div>
+               ) : (
+                 <table className="w-full text-sm text-left">
+                   <thead className="bg-gray-50 text-gray-600 font-semibold border-b sticky top-0">
+                     <tr>
+                       <th className="px-6 py-3">Funcionario</th>
+                       <th className="px-6 py-3">Motivo / Tipo</th>
+                       <th className="px-6 py-3">Periodo</th>
+                       <th className="px-6 py-3 text-center">Estado</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-gray-100">
+                     {personalAusenteList.map((ausencia, index) => {
+                       const inicio = new Date(ausencia.fecha_inicio).toLocaleDateString('es-CL');
+                       const fin = new Date(ausencia.fecha_termino).toLocaleDateString('es-CL');
+
+                       return (
+                         <tr key={index} className="hover:bg-indigo-50/30 transition-colors">
+                           <td className="px-6 py-4 font-bold text-gray-800">
+                              {ausencia.nombreCompleto}
+                              <div className="text-xs text-gray-400 font-normal">{ausencia.cargo}</div>
+                           </td>
+                           <td className="px-6 py-4 text-gray-600 capitalize">
+                              {ausencia.tipo_licencia || ausencia.motivo || 'Licencia Médica'}
+                           </td>
+                           <td className="px-6 py-4 text-gray-600 font-mono text-xs">
+                              {inicio} - {fin}
+                           </td>
+                           <td className="px-6 py-4 text-center">
+                             <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold uppercase border border-indigo-200">
+                               {ausencia.estado || 'ACTIVA'}
+                             </span>
+                           </td>
+                         </tr>
+                       );
+                     })}
+                   </tbody>
+                 </table>
+               )}
+            </div>
+            
+            <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end">
+               <button 
+                 onClick={() => setShowModalLicencias(false)}
+                 className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 text-sm font-medium hover:bg-gray-50"
+               >
+                 Cerrar
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
