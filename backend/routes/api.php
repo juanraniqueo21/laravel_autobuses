@@ -21,6 +21,7 @@ use App\Http\Controllers\LiquidacionController;
 use App\Http\Controllers\ReportController; // Controlador de Logística
 use App\Http\Controllers\ReporteController; // Controlador de Reportes (Nuevo)
 use App\Http\Controllers\RRHHController; // Controlador de RRHH
+use App\Http\Controllers\ProfileController; // Controlador de Perfil de Usuario
 
 // ============================================
 // RUTAS PÚBLICAS (sin autenticación)
@@ -37,6 +38,13 @@ Route::middleware('jwt.auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/refresh', [AuthController::class, 'refresh']);
+
+    // PERFIL DE USUARIO
+    Route::prefix('me')->group(function () {
+        Route::get('/profile', [ProfileController::class, 'getProfile']);
+        Route::put('/profile', [ProfileController::class, 'updateProfile']);
+        Route::put('/password', [ProfileController::class, 'updatePassword']);
+    });
 
     // ROLES (solo Admin)
     Route::middleware('role:admin')->group(function () {
