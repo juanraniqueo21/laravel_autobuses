@@ -139,8 +139,8 @@ Route::middleware('jwt.auth')->group(function () {
     Route::prefix('licencias')->group(function () {
         Route::get('/', [PermisoLicenciaController::class, 'index']);
         Route::get('/mis-licencias', [PermisoLicenciaController::class, 'misLicencias']);
-        Route::get('/{id}', [PermisoLicenciaController::class, 'show']);
-        Route::get('/activas', [PermisoLicenciaController::class, 'ausenciasActivas']);
+    Route::get('/activas', [PermisoLicenciaController::class, 'ausenciasActivas']);
+    Route::get('/{id}', [PermisoLicenciaController::class, 'show']);
         Route::post('/', [PermisoLicenciaController::class, 'store']);
         Route::put('/{id}', [PermisoLicenciaController::class, 'update']);
         Route::post('/{id}/aprobar', [PermisoLicenciaController::class, 'aprobar']);
@@ -204,6 +204,7 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/rentabilidad-por-tipo-servicio', [ReporteController::class, 'rentabilidadPorTipoServicio']);
         Route::get('/ocupacion-por-tipo-servicio', [ReporteController::class, 'ocupacionPorTipoServicio']);
         Route::get('/resumen-ejecutivo', [ReporteController::class, 'resumenEjecutivo']);
+        Route::get('/analisis-servicio/pdf', [ReporteController::class, 'analisisServicioPdf']);
 
         // Análisis de mantenimientos
         Route::get('/buses-con-mas-mantenimientos', [ReporteController::class, 'busesConMasMantenimientos']);
@@ -250,6 +251,8 @@ Route::middleware('jwt.auth')->group(function () {
 
         // Resumen de contratos
         Route::get('/resumen-contratos', [RRHHController::class, 'resumenContratos']);
+
+        Route::get('/empleados-por-contrato', [RRHHController::class, 'empleadosPorContrato']);
 
         // Empleados con alto riesgo de no renovación
         Route::get('/empleados-alto-riesgo', [RRHHController::class, 'empleadosAltoRiesgo']);

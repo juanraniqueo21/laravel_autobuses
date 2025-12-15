@@ -45,9 +45,9 @@ class BusSeeder extends Seeder
                 'modelo_carroceria' => 'Viaggio',
                 'fecha_adquisicion' => '2018-03-15',
                 'estado' => 'operativo',
-                'proxima_revision_tecnica' => $fechaReferencia->copy()->addMonths(3),
-                'ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(9),
-                'vencimiento_soap' => $fechaReferencia->copy()->addMonths(6),
+                'proxima_revision_tecnica' => $fechaReferencia->copy()->addDays(12),
+                'ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5)->subDays(10),
+                'vencimiento_soap' => $fechaReferencia->copy()->addDays(5),
                 'numero_soap' => 'SOAP2024001',
                 'compania_seguro' => 'HDI Seguros',
                 'numero_poliza' => 'POL2024001',
@@ -58,6 +58,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subMonths(2),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonth(),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
             [
                 'patente' => 'DGTY45',
@@ -82,9 +86,9 @@ class BusSeeder extends Seeder
                 'modelo_carroceria' => 'Apache Vip',
                 'fecha_adquisicion' => '2019-06-20',
                 'estado' => 'operativo',
-                'proxima_revision_tecnica' => $fechaReferencia->copy()->addMonths(4),
-                'ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(8),
-                'vencimiento_soap' => $fechaReferencia->copy()->addMonths(5),
+                'proxima_revision_tecnica' => $fechaReferencia->copy()->addDays(20),
+                'ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(6)->subDays(5),
+                'vencimiento_soap' => $fechaReferencia->copy()->addDays(18),
                 'numero_soap' => 'SOAP2024002',
                 'compania_seguro' => 'Mapfre',
                 'numero_poliza' => 'POL2024002',
@@ -95,6 +99,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subMonths(1),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(2),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
             [
                 'patente' => 'FFRT89',
@@ -132,6 +140,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subWeeks(3),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(2),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
 
             // ============================================
@@ -175,6 +187,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subMonths(1),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(2),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
             [
                 'patente' => 'PLMN67',
@@ -212,6 +228,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subWeeks(2),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(3),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
             [
                 'patente' => 'QRST90',
@@ -249,6 +269,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subWeeks(4),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(2),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
 
             // ============================================
@@ -292,6 +316,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subWeeks(1),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(3),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
             [
                 'patente' => 'YZAB56',
@@ -329,6 +357,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subDays(10),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(3),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
 
             // ============================================
@@ -372,6 +404,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subWeeks(2),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(4),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
             [
                 'patente' => 'GHIJ01',
@@ -409,6 +445,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subDays(2),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(4),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
 
             // ============================================
@@ -450,6 +490,10 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subMonths(3),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addWeeks(2),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
             [
                 'patente' => 'OPQR45',
@@ -487,12 +531,21 @@ class BusSeeder extends Seeder
                 'proximo_mantenimiento_km' => 10000,
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subMonths(2),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(1),
+                'kilometraje_actual' => 120000,
+                'kilometraje_ultimo_cambio_aceite' => 114500,
+                'tipo_aceite_motor' => 'sintético',
+                'fecha_ultima_revision_tecnica' => $fechaReferencia->copy()->subMonths(5),
             ],
         ];
 
         // Crear los 12 buses estáticos
         foreach ($buses as $busData) {
-            Bus::create($busData);
+            $alertaAceite = $busData['alerta_mantenimiento'] ?? null;
+            unset($busData['alerta_mantenimiento']);
+            $bus = Bus::create($busData);
+            if ($alertaAceite) {
+                $bus->update($alertaAceite);
+            }
         }
 
         // ============================================
@@ -544,7 +597,12 @@ class BusSeeder extends Seeder
             $vencimientoSoap = $fechaReferencia->copy()->addMonths(rand(3, 12));
             $vencimientoRev = $fechaReferencia->copy()->addMonths(rand(2, 8));
 
-            Bus::create([
+            $kilometrajeActual = rand(50000, 220000);
+            $deltaKm = rand(3000, 9000);
+            $tipoAceite = ['convencional', 'sintético'][rand(0, 1)];
+            $mesesRevision = rand(2, 6);
+
+            $bus = Bus::create([
                 'patente' => $patente,
                 'patente_verificador' => (string)$dv,
                 'marca' => $marcaData['marca'],
@@ -584,8 +642,21 @@ class BusSeeder extends Seeder
                 'fecha_ultimo_mantenimiento' => $fechaReferencia->copy()->subDays(rand(5, 60)),
                 'fecha_proximo_mantenimiento' => $fechaReferencia->copy()->addMonths(rand(1, 3)),
             ]);
+
+            $bus->update($this->construirAlertaAceite($fechaReferencia, $kilometrajeActual, $deltaKm, $mesesRevision, $tipoAceite));
         }
 
         $this->command->info("✅ {$totalBusesDeseados} buses creados (12 estáticos + 28 generados) con documentos vigentes al 08/12/2025.");
     }
+
+    private function construirAlertaAceite(Carbon $referencia, int $kilometrajeActual, int $deltaKm, int $mesesRevision, string $tipo = 'convencional'): array
+    {
+        return [
+            'kilometraje_actual' => $kilometrajeActual,
+            'kilometraje_ultimo_cambio_aceite' => max(0, $kilometrajeActual - $deltaKm),
+            'tipo_aceite_motor' => $tipo,
+            'fecha_ultima_revision_tecnica' => $referencia->copy()->subMonths($mesesRevision)->format('Y-m-d'),
+        ];
+    }
+
 }

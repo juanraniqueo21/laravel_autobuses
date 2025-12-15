@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, AlertTriangle, FileText, Calendar, RefreshCw, X, TrendingDown, UserMinus, ArrowRight } from 'lucide-react';
 import {
   fetchAlertasContratos,
+  fetchEmpleadosPorContrato,
   fetchRankingLicencias,
   fetchRankingLicenciasPdf,
   fetchResumenContratos,
@@ -26,6 +27,13 @@ export default function AnalisisRRHHPage() {
   const [descargandoRanking, setDescargandoRanking] = useState(false);
   const [historialReportes, setHistorialReportes] = useState([]);
   const [mostrarHistorial, setMostrarHistorial] = useState(false);
+  const [detalleContratos, setDetalleContratos] = useState({
+    abierto: false,
+    tipo: null,
+    titulo: '',
+    registros: [],
+    cargando: false,
+  });
 
   // Filtros
   const [mes, setMes] = useState(new Date().getMonth() + 1);
@@ -112,6 +120,38 @@ export default function AnalisisRRHHPage() {
     } finally {
       setDescargandoRanking(false);
     }
+  };
+
+  const handleMostrarDetalleContrato = async (tipo, titulo) => {
+    if (detalleContratos.abierto && detalleContratos.tipo === tipo) {
+      setDetalleContratos(prev => ({ ...prev, abierto: false }));
+      return;
+    }
+
+    setDetalleContratos({
+      abierto: true,
+      tipo,
+      titulo,
+      registros: [],
+      cargando: true,
+    });
+
+    try {
+      const respuesta = await fetchEmpleadosPorContrato({ tipo });
+      setDetalleContratos(prev => ({
+        ...prev,
+        registros: respuesta.data || [],
+        cargando: false,
+      }));
+    } catch (error) {
+      console.error(error);
+      addNotification('error', 'Error', 'No se pudo cargar los empleados para este contrato.');
+      setDetalleContratos(prev => ({ ...prev, cargando: false }));
+    }
+  };
+
+  const cerrarDetalleContratos = () => {
+    setDetalleContratos(prev => ({ ...prev, abierto: false }));
   };
 
   const handleDarDeBaja = async (empleadoId, nombreCompleto) => {
@@ -233,11 +273,82 @@ export default function AnalisisRRHHPage() {
       {tabActiva === 'resumen' && (
         <div className="space-y-6 animate-in fade-in duration-300">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MetricCard title="Total Activos" value={resumenContratos.total_activos} icon={Users} color="blue" />
-            <MetricCard title="Plazo Fijo" value={resumenContratos.plazo_fijo} icon={FileText} color="orange" />
-            <MetricCard title="Indefinidos" value={resumenContratos.indefinido} icon={Users} color="green" />
-            <MetricCard title="Vencen Mes" value={resumenContratos.vencen_proximo_mes} icon={AlertTriangle} color="red" />
+            <MetricCard
+              title="Total Activos"
+              value={resumenContratos.total_activos}
+              icon={Users}
+              color="blue"
+              interactive
+              onClick={() => handleMostrarDetalleContrato('activo', 'Empleados Activos')}
+            />
+            <MetricCard
+              title="Plazo Fijo"
+              value={resumenContratos.plazo_fijo}
+              icon={FileText}
+              color="orange"
+              interactive
+              onClick={() => handleMostrarDetalleContrato('plazo_fijo', 'Personal Plazo Fijo')}
+            />
+            <MetricCard
+              title="Indefinidos"
+              value={resumenContratos.indefinido}
+              icon={Users}
+              color="green"
+              interactive
+              onClick={() => handleMostrarDetalleContrato('indefinido', 'Personal Indefinido')}
+            />
+            <MetricCard
+              title="Vencen Mes"
+              value={resumenContratos.vencen_proximo_mes}
+              icon={AlertTriangle}
+              color="red"
+            />
           </div>
+
+          {detalleContratos.abierto && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{detalleContratos.titulo}</p>
+                  <p className="text-xs text-gray-500">
+                    {detalleContratos.cargando
+                      ? 'Cargando registros...'
+                      : `${detalleContratos.registros.length} empleados listados`}
+                  </p>
+                </div>
+                <button
+                  onClick={cerrarDetalleContratos}
+                  className="text-xs font-semibold uppercase tracking-wide text-blue-600 px-3 py-1 border border-blue-100 rounded-full hover:bg-blue-50 transition"
+                >
+                  Cerrar
+                </button>
+              </div>
+
+              <div className="mt-3">
+                {detalleContratos.cargando ? (
+                  <p className="text-xs text-gray-500">Cargando empleados...</p>
+                ) : detalleContratos.registros.length === 0 ? (
+                  <p className="text-xs text-gray-500">No hay registros para este filtro.</p>
+                ) : (
+                  <ul className="divide-y divide-gray-100 max-h-52 overflow-y-auto text-sm text-gray-700">
+                    {detalleContratos.registros.slice(0, 8).map(emp => (
+                      <li key={`${emp.id}-${emp.numero_empleado}`} className="py-2 flex flex-col md:flex-row md:items-center md:justify-between gap-1">
+                        <div>
+                          <p className="font-semibold text-gray-900">{emp.nombre_completo || 'Sin nombre registrado'}</p>
+                          <p className="text-xs text-gray-500">
+                            {emp.numero_empleado} • {emp.tipo_contrato || 'N/D'} • {emp.ciudad || 'Ciudad desconocida'}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          {emp.fecha_termino ? `Termina: ${formatFecha(emp.fecha_termino)}` : 'Sin término definido'}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">

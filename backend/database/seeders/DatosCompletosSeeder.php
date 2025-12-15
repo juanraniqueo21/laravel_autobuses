@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Models\Empleado;
 use App\Models\Mecanico;
 use App\Models\Mantenimiento;
+use App\Models\PermisoLicencia;
 use App\Models\Rol;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -24,20 +25,24 @@ class DatosCompletosSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    // Precio combustible promedio (CLP/litro)
-    const PRECIO_COMBUSTIBLE = 1100;
+    // Precio combustible promedio (CLP/litro - Diesel 2025)
+    const PRECIO_COMBUSTIBLE = 1190;
+    
+    // Costo promedio de peaje por Kilómetro para Buses (Ejes múltiples)
+    // En Ruta 5 Sur es aprox $120-$140 por km para vehículos pesados
+    const COSTO_PEAJE_KM = 125;
 
     private Carbon $fechaInicio;
     private Carbon $fechaFin;
 
     public function run(): void
     {
-        // 📅 Período: Octubre, Noviembre y hasta 8 de Diciembre 2025 (alineado con BusSeeder)
+        // 📅 Período: Octubre, Noviembre y hasta 8 de Diciembre 2025
         $this->fechaInicio = Carbon::create(2025, 10, 1, 6);
         $this->fechaFin = Carbon::create(2025, 12, 8, 23);
 
         $this->command->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        $this->command->info('🚀 GENERANDO DATOS COMPLETOS PARA DEFENSA');
+        $this->command->info('🚀 GENERANDO DATOS REALISTAS (CÓDIGO COMPLETO)');
         $this->command->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         $this->command->info("📅 Período: {$this->fechaInicio->format('d/m/Y')} - {$this->fechaFin->format('d/m/Y')}");
 
@@ -46,46 +51,40 @@ class DatosCompletosSeeder extends Seeder
         try {
             // PASO 1: Mecánicos
             $this->command->newLine();
-            $this->command->info('🔧 [1/6] Creando mecánicos con especialidades...');
+            $this->command->info('🔧 [1/7] Creando mecánicos con especialidades...');
             $mecanicos = $this->crearMecanicos();
 
-            // PASO 2: Rutas
+            // PASO 2: Actualización RRHH (Contratos y Licencias)
             $this->command->newLine();
-            $this->command->info('📍 [2/6] Creando rutas del sur de Chile...');
+            $this->command->info('📋 [2/7] Generando alertas de contratos y licencias...');
+            $this->generarDatosRRHH();
+
+            // PASO 3: Rutas
+            $this->command->newLine();
+            $this->command->info('📍 [3/7] Creando rutas del sur de Chile...');
             $rutas = $this->crearRutas();
 
-            // PASO 3: Turnos
+            // PASO 4: Turnos
             $this->command->newLine();
-            $this->command->info('📅 [3/6] Generando turnos con asignación de personal...');
+            $this->command->info('📅 [4/7] Generando turnos con asignación de personal...');
             $turnos = $this->crearTurnos($rutas);
 
-            // PASO 4: Viajes
+            // PASO 5: Viajes
             $this->command->newLine();
-            $this->command->info('🚌 [4/6] Creando viajes (algunos cancelados)...');
+            $this->command->info('🚌 [5/7] Simulando viajes (Lógica de ocupación y costos)...');
             $estadisticas = $this->crearViajes($turnos);
 
-            // PASO 5: Mantenimientos
+            // PASO 6: Mantenimientos
             $this->command->newLine();
-            $this->command->info('🛠️  [5/6] Generando historial de mantenimientos...');
+            $this->command->info('🛠️  [6/7] Generando historial de mantenimientos...');
             $estadisticasMantenimientos = $this->crearMantenimientos($mecanicos);
 
-            // === CORRECCIÓN DE ESTADOS DE BUSES ===
-            // Forzamos que los buses con mantenimientos 'en_proceso' queden en estado 'mantenimiento'
-            // ignorando la validación de fechas del modelo.
+            // PASO 7: Sincronización
             $this->command->newLine();
-            $this->command->info('🔄 Sincronizando estados de flota...');
+            $this->command->info('🔄 [7/7] Sincronizando estados de flota...');
+            $this->sincronizarEstadosFlota();
 
-            $busesEnTaller = Mantenimiento::where('estado', 'en_proceso')
-                ->select('bus_id')
-                ->distinct()
-                ->pluck('bus_id');
-
-            Bus::whereIn('id', $busesEnTaller)->update(['estado' => 'mantenimiento']);
-
-            $this->command->info("   ✅ Se actualizaron {$busesEnTaller->count()} buses a estado 'mantenimiento'.");
-
-            // PASO 6: Resumen
-            $this->command->newLine();
+            // Resumen Final
             $this->mostrarResumen($rutas, $turnos, $estadisticas, $estadisticasMantenimientos);
 
             DB::commit();
@@ -97,10 +96,129 @@ class DatosCompletosSeeder extends Seeder
         }
     }
 
+    private function generarDatosRRHH()
+    {
+        $empleados = Empleado::where('estado', 'activo')->get();
+        
+        $contratosVencen = 0;
+        $licenciasGeneradas = 0;
+
+        foreach ($empleados as $empleado) {
+            // --- A. GESTIÓN DE CONTRATOS ---
+            $rand = rand(1, 100);
+            
+            if ($rand <= 20) { 
+                // 20% Vencen ESTE MES (Diciembre 2025) para alerta roja
+                $empleado->update([
+                    'tipo_contrato' => 'plazo_fijo',
+                    'fecha_termino' => Carbon::create(2025, 12, rand(1, 31)), 
+                ]);
+                $contratosVencen++;
+            } elseif ($rand <= 50) {
+                // 30% Vencen el próximo año (2026)
+                $empleado->update([
+                    'tipo_contrato' => 'plazo_fijo',
+                    'fecha_termino' => Carbon::create(2026, rand(1, 6), 15),
+                ]);
+            } else {
+                // 50% Indefinido
+                $empleado->update([
+                    'tipo_contrato' => 'indefinido',
+                    'fecha_termino' => null,
+                ]);
+            }
+
+            // --- B. HISTORIAL DE LICENCIAS MÉDICAS ---
+            if (rand(1, 100) <= 35) { // 35% del personal con historial
+                $cantidadLicencias = rand(1, 2);
+                
+                for ($i = 0; $i < $cantidadLicencias; $i++) {
+                    $fechaInicioLic = $this->fechaInicio->copy()->subMonths(rand(0, 3))->addDays(rand(1, 20));
+                    $dias = rand(3, 14);
+                    
+                    DB::table('permisos_licencias')->insert([
+                        'empleado_id' => $empleado->id,
+                        'tipo' => 'licencia_medica',
+                        'fecha_inicio' => $fechaInicioLic->format('Y-m-d'),
+                        'fecha_termino' => $fechaInicioLic->copy()->addDays($dias)->format('Y-m-d'),
+                        'dias_totales' => $dias,
+                        'estado' => 'aprobado',
+                        'motivo' => ['Gripe A', 'Lumbago', 'Estrés', 'Gastroenteritis', 'COVID-19'][rand(0, 4)],
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $licenciasGeneradas++;
+                }
+            }
+        }
+        
+        $this->command->info("   ⚠️  RRHH: {$contratosVencen} empleados con contratos venciendo en Dic-2025.");
+        $this->command->info("   🏥 RRHH: {$licenciasGeneradas} licencias médicas registradas.");
+        $this->generarAusentismosActivos();
+    }
+
+    private function generarAusentismosActivos(): void
+    {
+        $mes = 12;
+        $anio = 2025;
+        $inicioMes = Carbon::create($anio, $mes, 1);
+        $aprobadorId = User::where('rol_id', 1)->value('id') ?? User::first()?->id;
+
+        if (!$aprobadorId) {
+            $this->command->warn('   ⚠️ RRHH: No se encontró admin para aprobar ausentismos ficticios.');
+            return;
+        }
+
+        $motivos = [
+            'Control médico preventivo',
+            'Apoyo familiar urgente',
+            'Licencia médica prolongada',
+            'Permiso administrativo',
+            'Vacaciones parciales',
+        ];
+
+        $empleados = Empleado::where('estado', 'activo')->inRandomOrder()->take(8)->get();
+        $created = 0;
+
+        foreach ($empleados as $empleado) {
+            $cantidad = rand(1, 3);
+
+            for ($i = 0; $i < $cantidad; $i++) {
+                $inicio = $inicioMes->copy()->addDays(rand(0, 18));
+                $duracion = rand(2, 9);
+                $termino = $inicio->copy()->addDays($duracion);
+
+                if ($termino->month !== $mes) {
+                    $termino = Carbon::create($anio, $mes, 28);
+                }
+
+                $tipo = ['licencia_medica', 'permiso', 'vacaciones'][rand(0, 2)];
+
+                PermisoLicencia::create([
+                    'empleado_id' => $empleado->id,
+                    'tipo' => $tipo,
+                    'fecha_inicio' => $inicio->format('Y-m-d'),
+                    'fecha_termino' => $termino->format('Y-m-d'),
+                    'dias_totales' => $inicio->diffInDays($termino) + 1,
+                    'estado' => 'aprobado',
+                    'motivo' => $motivos[array_rand($motivos)],
+                    'observaciones' => 'Generado para mostrar ausentismo mensual',
+                    'aprobado_por' => $aprobadorId,
+                    'fecha_respuesta' => $termino->copy()->addDay()->format('Y-m-d H:i:s'),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $created++;
+            }
+        }
+
+        $this->command->info("   📢 RRHH: {$created} ausentismos activos añadidos para diciembre.");
+    }
+
     private function crearRutas()
     {
         $rutasData = [
-            // RUTAS EXISTENTES
             [
                 'nombre' => 'Temuco - Pucón',
                 'codigo' => 'R-PUCON',
@@ -162,7 +280,6 @@ class DatosCompletosSeeder extends Seeder
                     ['ciudad' => 'Villarrica', 'distancia' => 34, 'tiempo' => 32, 'es_destino' => true],
                 ],
             ],
-            // NUEVAS RUTAS DEL SUR DE CHILE
             [
                 'nombre' => 'Santiago - Temuco',
                 'codigo' => 'R-CAPITAL',
@@ -364,9 +481,12 @@ class DatosCompletosSeeder extends Seeder
             $asistentesUsados = collect(); // Reset diario
 
             foreach ($buses as $bus) {
+                // Algún bus podría estar en descanso o reserva (8% probabilidad)
+                if (rand(1, 100) <= 8) continue;
+
                 $esDoblePiso = $bus->tipo_bus === 'doble_piso';
                 
-                // Buses doble piso: turno completo (1 turno)
+                // Buses doble piso: turno completo (1 turno, viaja ida y vuelta)
                 // Buses un piso: 2 turnos (mañana y tarde)
                 $turnosPorBus = $esDoblePiso ? 1 : 2;
 
@@ -384,7 +504,7 @@ class DatosCompletosSeeder extends Seeder
                         $horaTermino = $turnoIndex === 0 ? '14:00:00' : '22:00:00';
                     }
 
-                    // Crear turno
+                    // Crear turno (CORREGIDO: Eliminados ruta_id y conductor_id que causaban error)
                     $turno = AsignacionTurno::create([
                         'bus_id' => $bus->id,
                         'fecha_turno' => $fecha,
@@ -392,14 +512,15 @@ class DatosCompletosSeeder extends Seeder
                         'hora_termino' => $horaTermino,
                         'tipo_turno' => $tipoTurno,
                         'estado' => 'completado',
+                        // La relación ruta y conductor ahora es indirecta o via pivote según tu última migración
+                        // Si tu modelo AsignacionTurno aún requiere estos campos, la migración modify_asignaciones_turno debe revisarse.
+                        // Asumiendo que la migración modify_... eliminó las columnas, las quitamos de aquí.
                     ]);
 
                     // ASIGNAR CONDUCTORES
                     if ($esDoblePiso) {
-                        // Buses doble piso: 2-3 conductores
-                        $cantidadConductores = rand(2, 3);
+                        $cantidadConductores = 2; // Doble piso siempre lleva 2
                     } else {
-                        // Buses un piso: 1 conductor
                         $cantidadConductores = 1;
                     }
 
@@ -422,7 +543,7 @@ class DatosCompletosSeeder extends Seeder
                         }
                     }
 
-                    // ASIGNAR ASISTENTE (opcional para buses de un piso, obligatorio para doble piso)
+                    // ASIGNAR ASISTENTE
                     if ($asistentes->isNotEmpty()) {
                         $probabilidadAsistente = $esDoblePiso ? 100 : 30; // 100% doble piso, 30% un piso
                         
@@ -465,176 +586,182 @@ class DatosCompletosSeeder extends Seeder
     private function crearViajes($turnos)
     {
         if ($turnos->isEmpty()) {
-            $this->command->warn('   ⚠️  No hay turnos. No se pueden crear viajes.');
             return ['total' => 0, 'completados' => 0, 'cancelados' => 0, 'con_alerta' => 0, 'ineficientes' => 0];
         }
 
-        $viajesCreados = 0;
-        $viajesCompletados = 0;
-        $viajesCancelados = 0;
-        $viajesConAlerta = 0;
-        $viajesIneficientes = 0;
+        $contadores = [
+            'total' => 0,
+            'completados' => 0,
+            'cancelados' => 0,
+            'con_alerta' => 0,
+            'ineficientes' => 0
+        ];
 
         $motivosCancelacion = [
             'Falla mecánica del bus',
             'Condiciones climáticas adversas',
             'Conductor no disponible por enfermedad',
-            'Baja demanda de pasajeros',
-            'Emergencia en ruta',
+            'Baja demanda crítica',
+            'Emergencia en ruta (Corte de camino)',
             'Mantenimiento preventivo urgente',
-            'Bloqueo de ruta',
         ];
 
         foreach ($turnos as $turnoData) {
             $turno = $turnoData['turno'];
             $ruta = $turnoData['ruta'];
             $tipoTurno = $turnoData['tipo'];
+            $bus = $turno->bus;
 
-            // Determinar cantidad de viajes según tipo de turno
-            // Completo: 2 viajes (ida y vuelta)
-            // Mañana/Tarde: 2 viajes (ida y vuelta)
-            $cantidadViajes = $tipoTurno === 'completo' ? 2 : 2;
+            // Cantidad de viajes por turno (Ida y Vuelta)
+            $cantidadViajes = 2;
 
             for ($i = 0; $i < $cantidadViajes; $i++) {
-                // 5% de probabilidad de cancelación
-                $esCancelado = rand(1, 100) <= 5;
-                
                 $fechaViaje = Carbon::parse($turno->fecha_turno)
                     ->setTimeFromTimeString($turno->hora_inicio)
-                    ->addHours($i * ($tipoTurno === 'completo' ? 8 : 4));
+                    ->addHours($i * ($tipoTurno === 'completo' ? 8 : 5));
 
-                $fechaLlegada = $fechaViaje->copy()->addMinutes($ruta->tiempo_estimado_minutos + rand(-15, 30));
-
-                $bus = $turno->bus;
-
-                if ($esCancelado) {
-                    Viaje::create([
-                        'asignacion_turno_id' => $turno->id,
-                        'ruta_id' => $ruta->id,
-                        'codigo_viaje' => 'VJ-' . str_pad($viajesCreados + 1, 6, '0', STR_PAD_LEFT),
-                        'nombre_viaje' => ($i % 2 === 0 ? "Ida" : "Vuelta") . " {$ruta->origen} - {$ruta->destino}",
-                        'fecha_hora_salida' => $fechaViaje,
-                        'fecha_hora_llegada' => null,
-                        'estado' => 'cancelado',
-                        'observaciones' => $motivosCancelacion[array_rand($motivosCancelacion)],
-                        'pasajeros_transportados' => 0,
-                        'tarifa_aplicada' => 0,
-                        'dinero_esperado' => 0,
-                        'dinero_recaudado' => 0,
-                        'diferencia_porcentaje' => 0,
-                        'requiere_revision' => false,
-                        'costo_combustible' => 0,
-                        'costo_peajes' => 0,
-                        'costo_mantencion' => 0,
-                        'costo_total' => 0,
-                    ]);
-                    $viajesCancelados++;
-                } else {
-                    // RECAUDACIÓN
-                    // 🔧 FIX: No exceder capacidad del bus
-                    $capacidadBus = $bus?->capacidad_pasajeros ?? 45;
-                    $tasaOcupacion = rand(55, 95) / 100; // 55% a 95% de ocupación
-                    $pasajeros = intval($capacidadBus * $tasaOcupacion);
-                    $pasajeros = max(1, min($pasajeros, $capacidadBus)); // Entre 1 y capacidad máxima
-
-                    $tarifaBase = $ruta->tarifa_base_adulto;
-                    $factorTarifa = $bus?->factor_tarifa ?? 1;
-                    $tarifaAplicada = intval(round($tarifaBase * $factorTarifa));
-                    $dineroEsperado = $pasajeros * $tarifaAplicada;
-
-                    $factorRecaudacion = $this->obtenerFactorRecaudacion();
-                    $dineroRecaudado = intval($dineroEsperado * $factorRecaudacion);
-
-                    $diferenciaPorcentaje = round((abs($dineroEsperado - $dineroRecaudado) / $dineroEsperado) * 100, 2);
-                    $requiereRevision = $diferenciaPorcentaje > 10;
-
-                    if ($requiereRevision) {
-                        $viajesConAlerta++;
-                    }
-
-                    // COSTOS REALISTAS
-                    $distancia = $ruta->distancia_km ?: 10;
-                    $consumoKm = $bus?->consumo_km ?? 2.8;
-                    $litrosConsumidos = $distancia / $consumoKm;
-                    $costoCombustible = intval($litrosConsumidos * self::PRECIO_COMBUSTIBLE);
-
-                    $costoMantencion = intval($distancia * ($bus?->costo_mantencion_km ?? 120));
-                    $costoPeajes = rand(2000, 8000);
-
-                    // 💰 NUEVOS COSTOS REALISTAS
-                    // Salarios proporcionales al viaje (considerando que un conductor gana ~$1,200,000/mes)
-                    // Promedio 60 viajes/mes por conductor = ~$20,000 por viaje
-                    $cantidadConductores = $turno->conductores()->count() ?: 1;
-                    $cantidadAsistentes = $turno->asistentes()->count() ?: 0;
-                    $costoSalarios = ($cantidadConductores * 20000) + ($cantidadAsistentes * 15000);
-
-                    // Depreciación del bus (valor ~$80,000,000 / 10 años / 365 días / 2 viajes por día = ~$11,000 por viaje)
-                    $costoDepreciacion = rand(8000, 14000);
-
-                    // Seguros (anual ~$2,400,000 / 365 días / 2 viajes = ~$3,300 por viaje)
-                    $costoSeguros = rand(2500, 4000);
-
-                    // Costos administrativos (oficinas, personal, sistemas, etc.)
-                    $costosAdministrativos = intval($dineroRecaudado * 0.08); // 8% de ingresos
-
-                    $costoTotal = $costoCombustible + $costoMantencion + $costoPeajes
-                                + $costoSalarios + $costoDepreciacion + $costoSeguros
-                                + $costosAdministrativos;
-
-                    Viaje::create([
-                        'asignacion_turno_id' => $turno->id,
-                        'ruta_id' => $ruta->id,
-                        'codigo_viaje' => 'VJ-' . str_pad($viajesCreados + 1, 6, '0', STR_PAD_LEFT),
-                        'nombre_viaje' => ($i % 2 === 0 ? "Ida" : "Vuelta") . " {$ruta->origen} - {$ruta->destino}",
-                        'fecha_hora_salida' => $fechaViaje,
-                        'fecha_hora_llegada' => $fechaLlegada,
-                        'estado' => 'completado',
-                        'pasajeros_transportados' => $pasajeros,
-                        'tarifa_aplicada' => $tarifaAplicada,
-                        'dinero_esperado' => $dineroEsperado,
-                        'dinero_recaudado' => $dineroRecaudado,
-                        'diferencia_porcentaje' => $diferenciaPorcentaje,
-                        'requiere_revision' => $requiereRevision,
-                        'costo_combustible' => $costoCombustible,
-                        'costo_peajes' => $costoPeajes,
-                        'costo_mantencion' => $costoMantencion,
-                        'costo_total' => $costoTotal,
-                    ]);
-
-                    $viajesCompletados++;
-
-                    if ($costoTotal > $dineroRecaudado) {
-                        $viajesIneficientes++;
-                    }
+                // === LÓGICA DE DEMANDA SEMANAL REALISTA ===
+                $diaSemana = $fechaViaje->dayOfWeek; // 0=Domingo, 1=Lunes, ..., 6=Sábado
+                
+                // Definir rangos de ocupación según día
+                if ($diaSemana == 5) { // Viernes: Explosión de demanda
+                    $minOcup = 85; $maxOcup = 100;
+                } elseif ($diaSemana == 0) { // Domingo: Regreso masivo
+                    $minOcup = 80; $maxOcup = 100;
+                } elseif ($diaSemana == 1) { // Lunes: Alto en la mañana
+                    $minOcup = 60; $maxOcup = 90;
+                } else { // Martes, Miércoles, Jueves: Demanda valle
+                    // Bajamos la ocupación mínima para generar posibles pérdidas reales
+                    $minOcup = 25; $maxOcup = 65; 
                 }
 
-                $viajesCreados++;
+                $capacidadBus = $bus?->capacidad_pasajeros ?? 45;
+                $ocupacion = rand($minOcup, $maxOcup) / 100;
+                
+                // Respetar estrictamente la capacidad máxima
+                $pasajeros = intval($capacidadBus * $ocupacion);
+                $pasajeros = min($pasajeros, $capacidadBus);
+                $pasajeros = max(4, $pasajeros); // Mínimo 4 pasajeros
+
+                // Probabilidad de cancelación baja (2%)
+                if (rand(1, 100) <= 2) {
+                    $this->crearViajeCancelado($turno, $ruta, $fechaViaje, $i, $contadores, $motivosCancelacion);
+                    continue;
+                }
+
+                // === CÁLCULO FINANCIERO AGRESIVO ===
+                
+                // 1. INGRESOS
+                $tarifaReal = $ruta->tarifa_base_adulto; 
+                $ingresoEsperado = $pasajeros * $tarifaReal;
+                
+                // Variación en recaudación (pérdida de monedas, evasión mínima)
+                $factorRecaudacion = rand(96, 100) / 100;
+                $dineroRecaudado = intval($ingresoEsperado * $factorRecaudacion);
+
+                // 2. COSTOS VARIABLES (REALISMO AUMENTADO)
+                $distancia = $ruta->distancia_km ?: 100;
+                
+                // A. Combustible
+                $rendimiento = $bus->consumo_km ?? 3.0; // km por litro
+                $litros = $distancia / $rendimiento;
+                $costoCombustible = intval($litros * self::PRECIO_COMBUSTIBLE);
+
+                // B. Peajes (COSTO REAL)
+                // Se aplica variación aleatoria
+                $costoPeajes = intval($distancia * self::COSTO_PEAJE_KM * (rand(95, 105) / 100));
+
+                // C. Tripulación (Costo variable por vuelta)
+                $numConductores = DB::table('turno_conductores')->where('asignacion_turno_id', $turno->id)->count();
+                $tieneAsistente = DB::table('turno_asistentes')->where('asignacion_turno_id', $turno->id)->exists();
+                $costoSalarios = ($numConductores * 30000) + ($tieneAsistente ? 18000 : 0); // Sueldo por tramo + viático
+
+                // D. Servicios a Bordo (Snack/Bebida)
+                $costoSnack = $pasajeros * 1100; 
+
+                // E. Mantenimiento Proporcional & Depreciación
+                // Subimos a $220 por km para incluir depreciación real
+                $costoMantencion = intval($distancia * 220);
+
+                // F. Costos Administrativos y Losa (10% del ingreso + costo fijo salida)
+                $costoAdmin = intval($dineroRecaudado * 0.10) + 4500; // 4500 derecho de losa
+
+                // Costo Total
+                $costoTotal = $costoCombustible + $costoPeajes + $costoSalarios + $costoSnack + $costoMantencion + $costoAdmin;
+
+                // === ANÁLISIS DEL VIAJE ===
+                // Margen de ganancia
+                $margen = $dineroRecaudado - $costoTotal;
+                
+                // Si el margen es negativo, es ineficiente
+                if ($margen < 0) {
+                    $contadores['ineficientes']++;
+                }
+
+                // Alerta si hay mucha diferencia entre lo esperado y lo recaudado
+                $diferenciaPct = 0;
+                if ($ingresoEsperado > 0) {
+                    $diferenciaPct = round((($ingresoEsperado - $dineroRecaudado) / $ingresoEsperado) * 100, 2);
+                }
+                
+                $requiereRevision = $diferenciaPct > 5; // Más estricto: 5%
+                if ($requiereRevision) $contadores['con_alerta']++;
+
+                $fechaLlegada = $fechaViaje->copy()->addMinutes($ruta->tiempo_estimado_minutos + rand(-10, 30));
+
+                Viaje::create([
+                    'asignacion_turno_id' => $turno->id,
+                    'ruta_id' => $ruta->id,
+                    'codigo_viaje' => 'VJ-' . str_pad($contadores['total'] + 1, 6, '0', STR_PAD_LEFT),
+                    'nombre_viaje' => ($i % 2 === 0 ? "Ida" : "Vuelta") . " {$ruta->origen} - {$ruta->destino}",
+                    'fecha_hora_salida' => $fechaViaje,
+                    'fecha_hora_llegada' => $fechaLlegada,
+                    'estado' => 'completado',
+                    'pasajeros_transportados' => $pasajeros,
+                    'tarifa_aplicada' => $tarifaReal,
+                    'dinero_esperado' => $ingresoEsperado,
+                    'dinero_recaudado' => $dineroRecaudado,
+                    'diferencia_porcentaje' => $diferenciaPct,
+                    'requiere_revision' => $requiereRevision,
+                    // Costos detallados
+                    'combustible_litros' => round($litros, 2),
+                    // CORRECCION AQUI: Convertir a entero porque la columna es integer
+                    'kilometros_recorridos' => intval($distancia),
+                    'costo_combustible' => $costoCombustible,
+                    'costo_peajes' => $costoPeajes,
+                    'costo_mantencion' => $costoMantencion,
+                    'costo_total' => $costoTotal,
+                ]);
+
+                $contadores['completados']++;
+                $contadores['total']++;
             }
         }
 
-        $this->command->info("   ✓ {$viajesCreados} viajes creados ({$viajesCompletados} completados, {$viajesCancelados} cancelados)");
-        $this->command->info("   ✓ {$viajesConAlerta} viajes con revisión, {$viajesIneficientes} con costos > recaudación");
+        $this->command->info("   ✓ {$contadores['total']} viajes creados ({$contadores['completados']} completados, {$contadores['cancelados']} cancelados)");
+        $this->command->info("   ✓ {$contadores['con_alerta']} viajes con revisión, {$contadores['ineficientes']} con pérdidas financieras");
 
-        return [
-            'total' => $viajesCreados,
-            'completados' => $viajesCompletados,
-            'cancelados' => $viajesCancelados,
-            'con_alerta' => $viajesConAlerta,
-            'ineficientes' => $viajesIneficientes,
-        ];
+        return $contadores;
     }
 
-    private function obtenerFactorRecaudacion(): float
+    private function crearViajeCancelado($turno, $ruta, $fecha, $i, &$contadores, $motivos)
     {
-        $rand = rand(1, 100);
-
-        if ($rand <= 60) {
-            return rand(90, 110) / 100; // ±10%
-        } elseif ($rand <= 85) {
-            return rand(110, 120) / 100; // +10 a +20%
-        }
-
-        return rand(80, 90) / 100; // -10 a -20%
+        Viaje::create([
+            'asignacion_turno_id' => $turno->id,
+            'ruta_id' => $ruta->id,
+            'codigo_viaje' => 'VJ-C-' . uniqid(),
+            'nombre_viaje' => "CANCELADO - " . ($i % 2 === 0 ? "Ida" : "Vuelta"),
+            'fecha_hora_salida' => $fecha,
+            'estado' => 'cancelado',
+            'observaciones' => $motivos[array_rand($motivos)],
+            'pasajeros_transportados' => 0,
+            'tarifa_aplicada' => 0,
+            'dinero_esperado' => 0,
+            'dinero_recaudado' => 0,
+            'costo_total' => 0,
+        ]);
+        $contadores['cancelados']++;
+        $contadores['total']++;
     }
 
     private function crearMecanicos()
@@ -663,7 +790,7 @@ class DatosCompletosSeeder extends Seeder
                     'rut' => $persona['rut'],
                     'rut_verificador' => $persona['dv'],
                     'password' => Hash::make('123456'),
-                    'rol_id' => $mecanicoRol?->id,
+                    'rol_id' => $mecanicoRol?->id ?? 4,
                     'estado' => 'activo',
                 ]
             );
@@ -718,22 +845,19 @@ class DatosCompletosSeeder extends Seeder
     private function crearMantenimientos($mecanicos)
     {
         if ($mecanicos->isEmpty()) {
-            $this->command->warn('   ⚠️  No hay mecánicos. No se pueden crear mantenimientos.');
             return ['total' => 0, 'preventivos' => 0, 'correctivos' => 0, 'en_proceso' => 0];
         }
 
         $buses = Bus::all();
-
         if ($buses->isEmpty()) {
-            $this->command->warn('   ⚠️  No hay buses. No se pueden crear mantenimientos.');
             return ['total' => 0, 'preventivos' => 0, 'correctivos' => 0, 'en_proceso' => 0];
         }
 
         $tiposMantenimiento = [
             'preventivo' => [
                 'tipos_falla' => ['Cambio de aceite', 'Revisión general', 'Cambio de filtros', 'Inspección de frenos', 'Alineación y balanceo'],
-                'costo_min' => 80000,
-                'costo_max' => 250000,
+                'costo_min' => 120000, // Ajustado al alza
+                'costo_max' => 350000,
                 'duracion_min' => 1,
                 'duracion_max' => 2,
             ],
@@ -749,8 +873,8 @@ class DatosCompletosSeeder extends Seeder
                     'Daño en carrocería' => ['carroceria'],
                     'Neumáticos desgastados' => ['neumaticos'],
                 ],
-                'costo_min' => 150000,
-                'costo_max' => 2500000,
+                'costo_min' => 250000,
+                'costo_max' => 3500000,
                 'duracion_min' => 1,
                 'duracion_max' => 7,
             ],
@@ -762,22 +886,17 @@ class DatosCompletosSeeder extends Seeder
         $enProceso = 0;
 
         foreach ($buses as $bus) {
-            // Cada bus tiene entre 2 y 6 mantenimientos en el período
-            $cantidadMantenimientos = rand(2, 6);
+            $cantidadMantenimientos = $this->determinarMantenimientosPorBus($bus);
 
             for ($i = 0; $i < $cantidadMantenimientos; $i++) {
-                $tipo = rand(1, 100) <= 60 ? 'preventivo' : 'correctivo'; // 60% preventivo, 40% correctivo
+                $tipo = rand(1, 100) <= 60 ? 'preventivo' : 'correctivo';
                 $config = $tiposMantenimiento[$tipo];
 
-                // Fecha de inicio aleatoria dentro del período
                 $diasAtras = rand(0, $this->fechaInicio->diffInDays($this->fechaFin));
                 $fechaInicio = $this->fechaInicio->copy()->addDays($diasAtras);
-
-                // Duración del mantenimiento
                 $duracionDias = rand($config['duracion_min'], $config['duracion_max']);
                 $fechaTermino = $fechaInicio->copy()->addDays($duracionDias);
 
-                // Determinar estado usando la fecha simulada (fechaFin) como "hoy"
                 if ($fechaInicio->gt($this->fechaFin)) {
                     $estado = 'pendiente';
                 } elseif ($fechaInicio->lte($this->fechaFin) && $fechaTermino->gt($this->fechaFin)) {
@@ -787,7 +906,6 @@ class DatosCompletosSeeder extends Seeder
                     $estado = 'completado';
                 }
 
-                // Seleccionar descripción y mecánico apropiado
                 if ($tipo === 'preventivo') {
                     $descripcion = $config['tipos_falla'][array_rand($config['tipos_falla'])];
                     $mecanico = $mecanicos->random();
@@ -797,7 +915,6 @@ class DatosCompletosSeeder extends Seeder
                     $descripcion = $descripcionKey;
                     $especialidadRequerida = $config['tipos_falla'][$descripcionKey];
 
-                    // Buscar mecánico con la especialidad
                     $mecanicoEspecializado = $mecanicos->first(function($mec) use ($especialidadRequerida) {
                         return !empty(array_intersect($mec->especialidad ?? [], $especialidadRequerida));
                     });
@@ -806,69 +923,35 @@ class DatosCompletosSeeder extends Seeder
                     $correctivos++;
                 }
 
-                // Costo - MEJORADO: SIEMPRE asignar costo (estimado para en_proceso/pendiente, real para completado)
                 $costoTotal = rand($config['costo_min'], $config['costo_max']);
 
-                // Repuestos detallados (varía según tipo de mantenimiento)
                 $repuestos = null;
                 if ($estado === 'completado') {
                     if ($tipo === 'preventivo') {
                         $repuestos = [
                             ['nombre' => 'Filtro de aceite', 'cantidad' => rand(1, 2), 'costo' => rand(8000, 15000)],
-                            ['nombre' => 'Filtro de aire', 'cantidad' => 1, 'costo' => rand(12000, 20000)],
-                            ['nombre' => 'Filtro de combustible', 'cantidad' => 1, 'costo' => rand(15000, 25000)],
                             ['nombre' => 'Aceite motor', 'cantidad' => rand(8, 15), 'costo' => rand(8000, 12000)],
                         ];
                     } else {
-                        // Repuestos según el tipo de falla
-                        $repuestosBase = [
-                            'Falla en motor' => [
-                                ['nombre' => 'Pistones', 'cantidad' => rand(2, 6), 'costo' => rand(80000, 150000)],
-                                ['nombre' => 'Juntas', 'cantidad' => rand(3, 5), 'costo' => rand(15000, 30000)],
-                                ['nombre' => 'Correa de distribución', 'cantidad' => 1, 'costo' => rand(45000, 80000)],
-                            ],
-                            'Problema eléctrico' => [
-                                ['nombre' => 'Batería', 'cantidad' => 1, 'costo' => rand(120000, 180000)],
-                                ['nombre' => 'Alternador', 'cantidad' => 1, 'costo' => rand(180000, 280000)],
-                                ['nombre' => 'Cables eléctricos', 'cantidad' => rand(5, 10), 'costo' => rand(5000, 10000)],
-                            ],
-                            'Problema de frenos' => [
-                                ['nombre' => 'Pastillas de freno', 'cantidad' => 4, 'costo' => rand(40000, 70000)],
-                                ['nombre' => 'Discos de freno', 'cantidad' => 2, 'costo' => rand(80000, 120000)],
-                                ['nombre' => 'Líquido de frenos', 'cantidad' => 2, 'costo' => rand(8000, 12000)],
-                            ],
-                            'Neumáticos desgastados' => [
-                                ['nombre' => 'Neumático 295/80R22.5', 'cantidad' => rand(2, 6), 'costo' => rand(180000, 250000)],
-                                ['nombre' => 'Válvulas', 'cantidad' => rand(2, 6), 'costo' => rand(3000, 5000)],
-                            ],
-                        ];
-
-                        $repuestos = $repuestosBase[$descripcion] ?? [
-                            ['nombre' => 'Repuesto genérico', 'cantidad' => rand(1, 3), 'costo' => rand(30000, 80000)],
-                            ['nombre' => 'Mano de obra especializada', 'cantidad' => rand(8, 20), 'costo' => rand(15000, 25000)],
+                        $repuestos = [
+                            ['nombre' => 'Repuesto específico', 'cantidad' => 1, 'costo' => intval($costoTotal * 0.6)],
+                            ['nombre' => 'Mano de obra', 'cantidad' => rand(5, 10), 'costo' => 25000],
                         ];
                     }
                 }
 
-                // Observaciones más detalladas
-                $observaciones = null;
-                if ($estado === 'en_proceso') {
-                    $avance = rand(20, 80);
-                    $observaciones = "Mantenimiento en curso. Avance: {$avance}%. Tiempo estimado restante: " . rand(1, 3) . " días.";
-                } elseif ($estado === 'completado') {
-                    $observaciones = "Mantenimiento finalizado satisfactoriamente. Bus en condiciones óptimas.";
-                } else {
-                    $observaciones = "Mantenimiento programado. Pendiente de inicio.";
-                }
+                $observaciones = $estado === 'en_proceso' 
+                    ? "En reparación. Avance " . rand(20, 80) . "%."
+                    : "Mantenimiento finalizado.";
 
                 Mantenimiento::create([
                     'bus_id' => $bus->id,
-                    'mecanico_id' => $mecanico->id,
+                    'mecanico_id' => $mecanico->empleado_id, // Usar empleado_id que es la FK correcta
                     'tipo_mantenimiento' => $tipo,
                     'descripcion' => $descripcion,
                     'fecha_inicio' => $fechaInicio->format('Y-m-d'),
-                    'fecha_termino' => $estado === 'completado' ? $fechaTermino->format('Y-m-d') : $fechaTermino->format('Y-m-d'),
-                    'costo_total' => $costoTotal, // ✅ AHORA SIEMPRE TIENE COSTO
+                    'fecha_termino' => $estado === 'completado' ? $fechaTermino->format('Y-m-d') : null,
+                    'costo_total' => $costoTotal,
                     'estado' => $estado,
                     'repuestos_utilizados' => $repuestos,
                     'observaciones' => $observaciones,
@@ -889,6 +972,52 @@ class DatosCompletosSeeder extends Seeder
         ];
     }
 
+    private function sincronizarEstadosFlota()
+    {
+        $busesEnTaller = Mantenimiento::where('estado', 'en_proceso')->pluck('bus_id');
+        Bus::whereIn('id', $busesEnTaller)->update(['estado' => 'mantenimiento']);
+        Bus::whereNotIn('id', $busesEnTaller)->update(['estado' => 'operativo']);
+        
+        $this->command->info("   ✅ Se sincronizaron " . $busesEnTaller->count() . " buses a estado 'mantenimiento'.");
+    }
+
+    private function determinarMantenimientosPorBus(Bus $bus): int
+    {
+        $anioReferencia = $this->fechaFin->year;
+        $edad = max(0, $anioReferencia - ($bus->anio ?? $anioReferencia));
+        $base = rand(2, 4);
+        $bonus = 0;
+
+        if ($edad >= 3) {
+            $bonus++;
+        }
+        if ($edad >= 7) {
+            $bonus++;
+        }
+        if ($edad >= 10) {
+            $bonus++;
+        }
+
+        $servicio = $bus->tipo_servicio ?? 'clasico';
+        if (in_array($servicio, ['premium', 'cama'], true)) {
+            $bonus += 2;
+            if ($edad >= 5) {
+                $bonus++;
+            }
+        } elseif ($servicio === 'semicama') {
+            $bonus++;
+        } elseif ($servicio === 'clasico' && $edad <= 2) {
+            $base = max(2, $base - 1);
+        }
+
+        if (rand(1, 100) <= 25) {
+            $bonus++;
+        }
+
+        $total = $base + $bonus;
+        return min(max($total, 2), 6);
+    }
+
     private function mostrarResumen($rutas, $turnos, $estadisticas, $estadisticasMantenimientos = null): void
     {
         $this->command->newLine();
@@ -901,7 +1030,7 @@ class DatosCompletosSeeder extends Seeder
         $this->command->info("   ✅ Viajes completados: {$estadisticas['completados']}");
         $this->command->info("   ❌ Viajes cancelados: {$estadisticas['cancelados']}");
         $this->command->info("   ⚠️  Viajes con revisión: {$estadisticas['con_alerta']}");
-        $this->command->info("   💰 Viajes con pérdida: {$estadisticas['ineficientes']}");
+        $this->command->info("   💰 Viajes con pérdida (Margen Negativo): {$estadisticas['ineficientes']}");
 
         if ($estadisticasMantenimientos) {
             $this->command->newLine();

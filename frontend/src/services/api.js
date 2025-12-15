@@ -1404,6 +1404,27 @@ export const fetchResumenEjecutivo = async (params = {}) => {
   return result;
 };
 
+/**
+ * Descargar informe mensual de servicio en PDF
+ */
+export const fetchAnalisisServicioPdf = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.mes) queryParams.append('mes', params.mes);
+  if (params.anio) queryParams.append('anio', params.anio);
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+
+  const url = `${API_URL}/reportes/analisis-servicio/pdf${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.blob();
+};
+
 // ============================================
 // ANÁLISIS DE MANTENIMIENTOS
 // ============================================
@@ -1632,6 +1653,23 @@ export const fetchAlertasContratos = async (params = {}) => {
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   const result = await response.json();
   return result;
+};
+
+/**
+ * Obtener empleados por tipo de contrato para desplegar detalles
+ */
+export const fetchEmpleadosPorContrato = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.tipo) queryParams.append('tipo', params.tipo);
+
+  const url = `${API_URL}/rrhh/empleados-por-contrato${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
 };
 
 /**

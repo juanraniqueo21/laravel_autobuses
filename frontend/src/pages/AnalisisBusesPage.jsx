@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart3, TrendingUp, Users, DollarSign, Percent, Calendar } from 'lucide-react';
-import { fetchRentabilidadPorTipoServicio, fetchOcupacionPorTipoServicio, fetchResumenEjecutivo } from '../services/api';
+import { fetchRentabilidadPorTipoServicio, fetchOcupacionPorTipoServicio, fetchResumenEjecutivo, fetchAnalisisServicioPdf } from '../services/api';
 import MetricCard from '../components/cards/MetricCard';
+import { useNotifications } from '../context/NotificationContext';
 
 export default function AnalisisBusesPage() {
   const [rentabilidad, setRentabilidad] = useState([]);
@@ -10,6 +11,25 @@ export default function AnalisisBusesPage() {
   const [loading, setLoading] = useState(true);
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
+  const [mesReporte, setMesReporte] = useState(new Date().getMonth() + 1);
+  const [anioReporte, setAnioReporte] = useState(new Date().getFullYear());
+  const [descargandoReporteServicio, setDescargandoReporteServicio] = useState(false);
+  const { addNotification } = useNotifications();
+  const mesesDisponibles = [
+    { value: 1, label: 'Enero' },
+    { value: 2, label: 'Febrero' },
+    { value: 3, label: 'Marzo' },
+    { value: 4, label: 'Abril' },
+    { value: 5, label: 'Mayo' },
+    { value: 6, label: 'Junio' },
+    { value: 7, label: 'Julio' },
+    { value: 8, label: 'Agosto' },
+    { value: 9, label: 'Septiembre' },
+    { value: 10, label: 'Octubre' },
+    { value: 11, label: 'Noviembre' },
+    { value: 12, label: 'Diciembre' },
+  ];
+  const aniosDisponibles = Array.from({ length: 3 }, (_, idx) => new Date().getFullYear() - idx);
 
   useEffect(() => {
     loadData();
@@ -44,6 +64,37 @@ export default function AnalisisBusesPage() {
       console.error('❌ Error cargando análisis:', error); // actualizado con el emoji
     } finally {
       setLoading(false);
+    }
+  };
+
+  const descargarArchivo = (blob, nombreArchivo) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nombreArchivo;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleDescargarReporteServicio = async () => {
+    try {
+      setDescargandoReporteServicio(true);
+      const blob = await fetchAnalisisServicioPdf({
+        mes: mesReporte,
+        anio: anioReporte,
+        fecha_inicio: fechaInicio || undefined,
+        fecha_fin: fechaFin || undefined,
+      });
+      const mesPadding = String(mesReporte).padStart(2, '0');
+      descargarArchivo(blob, `analisis-servicio-${anioReporte}-${mesPadding}.pdf`);
+      addNotification('success', 'Reporte mensual', 'Se descargó el PDF del análisis mensual.');
+    } catch (error) {
+      console.error('Error generando reporte mensual', error);
+      addNotification('error', 'Reporte', 'No se pudo generar el PDF mensual.');
+    } finally {
+      setDescargandoReporteServicio(false);
     }
   };
 
@@ -121,8 +172,44 @@ export default function AnalisisBusesPage() {
               Limpiar
             </button>
           )}
+      </div>
+    </div>
+
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 items-end justify-between">
+      <div className="flex flex-wrap gap-4">
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Mes del reporte</label>
+          <select
+            value={mesReporte}
+            onChange={(e) => setMesReporte(Number(e.target.value))}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full"
+          >
+            {mesesDisponibles.map((mes) => (
+              <option key={mes.value} value={mes.value}>{mes.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Año del reporte</label>
+          <select
+            value={anioReporte}
+            onChange={(e) => setAnioReporte(Number(e.target.value))}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full"
+          >
+            {aniosDisponibles.map((anio) => (
+              <option key={anio} value={anio}>{anio}</option>
+            ))}
+          </select>
         </div>
       </div>
+      <button
+        onClick={handleDescargarReporteServicio}
+        disabled={descargandoReporteServicio}
+        className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${descargandoReporteServicio ? 'bg-indigo-100 text-indigo-400 cursor-wait' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+      >
+        {descargandoReporteServicio ? 'Generando PDF...' : 'Descargar reporte mensual'}
+      </button>
+    </div>
 
       {/* Resumen Ejecutivo */}
       {resumen && (

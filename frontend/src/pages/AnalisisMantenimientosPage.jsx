@@ -40,7 +40,7 @@ export default function AnalisisMantenimientosPage() {
   const [activandoBus, setActivandoBus] = useState(null);
   const [tabActiva, setTabActiva] = useState('general'); // general, taller, costos, alertas
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [datosModal, setDatosModal] = useState({ titulo: '', datos: [] });
+  const [datosModal, setDatosModal] = useState({ titulo: '', datos: [], tipo: null });
   const [descargandoPdf, setDescargandoPdf] = useState(false);
 
   const { addNotification } = useNotifications();
@@ -144,8 +144,8 @@ export default function AnalisisMantenimientosPage() {
   };
 
   // --- HELPERS ---
-  const abrirModalConDatos = (titulo, datos) => {
-    setDatosModal({ titulo, datos });
+  const abrirModalConDatos = (titulo, datos, tipo = null) => {
+    setDatosModal({ titulo, datos, tipo });
     setModalAbierto(true);
   };
 
@@ -177,6 +177,109 @@ export default function AnalisisMantenimientosPage() {
     return 'Sistema';
   };
 
+  const renderModalBusesTaller = () => {
+    const datos = Array.isArray(datosModal.datos) ? datosModal.datos : [];
+    if (datos.length === 0) {
+      return <p className="text-center text-gray-500">No hay registros para mostrar.</p>;
+    }
+    return (
+      <div className="space-y-4">
+        {datos.map((bus) => (
+          <div key={bus.mantenimiento_id ?? bus.bus_id ?? bus.patente} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <p className="text-sm text-gray-500 uppercase tracking-wide">{bus.tipo_servicio ?? 'Servicio'}</p>
+                <h4 className="text-lg font-semibold text-gray-800">
+                  {bus.patente} · {bus.marca} {bus.modelo}
+                </h4>
+                <p className="text-xs text-gray-500">{bus.capacidad_pasajeros ?? 0} pasajeros · Mantenimiento #{bus.mantenimiento_id}</p>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${bus.activable_emergencia ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                {bus.activable_emergencia ? 'Activable' : 'No activable'}
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-600">
+              <span className="font-semibold text-gray-700">{bus.tipo_mantenimiento ?? 'Mantenimiento'}</span>
+              <span className="italic">{bus.descripcion ?? 'Descripción pendiente'}</span>
+              <span>Días en mantenimiento: {bus.dias_en_mantenimiento ?? 'N/A'}</span>
+              {bus.mecanico_asignado && <span>Mecánico: {bus.mecanico_asignado}</span>}
+            </div>
+            {bus.fecha_inicio && (
+              <p className="text-xs text-gray-400 mt-2">
+                Inicio: {formatFecha(bus.fecha_inicio)} {bus.fecha_termino_estimada ? `· Est. fin: ${formatFecha(bus.fecha_termino_estimada)}` : ''}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderModalResumenMantenimientos = () => {
+    const datos = Array.isArray(datosModal.datos) ? datosModal.datos : [];
+    if (datos.length === 0) {
+      return <p className="text-center text-gray-500">No hay mantenimientos registrados.</p>;
+    }
+    return (
+      <div className="space-y-4">
+        {datos.map((bus) => (
+          <div key={bus.bus_id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+              <div>
+                <p className="text-sm text-gray-500 uppercase tracking-wide">{bus.tipo_servicio ?? 'Servicio'}</p>
+                <div className="flex items-baseline gap-2">
+                  <h4 className="text-lg font-semibold text-gray-800">{bus.patente}</h4>
+                  <span className="text-xs text-gray-500">{bus.marca} {bus.modelo}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-500">Total mantenimientos</p>
+                <p className="text-2xl font-bold text-orange-600">{bus.total_mantenimientos}</p>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+              <div className="rounded-lg bg-blue-50 border border-blue-100 p-2">
+                <p className="text-gray-500 text-[11px]">Preventivos</p>
+                <p className="text-sm font-bold text-blue-700">{bus.preventivos}</p>
+              </div>
+              <div className="rounded-lg bg-red-50 border border-red-100 p-2">
+                <p className="text-gray-500 text-[11px]">Correctivos</p>
+                <p className="text-sm font-bold text-red-700">{bus.correctivos}</p>
+              </div>
+              <div className="rounded-lg bg-yellow-50 border border-yellow-100 p-2">
+                <p className="text-gray-500 text-[11px]">En proceso</p>
+                <p className="text-sm font-bold text-yellow-700">{bus.en_proceso}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 border border-gray-100 p-2">
+                <p className="text-gray-500 text-[11px]">Costo total</p>
+                <p className="text-sm font-bold text-gray-800">{formatCurrency(bus.costo_total_mantenimientos)}</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">Estado actual: {bus.estado_bus ?? 'N/A'}</p>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderModalContent = () => {
+    if (datosModal.tipo === 'taller') {
+      return renderModalBusesTaller();
+    }
+    if (datosModal.tipo === 'mantenimientos') {
+      return renderModalResumenMantenimientos();
+    }
+    const datos = Array.isArray(datosModal.datos) && datosModal.datos.length > 0 ? datosModal.datos : null;
+    if (!datos) {
+      return <p className="text-center text-gray-500">No hay datos registrados.</p>;
+    }
+    return (
+      <div className="bg-gray-50 p-4 rounded text-xs font-mono whitespace-pre-wrap overflow-auto max-h-96">
+        {JSON.stringify(datosModal.datos, null, 2)}
+      </div>
+    );
+  };
+
   // --- FILTROS ---
   const busesEmergenciaFiltrados = busesEmergencia.filter(bus => 
     bus.patente?.toLowerCase().includes(busqueda.toLowerCase()) || 
@@ -186,6 +289,14 @@ export default function AnalisisMantenimientosPage() {
   const totalMantenimientos = busesMantenimientos.reduce((sum, bus) => sum + (bus.total_mantenimientos || 0), 0);
   const totalCostos = costosMantenimiento.reduce((sum, bus) => sum + (bus.costo_total_mantenimiento || 0), 0);
   const busesActivables = busesEmergencia.filter(bus => bus.activable_emergencia).length;
+
+  const mostrarDetalleMantenimientos = () => {
+    abrirModalConDatos('Detalle de mantenimientos', busesMantenimientos, 'mantenimientos');
+  };
+
+  const mostrarBusesEnTaller = () => {
+    abrirModalConDatos('Buses en taller', busesEmergencia, 'taller');
+  };
 
   if (loading) return <div className="p-10 text-center text-gray-500 animate-pulse">Cargando datos...</div>;
 
@@ -264,12 +375,26 @@ export default function AnalisisMantenimientosPage() {
       {tabActiva === 'general' && (
         <div className="space-y-6 animate-in fade-in duration-300">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <MetricCard title="Total Mantenimientos" value={totalMantenimientos} icon={Wrench} color="orange" />
-            <MetricCard title="Buses en Taller" value={busesEmergencia.length} icon={AlertTriangle} color="red" />
+            <MetricCard
+              title="Total Mantenimientos"
+              value={totalMantenimientos}
+              icon={Wrench}
+              color="orange"
+              interactive
+              subtitle="Ver detalles"
+              onClick={mostrarDetalleMantenimientos}
+            />
+            <MetricCard
+              title="Buses en Taller"
+              value={busesEmergencia.length}
+              icon={AlertTriangle}
+              color="red"
+              interactive
+              subtitle="Mostrar lista"
+              onClick={mostrarBusesEnTaller}
+            />
             <MetricCard title="Costo Total" value={formatCurrency(totalCostos)} icon={DollarSign} color="blue" />
-            <div onClick={() => setTabActiva('taller')} className="cursor-pointer hover:opacity-90 transition-opacity">
-              <MetricCard title="Activables Emergencia" value={busesActivables} icon={Power} color="green" subtitle="Ver disponibles" />
-            </div>
+            <MetricCard title="Activables Emergencia" value={busesActivables} icon={Power} color="green" subtitle="Ver disponibles" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -318,7 +443,7 @@ export default function AnalisisMantenimientosPage() {
             <div className="flex gap-3 items-center">
               <span className="text-sm text-gray-500">{busesEmergenciaFiltrados.length} vehículos</span>
               {busesEmergenciaFiltrados.length > 5 && (
-                <button onClick={() => abrirModalConDatos('Lista Completa Taller', busesEmergencia)} className="text-blue-600 text-xs font-bold hover:underline bg-blue-50 px-3 py-1 rounded">
+                <button onClick={() => abrirModalConDatos('Lista Completa Taller', busesEmergencia, 'taller')} className="text-blue-600 text-xs font-bold hover:underline bg-blue-50 px-3 py-1 rounded">
                   Ver Todos
                 </button>
               )}
@@ -506,9 +631,7 @@ export default function AnalisisMantenimientosPage() {
               <button onClick={() => setModalAbierto(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={20}/></button>
             </div>
             <div className="p-6 overflow-y-auto">
-              <div className="bg-gray-50 p-4 rounded text-xs font-mono whitespace-pre-wrap overflow-auto max-h-96">
-                {JSON.stringify(datosModal.datos, null, 2)}
-              </div>
+              {renderModalContent()}
             </div>
           </div>
         </div>

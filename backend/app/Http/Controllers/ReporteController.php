@@ -24,15 +24,15 @@ class ReporteController extends Controller
         $fechaInicio = null;
         $fechaFin = null;
 
-        if ($request->has('mes') && $request->has('anio')) {
+        if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
+            $fechaInicio = $request->input('fecha_inicio');
+            $fechaFin = $request->input('fecha_fin');
+        } elseif ($request->has('mes') && $request->has('anio')) {
             $mes = $request->mes;
             $anio = $request->anio;
 
             $fechaInicio = Carbon::createFromDate($anio, $mes, 1)->startOfDay()->format('Y-m-d');
             $fechaFin = Carbon::createFromDate($anio, $mes, 1)->endOfMonth()->endOfDay()->format('Y-m-d');
-        } else {
-            $fechaInicio = $request->input('fecha_inicio');
-            $fechaFin = $request->input('fecha_fin');
         }
 
         return ['fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin];
@@ -476,6 +476,12 @@ class ReporteController extends Controller
      */
     public function rentabilidadPorTipoServicio(Request $request)
     {
+        $analisis = $this->obtenerRentabilidadPorTipoServicio($request);
+        return response()->json($analisis);
+    }
+
+    private function obtenerRentabilidadPorTipoServicio(Request $request)
+    {
         $query = DB::table('viajes')
             ->join('asignaciones_turno', 'viajes.asignacion_turno_id', '=', 'asignaciones_turno.id')
             ->join('buses', 'asignaciones_turno.bus_id', '=', 'buses.id')
@@ -504,7 +510,7 @@ class ReporteController extends Controller
             ->get();
 
         // Calcular margen de ganancia % y formatear
-        $analisis = $resultados->map(function ($item) {
+        return $resultados->map(function ($item) {
             $margen = $item->total_ingresos > 0
                 ? round(($item->ganancia_neta / $item->total_ingresos) * 100, 2)
                 : 0;
@@ -521,8 +527,6 @@ class ReporteController extends Controller
                 'capacidad_promedio' => (float) $item->capacidad_promedio,
             ];
         });
-
-        return response()->json($analisis);
     }
 
     /**
@@ -534,6 +538,12 @@ class ReporteController extends Controller
      * - fecha_fin: filtrar hasta fecha
      */
     public function ocupacionPorTipoServicio(Request $request)
+    {
+        $analisis = $this->obtenerOcupacionPorTipoServicio($request);
+        return response()->json($analisis);
+    }
+
+    private function obtenerOcupacionPorTipoServicio(Request $request)
     {
         $query = DB::table('viajes')
             ->join('asignaciones_turno', 'viajes.asignacion_turno_id', '=', 'asignaciones_turno.id')
@@ -561,7 +571,7 @@ class ReporteController extends Controller
             ->groupBy('buses.tipo_servicio')
             ->get();
 
-        $analisis = $resultados->map(function ($item) {
+        return $resultados->map(function ($item) {
             return [
                 'tipo_servicio' => ucfirst($item->tipo_servicio),
                 'total_viajes' => (int) $item->total_viajes,
@@ -572,8 +582,6 @@ class ReporteController extends Controller
                 'capacidad_promedio' => (float) $item->capacidad_promedio,
             ];
         });
-
-        return response()->json($analisis);
     }
 
     /**
@@ -585,6 +593,12 @@ class ReporteController extends Controller
      * - fecha_fin: filtrar hasta fecha
      */
     public function resumenEjecutivo(Request $request)
+    {
+        $resumen = $this->calcularResumenEjecutivo($request);
+        return response()->json($resumen);
+    }
+
+    private function calcularResumenEjecutivo(Request $request)
     {
         $query = DB::table('viajes')
             ->where('viajes.estado', 'completado');
@@ -644,7 +658,7 @@ class ReporteController extends Controller
         $totalViajesDeficitarios = $viajesDeficitarios->count();
         $perdidaTotalDeficitarios = $viajesDeficitarios->sum(DB::raw('costo_total - dinero_recaudado'));
 
-        $resumen = [
+        return [
             // KPIs principales
             'total_viajes' => (int) $totales->total_viajes,
             'total_pasajeros' => (int) $totales->total_pasajeros,
@@ -662,8 +676,34 @@ class ReporteController extends Controller
             'viajes_deficitarios' => $totalViajesDeficitarios,
             'perdida_total_deficitarios' => (int) $perdidaTotalDeficitarios,
         ];
+    }
 
-        return response()->json($resumen);
+    public function analisisServicioPdf(Request $request)
+    {
+        $fechas = $this->procesarFiltrosFecha($request);
+
+        $rentabilidad = $this->obtenerRentabilidadPorTipoServicio($request)->toArray();
+        $ocupacion = $this->obtenerOcupacionPorTipoServicio($request)->toArray();
+        $resumen = $this->calcularResumenEjecutivo($request);
+
+        $pdf = Pdf::loadView('pdf.analisis_servicio', [
+            'rentabilidad' => $rentabilidad,
+            'ocupacion' => $ocupacion,
+            'resumen' => $resumen,
+            'filtros' => [
+                'mes' => $request->input('mes'),
+                'anio' => $request->input('anio'),
+                'fecha_inicio' => $fechas['fecha_inicio'],
+                'fecha_fin' => $fechas['fecha_fin'],
+            ],
+        ])->setPaper('a4', 'portrait');
+
+        $mes = $request->input('mes', Carbon::now()->month);
+        $anio = $request->input('anio', Carbon::now()->year);
+        $archivo = sprintf('analisis-servicio-%04d-%02d.pdf', $anio, $mes);
+        $this->registrarHistorialReporte($request, 'servicio', $archivo);
+
+        return $pdf->stream('analisis-servicio.pdf');
     }
 
     // ============================================

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Empleado;
 use App\Models\PermisoLicencia;
 use App\Models\ReportHistory;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -57,25 +58,51 @@ class RRHHController extends Controller
         return $notas;
     }
 
+    private function obtenerReferenciaMensual(Request $request): Carbon
+    {
+        $mes = (int) $request->input('mes');
+        $anio = (int) $request->input('anio');
+
+        if ($mes >= 1 && $mes <= 12 && $anio > 0) {
+            try {
+                return Carbon::create($anio, $mes, 1)->startOfMonth();
+            } catch (\Exception $e) {
+                \Log::warning('RRHH: referencia mensual inválida', ['mes' => $mes, 'anio' => $anio]);
+            }
+        }
+
+        return Carbon::now();
+    }
+
+    private function obtenerRangoMensual(Request $request): array
+    {
+        $referencia = $this->obtenerReferenciaMensual($request);
+        return [
+            'inicio' => $referencia->copy()->startOfMonth(),
+            'fin' => $referencia->copy()->endOfMonth(),
+            'referencia' => $referencia,
+        ];
+    }
+
     /**
      * Alertas de contratos próximos a vencer
      * Retorna empleados con contrato "plazo_fijo" que vencen en los próximos 30 días
      */
-    public function alertasContratos()
+    public function alertasContratos(Request $request)
     {
-        $hoy = Carbon::now();
-        $limite = $hoy->copy()->addDays(30);
+        $referencia = $this->obtenerReferenciaMensual($request);
+        $limite = $referencia->copy()->addDays(30);
 
         $empleados = Empleado::with(['user'])
             ->where('tipo_contrato', 'plazo_fijo')
             ->where('estado', 'activo')
             ->whereNotNull('fecha_termino')
-            ->whereBetween('fecha_termino', [$hoy, $limite])
+            ->whereBetween('fecha_termino', [$referencia, $limite])
             ->orderBy('fecha_termino', 'asc')
             ->get();
 
-        $alertas = $empleados->map(function ($empleado) use ($hoy) {
-            $diasRestantes = Carbon::parse($empleado->fecha_termino)->diffInDays($hoy);
+        $alertas = $empleados->map(function ($empleado) use ($referencia) {
+            $diasRestantes = Carbon::parse($empleado->fecha_termino)->diffInDays($referencia);
             $severidad = $diasRestantes <= 7 ? 'critica' : ($diasRestantes <= 15 ? 'alta' : 'media');
 
             return [
@@ -282,10 +309,19 @@ class RRHHController extends Controller
 
         return $pdf->stream('ranking-licencias.pdf');
     }
-    public function resumenContratos()
+    public function resumenContratos(Request $request)
     {
+        $rango = $this->obtenerRangoMensual($request);
+        $inicioMes = $rango['inicio'];
+        $finMes = $rango['fin'];
+
         $resumen = Empleado::select('tipo_contrato', DB::raw('COUNT(*) as total'))
             ->where('estado', '!=', 'terminado')
+            ->where('fecha_contratacion', '<=', $finMes)
+            ->where(function ($query) use ($inicioMes) {
+                $query->whereNull('fecha_termino')
+                      ->orWhere('fecha_termino', '>=', $inicioMes);
+            })
             ->groupBy('tipo_contrato')
             ->get();
 
@@ -310,6 +346,13 @@ class RRHHController extends Controller
             ->whereBetween('fecha_termino', [$hoy, $limite])
             ->count();
 
+        $limiteVencimiento = $inicioMes->copy()->addDays(30);
+        $vencenProximo = Empleado::where('tipo_contrato', 'plazo_fijo')
+            ->where('estado', 'activo')
+            ->whereNotNull('fecha_termino')
+            ->whereBetween('fecha_termino', [$inicioMes, $limiteVencimiento])
+            ->count();
+
         $estadisticas['vencen_proximo_mes'] = $vencenProximo;
 
         return response()->json([
@@ -322,10 +365,10 @@ class RRHHController extends Controller
      * Empleados con alto riesgo de no renovación
      * Cruza datos de contratos próximos a vencer + muchas licencias
      */
-    public function empleadosAltoRiesgo()
+    public function empleadosAltoRiesgo(Request $request)
     {
-        $hoy = Carbon::now();
-        $limite = $hoy->copy()->addDays(60); // 60 días de anticipación
+        $referencia = $this->obtenerReferenciaMensual($request);
+        $limite = $referencia->copy()->addDays(60); // 60 días de anticipación
 
         $empleados = DB::table('empleados')
             ->join('users', 'empleados.user_id', '=', 'users.id')
@@ -349,7 +392,7 @@ class RRHHController extends Controller
             ->where('empleados.tipo_contrato', 'plazo_fijo')
             ->where('empleados.estado', 'activo')
             ->whereNotNull('empleados.fecha_termino')
-            ->whereBetween('empleados.fecha_termino', [$hoy, $limite])
+            ->whereBetween('empleados.fecha_termino', [$referencia, $limite])
             ->groupBy(
                 'empleados.id',
                 'empleados.numero_empleado',
@@ -365,8 +408,8 @@ class RRHHController extends Controller
             ->orderBy('empleados.fecha_termino', 'asc')
             ->get();
 
-        $resultado = $empleados->map(function ($item) use ($hoy) {
-            $diasRestantes = Carbon::parse($item->fecha_termino)->diffInDays($hoy);
+        $resultado = $empleados->map(function ($item) use ($referencia) {
+            $diasRestantes = Carbon::parse($item->fecha_termino)->diffInDays($referencia);
 
             return [
                 'id' => $item->id,
@@ -387,6 +430,40 @@ class RRHHController extends Controller
             'success' => true,
             'data' => $resultado,
             'total' => $resultado->count(),
+        ]);
+    }
+
+    public function empleadosPorContrato(Request $request)
+    {
+        $tipo = $request->input('tipo');
+
+        $query = Empleado::with('user')
+            ->where('estado', 'activo');
+
+        if ($tipo && $tipo !== 'activo') {
+            $query->where('tipo_contrato', $tipo);
+        }
+
+        $empleados = $query
+            ->orderBy('tipo_contrato')
+            ->orderBy('numero_empleado')
+            ->get();
+
+        $data = $empleados->map(function ($empleado) {
+            return [
+                'id' => $empleado->id,
+                'nombre_completo' => trim(($empleado->user->nombre ?? '') . ' ' . ($empleado->user->apellido ?? '')),
+                'numero_empleado' => $empleado->numero_empleado,
+                'ciudad' => $empleado->ciudad,
+                'tipo_contrato' => $empleado->tipo_contrato,
+                'fecha_termino' => $empleado->fecha_termino,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'tipo' => $tipo ?? 'activo',
+            'data' => $data,
         ]);
     }
 
