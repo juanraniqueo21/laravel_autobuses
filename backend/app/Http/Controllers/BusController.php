@@ -110,7 +110,7 @@ class BusController extends Controller
                 'tipo_combustible' => ['required', Rule::in(['diesel', 'gasolina', 'gas', 'eléctrico', 'híbrido'])],
                 'anio' => 'required|integer|min:1980|max:' . (date('Y') + 1),
                 'capacidad_pasajeros' => 'required|integer|min:1|max:100',
-                'estado' => ['required', Rule::in(['operativo', 'mantenimiento', 'desmantelado'])],
+                'estado' => ['required', Rule::in(['operativo', 'mantenimiento', 'desmantelado', 'inactivo'])],
 
                 // Nuevos campos obligatorios
                 'tipo_bus' => ['required', Rule::in(['simple', 'doble_piso'])],
@@ -307,7 +307,7 @@ class BusController extends Controller
                 'tipo_combustible' => ['sometimes', 'required', Rule::in(['diesel', 'gasolina', 'gas', 'eléctrico', 'híbrido'])],
                 'anio' => 'sometimes|required|integer|min:1980|max:' . (date('Y') + 1),
                 'capacidad_pasajeros' => 'sometimes|required|integer|min:1|max:100',
-                'estado' => ['sometimes', 'required', Rule::in(['operativo', 'mantenimiento', 'desmantelado'])],
+                'estado' => ['sometimes', 'required', Rule::in(['operativo', 'mantenimiento', 'desmantelado', 'inactivo'])],
                 'tipo_bus' => ['sometimes', 'required', Rule::in(['simple', 'doble_piso'])],
                 'cantidad_ejes' => ['sometimes', 'required', Rule::in(['2', '3', '4'])],
                 'patente_verificador' => 'nullable|string|max:1',

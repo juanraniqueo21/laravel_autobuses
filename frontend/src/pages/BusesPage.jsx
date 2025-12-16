@@ -13,7 +13,7 @@ import usePagination from '../hooks/usePagination';
 import Pagination from '../components/common/Pagination';
 import { useNotifications } from '../context/NotificationContext';
 
-const ESTADOS_BUS = ['operativo', 'mantenimiento', 'desmantelado'];
+const ESTADOS_BUS = ['operativo', 'mantenimiento', 'inactivo', 'desmantelado'];
 const TIPOS_COMBUSTIBLE = ['diesel', 'gasolina', 'gas', 'eléctrico', 'híbrido'];
 const TIPOS_COBERTURA = ['ninguna', 'terceros', 'full'];
 

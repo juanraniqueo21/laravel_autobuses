@@ -22,6 +22,7 @@ export default function DashboardPage({ onNavigate }) {
     busesTotal: 0,
     busesOperativos: 0,
     busesMantenimiento: 0,
+    busesInactivos: 0,
     rutasActivas: 0,
     viajesHoy: 0,
     viajesCompletadosHoy: 0,
@@ -87,6 +88,7 @@ export default function DashboardPage({ onNavigate }) {
       // 1. PROCESAMIENTO FLOTA
       const operativos = buses.filter(b => b.estado === 'operativo' || b.estado === 'activo').length;
       const listaMantenimiento = buses.filter(b => b.estado === 'mantenimiento');
+      const listaInactivos = buses.filter(b => b.estado === 'inactivo');
       setBusesEnTaller(listaMantenimiento);
 
       // 2. PROCESAMIENTO VIAJES
@@ -267,12 +269,13 @@ export default function DashboardPage({ onNavigate }) {
       setStats({
         busesTotal: buses.length,
         busesOperativos: operativos,
-        busesMantenimiento: listaMantenimiento.length, 
+        busesMantenimiento: listaMantenimiento.length,
+        busesInactivos: listaInactivos.length,
         rutasActivas: rutas.filter(r => r.estado === 'activa').length,
         viajesHoy: totalViajes,
         viajesCompletadosHoy: completados,
         reportesPendientes,
-        personalEnLicencia: licenciasEnriquecidas.length, 
+        personalEnLicencia: licenciasEnriquecidas.length,
         mantenimientosActivos: mantActivos
       });
       
@@ -407,14 +410,21 @@ export default function DashboardPage({ onNavigate }) {
               <Bus size={28} />
             </div>
           </div>
-          <div 
-            onClick={(e) => {
-              e.stopPropagation();
-              if(stats.busesMantenimiento > 0) setShowModalMantenimiento(true);
-            }}
-            className="mt-6 flex items-center gap-2 text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg w-fit border border-amber-100 cursor-pointer hover:bg-amber-100 transition-colors z-20 relative"
-          >
-            <Wrench size={14} /> {stats.busesMantenimiento} en mantenimiento
+          <div className="mt-6 flex items-center gap-2 flex-wrap">
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                if(stats.busesMantenimiento > 0) setShowModalMantenimiento(true);
+              }}
+              className="flex items-center gap-2 text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 cursor-pointer hover:bg-amber-100 transition-colors z-20 relative"
+            >
+              <Wrench size={14} /> {stats.busesMantenimiento} en mantenimiento
+            </div>
+            {stats.busesInactivos > 0 && (
+              <div className="flex items-center gap-2 text-xs font-bold text-red-700 bg-red-50 px-3 py-1.5 rounded-lg border border-red-100">
+                <AlertCircle size={14} /> {stats.busesInactivos} inactivos
+              </div>
+            )}
           </div>
         </div>
 
