@@ -1330,7 +1330,7 @@ class ReporteController extends Controller
         // Obtener todos los buses activos
         $buses = DB::table('buses')
             ->select('id', 'patente', 'marca', 'modelo', 'kilometraje_actual', 'kilometraje_ultimo_cambio_aceite', 'fecha_ultima_revision_tecnica')
-            ->where('estado', '!=', 'dado_de_baja')
+            ->where('estado', '!=', 'desmantelado')
             ->get();
 
         foreach ($buses as $bus) {
