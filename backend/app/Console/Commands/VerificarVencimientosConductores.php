@@ -40,7 +40,8 @@ class VerificarVencimientosConductores extends Command
         // ============================================
         $this->info('👨‍✈️ Verificando licencias de conducir vencidas...');
 
-        $conductoresConLicenciaVencidaQuery = Conductor::whereIn('estado', ['activo', 'baja_medica', 'suspendido'])
+        $conductoresConLicenciaVencidaQuery = Conductor::with('empleado.user')
+            ->whereIn('estado', ['activo', 'baja_medica', 'suspendido'])
             ->conLicenciaVencida()
             ->get();
 
@@ -63,7 +64,8 @@ class VerificarVencimientosConductores extends Command
         $this->info('⚠️  Alertas de vencimientos próximos (30 días)...');
 
         // Licencias próximas a vencer
-        $conductoresConLicenciaProxima = Conductor::whereIn('estado', ['activo', 'baja_medica', 'suspendido'])
+        $conductoresConLicenciaProxima = Conductor::with('empleado.user')
+            ->whereIn('estado', ['activo', 'baja_medica', 'suspendido'])
             ->whereDate('fecha_vencimiento_licencia', '>=', Carbon::now())
             ->whereDate('fecha_vencimiento_licencia', '<=', Carbon::now()->addDays(30))
             ->get();
