@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Wrench, AlertTriangle, DollarSign, Calendar, Power, 
+import {
+  Wrench, AlertTriangle, DollarSign, Calendar, Power,
   BarChart3, Search, X, RefreshCw, FileText, ArrowRight,
-  Filter, ChevronDown, PieChart as PieChartIcon 
+  Filter, ChevronDown, PieChart as PieChartIcon, TrendingUp, Users, MapPin
 } from 'lucide-react';
 import {
   fetchBusesConMasMantenimientos,
@@ -15,7 +15,10 @@ import {
   fetchBusesSOAPPorVencer,
   fetchBusesPermisoCirculacionPorVencer,
   activarBusEmergencia,
-  fetchHistorialReportes
+  fetchHistorialReportes,
+  fetchRutasCriticasPorFallas,
+  fetchBusesConFallasPorConductor,
+  fetchConductoresConIncidentes
 } from '../services/api';
 import { 
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, 
@@ -59,6 +62,11 @@ export default function AnalisisMantenimientosPage() {
   const [loading, setLoading] = useState(true);
   const [historialReportes, setHistorialReportes] = useState([]);
   const [mostrarHistorial, setMostrarHistorial] = useState(false);
+
+  // --- NUEVOS ESTADOS PARA ANÁLISIS AVANZADO ---
+  const [rutasCriticas, setRutasCriticas] = useState([]);
+  const [busesFallasConductor, setBusesFallasConductor] = useState([]);
+  const [conductoresIncidentes, setConductoresIncidentes] = useState({ data: [], estadisticas: {} });
   
   // Filtros
   const [mes, setMes] = useState(new Date().getMonth() + 1);
@@ -98,14 +106,28 @@ export default function AnalisisMantenimientosPage() {
       const params = getFiltroParams();
       const historialPromise = fetchHistorialReportes({ tipo: 'mantenimientos', mes, anio });
 
-      const [busesData, fallasData, costosData, emergenciaData, alertas, tops, historial] = await Promise.all([
+      const [
+        busesData,
+        fallasData,
+        costosData,
+        emergenciaData,
+        alertas,
+        tops,
+        historial,
+        rutasCrit,
+        busesFallas,
+        conductoresInc
+      ] = await Promise.all([
         fetchBusesConMasMantenimientos(params),
         fetchTiposFallasMasComunes(params),
         fetchCostosMantenimientoPorBus(params),
         fetchBusesDisponiblesEmergencia(params),
         fetchMantenimientoAlertas(params),
         fetchMantenimientoTops(params),
-        historialPromise
+        historialPromise,
+        fetchRutasCriticasPorFallas({ ...params, limit: 10 }),
+        fetchBusesConFallasPorConductor({ ...params, limit: 15 }),
+        fetchConductoresConIncidentes({ ...params, limit: 20 })
       ]);
 
       setBusesMantenimientos(busesData || []);
@@ -114,6 +136,12 @@ export default function AnalisisMantenimientosPage() {
       setBusesEmergencia(emergenciaData || []);
       setAlertasData(alertas || { alertas: [], por_tipo: {} });
       setTopsData(tops || { top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] });
+      setRutasCriticas(rutasCrit?.data || []);
+      setBusesFallasConductor(busesFallas?.data || []);
+      setConductoresIncidentes({
+        data: conductoresInc?.data || [],
+        estadisticas: conductoresInc?.estadisticas || {}
+      });
       setHistorialReportes((historial?.data) || []);
 
       try {
@@ -466,6 +494,7 @@ export default function AnalisisMantenimientosPage() {
           { id: 'general', label: 'Resumen General', icon: BarChart3 },
           { id: 'taller', label: 'Flota en Taller', icon: Power },
           { id: 'costos', label: 'Costos y Fallas', icon: DollarSign },
+          { id: 'avanzado', label: 'Análisis Avanzado', icon: TrendingUp },
         ].map(tab => (
           <button
             key={tab.id}
@@ -650,6 +679,183 @@ export default function AnalisisMantenimientosPage() {
                   <button onClick={() => abrirModalConDatos('Costos por Bus', costosMantenimiento, 'costos')} className="text-sm font-medium text-orange-600 hover:text-orange-800">Ver todas</button>
                </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {tabActiva === 'avanzado' && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {/* RUTAS CRÍTICAS CON FALLAS */}
+          <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-red-50 to-orange-50">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                <MapPin size={20} className="text-red-600" />
+                Rutas Críticas - Buses con Más Fallas
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">Identifica qué rutas operan con buses problemáticos</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase">Ruta</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase">Viajes</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase">Buses</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase">Fallas</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase">Promedio</th>
+                    <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700 uppercase">Costo Total</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {rutasCriticas.length === 0 ? (
+                    <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-500">No hay datos disponibles</td></tr>
+                  ) : (
+                    rutasCriticas.map((ruta, i) => (
+                      <tr key={i} className="hover:bg-red-50/30 transition-colors">
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-bold text-gray-900">{ruta.ruta_codigo}</p>
+                          <p className="text-xs text-gray-600">{ruta.origen} → {ruta.destino}</p>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-bold">{ruta.total_viajes}</span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-bold">{ruta.buses_diferentes}</span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-bold">{ruta.total_fallas}</span>
+                        </td>
+                        <td className="px-6 py-4 text-center text-sm font-medium text-orange-700">{ruta.promedio_fallas_por_viaje}</td>
+                        <td className="px-6 py-4 text-right text-sm font-bold text-red-600">{formatCurrency(ruta.costo_total_fallas)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* BUSES CON FALLAS POR CONDUCTOR */}
+          <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-yellow-50">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                <Wrench size={20} className="text-orange-600" />
+                Buses Problemáticos y Sus Conductores
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">Relaciona buses con fallas y quiénes los operaron</p>
+            </div>
+            <div className="p-6 space-y-4">
+              {busesFallasConductor.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">No hay datos disponibles</p>
+              ) : (
+                busesFallasConductor.map((bus, i) => (
+                  <div key={i} className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-gray-900">{bus.patente} <span className="text-gray-500 font-normal text-sm">({bus.marca} {bus.modelo})</span></h4>
+                        <p className="text-xs text-gray-600 mt-1">
+                          <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded font-semibold">{bus.total_fallas} fallas</span>
+                          <span className="mx-2">·</span>
+                          <span className="font-medium">{formatCurrency(bus.costo_total)}</span>
+                        </p>
+                      </div>
+                    </div>
+                    {bus.conductores && bus.conductores.length > 0 ? (
+                      <div className="bg-white p-4">
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Conductores que operaron este bus:</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {bus.conductores.map((cond, j) => (
+                            <div key={j} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded border border-gray-200">
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{cond.nombre_conductor}</p>
+                                <p className="text-xs text-gray-500">Lic: {cond.numero_licencia}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs font-bold text-blue-700">{cond.turnos_asignados}</p>
+                                <p className="text-xs text-gray-500">turnos</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center text-sm text-gray-500">Sin conductores registrados</div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* CONDUCTORES CON MÁS INCIDENTES */}
+          <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                    <Users size={20} className="text-purple-600" />
+                    Conductores con Más Incidentes
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">Detecta conductores asociados a más fallas (en los 7 días después de sus turnos)</p>
+                </div>
+                {conductoresIncidentes.estadisticas && (
+                  <div className="bg-white px-4 py-2 rounded-lg border border-gray-200 text-center">
+                    <p className="text-xs text-gray-500 uppercase font-semibold">Tasa de Incidencia</p>
+                    <p className="text-2xl font-bold text-purple-700">{conductoresIncidentes.estadisticas.tasa_incidencia}%</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 uppercase">Conductor</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase">Experiencia</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase">Turnos</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase">Fallas</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase">% Turnos con Fallas</th>
+                    <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 uppercase">Infracciones</th>
+                    <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700 uppercase">Costo Fallas</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {conductoresIncidentes.data.length === 0 ? (
+                    <tr><td colSpan="7" className="px-6 py-8 text-center text-gray-500">No hay datos disponibles</td></tr>
+                  ) : (
+                    conductoresIncidentes.data.map((conductor, i) => {
+                      const porcentaje = parseFloat(conductor.porcentaje_turnos_con_fallas || 0);
+                      const alertColor = porcentaje > 15 ? 'red' : porcentaje > 10 ? 'orange' : 'yellow';
+
+                      return (
+                        <tr key={i} className={`hover:bg-${alertColor}-50/20 transition-colors`}>
+                          <td className="px-6 py-4">
+                            <p className="text-sm font-bold text-gray-900">{conductor.nombre_conductor}</p>
+                            <p className="text-xs text-gray-500">Lic: {conductor.numero_licencia}</p>
+                          </td>
+                          <td className="px-6 py-4 text-center text-sm text-gray-700">{conductor.anios_experiencia} años</td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-bold">{conductor.total_turnos}</span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`bg-${alertColor}-100 text-${alertColor}-800 px-3 py-1 rounded-full text-sm font-bold`}>{conductor.fallas_asociadas}</span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`bg-${alertColor}-100 text-${alertColor}-800 px-3 py-1 rounded-full text-sm font-bold`}>
+                              {porcentaje.toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">{conductor.cantidad_infracciones}</span>
+                          </td>
+                          <td className="px-6 py-4 text-right text-sm font-bold text-red-600">{formatCurrency(conductor.costo_total_fallas)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
