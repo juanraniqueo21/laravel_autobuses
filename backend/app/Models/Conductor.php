@@ -59,4 +59,63 @@ class Conductor extends Model
     {
         return $this->hasMany(Viaje::class);
     }
+
+    // ============================================
+    // MÉTODOS DE ESTADO
+    // ============================================
+
+    /**
+     * Verifica si el conductor está inactivo
+     */
+    public function estaInactivo(): bool
+    {
+        return $this->estado === 'inactivo';
+    }
+
+    // ============================================
+    // SCOPES
+    // ============================================
+
+    /**
+     * Scope para obtener conductores inactivos
+     */
+    public function scopeInactivos($query)
+    {
+        return $query->where('estado', 'inactivo');
+    }
+
+    /**
+     * Scope para obtener conductores con licencia vencida
+     */
+    public function scopeConLicenciaVencida($query)
+    {
+        return $query->whereNotNull('fecha_vencimiento_licencia')
+                     ->whereDate('fecha_vencimiento_licencia', '<', now());
+    }
+
+    // ============================================
+    // ACCESSORS
+    // ============================================
+
+    /**
+     * Verifica si la licencia está vencida
+     */
+    public function getLicenciaVencidaAttribute(): bool
+    {
+        if (!$this->fecha_vencimiento_licencia) {
+            return false;
+        }
+        return $this->fecha_vencimiento_licencia->isPast();
+    }
+
+    /**
+     * Obtiene los días hasta el vencimiento de la licencia
+     */
+    public function getDiasHastaVencimientoLicenciaAttribute(): ?int
+    {
+        if (!$this->fecha_vencimiento_licencia) {
+            return null;
+        }
+        return now()->diffInDays($this->fecha_vencimiento_licencia, false);
+    }
 }

@@ -21,6 +21,11 @@ class Kernel extends ConsoleKernel
         $schedule->command('buses:verificar-vencimientos')
                  ->dailyAt('00:05')
                  ->appendOutputTo(storage_path('logs/buses_vencimientos.log'));
+
+        // Verificar vencimientos de licencias de conductores todos los días a las 00:10
+        $schedule->command('conductores:verificar-vencimientos')
+                 ->dailyAt('00:10')
+                 ->appendOutputTo(storage_path('logs/conductores_vencimientos.log'));
     }
 
     /**

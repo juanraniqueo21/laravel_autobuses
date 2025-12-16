@@ -13,7 +13,7 @@ import Pagination from '../components/common/Pagination'; // Asegúrate de impor
 import { useNotifications } from '../context/NotificationContext';
 
 const CLASES_LICENCIA = ['A', 'A2', 'A3', 'B', 'C', 'D', 'E'];
-const ESTADOS = ['activo', 'licencia_medica', 'suspendido', 'inactivo'];
+const ESTADOS = ['activo', 'baja_medica', 'suspendido', 'inactivo'];
 
 // ==========================================
 // UTILIDADES DE FECHAS Y SEMÁFORO
