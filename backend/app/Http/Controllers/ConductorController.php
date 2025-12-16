@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Conductor;
 use App\Models\Empleado;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 
 class ConductorController extends Controller
 {
@@ -120,6 +121,15 @@ class ConductorController extends Controller
 
         // Crear nuevo conductor
         try {
+            // Verificar si la licencia está vencida y ajustar el estado automáticamente
+            $estadoInicial = $validated['estado'] ?? 'activo';
+            if (isset($validated['fecha_vencimiento_licencia'])) {
+                $fechaVencimiento = \Carbon\Carbon::parse($validated['fecha_vencimiento_licencia']);
+                if ($fechaVencimiento->isPast() && in_array($estadoInicial, ['activo', 'baja_medica'])) {
+                    $estadoInicial = 'suspendido';
+                }
+            }
+
             $conductor = Conductor::create([
                 'empleado_id' => $validated['empleado_id'],
                 'numero_licencia' => $validated['numero_licencia'],
@@ -127,7 +137,7 @@ class ConductorController extends Controller
                 'fecha_primera_licencia' => $validated['fecha_primera_licencia'],
                 'fecha_vencimiento_licencia' => $validated['fecha_vencimiento_licencia'],
                 'estado_licencia' => $validated['estado_licencia'],
-                'estado' => $validated['estado'] ?? 'activo',
+                'estado' => $estadoInicial,
                 'anios_experiencia' => $validated['anios_experiencia'] ?? 0,
                 'observaciones_licencia' => $validated['observaciones_licencia'] ?? null,
                 'cantidad_infracciones' => $validated['cantidad_infracciones'] ?? 0,
@@ -193,6 +203,16 @@ class ConductorController extends Controller
 
         try {
             $conductor->update($validated);
+
+            // Verificar si la licencia está vencida después de actualizar
+            $conductor->refresh();
+            if ($conductor->fecha_vencimiento_licencia) {
+                $fechaVencimiento = \Carbon\Carbon::parse($conductor->fecha_vencimiento_licencia);
+                if ($fechaVencimiento->isPast() && in_array($conductor->estado, ['activo', 'baja_medica'])) {
+                    $conductor->update(['estado' => 'suspendido']);
+                }
+            }
+
             $conductor->load('empleado.user');
 
             return response()->json([
