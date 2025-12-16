@@ -950,6 +950,170 @@ class ReporteController extends Controller
     }
 
     /**
+     * Distribución de costos por tipo de mantenimiento
+     *
+     * Retorna total, promedio y cantidad para preventivos/correctivos
+     */
+    public function costosPorTipoMantenimiento(Request $request)
+    {
+        $fechas = $this->procesarFiltrosFecha($request);
+
+        $query = DB::table('mantenimientos')
+            ->whereNotNull('tipo_mantenimiento')
+            ->whereNotNull('costo_total');
+
+        if ($fechas['fecha_inicio'] && $fechas['fecha_fin']) {
+            $query->whereBetween('fecha_inicio', [$fechas['fecha_inicio'], $fechas['fecha_fin']]);
+        }
+
+        $resultados = $query
+            ->select(
+                'tipo_mantenimiento',
+                DB::raw('COUNT(*) as cantidad'),
+                DB::raw('SUM(costo_total) as total_costos'),
+                DB::raw('ROUND(AVG(costo_total), 0) as promedio_costos')
+            )
+            ->groupBy('tipo_mantenimiento')
+            ->orderBy('tipo_mantenimiento')
+            ->get();
+
+        return response()->json($resultados);
+    }
+
+    /**
+     * Tendencia mensual de mantenimientos y costos acumulados
+     */
+    public function tendenciaMensualMantenimientos(Request $request)
+    {
+        $fechas = $this->procesarFiltrosFecha($request);
+        $fechaInicio = $fechas['fecha_inicio'];
+        $fechaFin = $fechas['fecha_fin'];
+
+        if (!$fechaInicio || !$fechaFin) {
+            $fechaFin = Carbon::now()->endOfDay();
+            $fechaInicio = Carbon::now()->subMonths(5)->startOfMonth();
+        } else {
+            $fechaInicio = Carbon::parse($fechaInicio)->startOfDay();
+            $fechaFin = Carbon::parse($fechaFin)->endOfDay();
+        }
+
+        $resultados = DB::table('mantenimientos')
+            ->whereNotNull('fecha_inicio')
+            ->whereBetween('fecha_inicio', [$fechaInicio, $fechaFin])
+            ->select(
+                DB::raw("DATE_TRUNC('month', fecha_inicio) as mes"),
+                DB::raw('COUNT(*) as total_mantenimientos'),
+                DB::raw('SUM(costo_total) as costo_total')
+            )
+            ->groupBy('mes')
+            ->orderBy('mes')
+            ->get();
+
+        $datos = $resultados->map(function ($item) {
+            return [
+                'mes' => Carbon::parse($item->mes)->format('Y-m'),
+                'nombre' => Carbon::parse($item->mes)->locale('es')->isoFormat('MMM YYYY'),
+                'total_mantenimientos' => (int) $item->total_mantenimientos,
+                'costo_total' => (int) $item->costo_total,
+            ];
+        });
+
+        return response()->json($datos);
+    }
+
+    /**
+     * Rutas con más fallas detectadas (viajes con alerta)
+     */
+    public function rutasConMasFallas(Request $request)
+    {
+        $fechas = $this->procesarFiltrosFecha($request);
+        $limit = (int) $request->input('limit', 5);
+        $query = DB::table('viajes')
+            ->join('rutas', 'viajes.ruta_id', '=', 'rutas.id')
+            ->where(function ($sub) {
+                $sub->where('viajes.requiere_revision', true)
+                    ->orWhere('viajes.diferencia_porcentaje', '>=', 2)
+                    ->orWhereRaw('(viajes.costo_total - viajes.dinero_recaudado) > 0');
+            });
+
+        if ($fechas['fecha_inicio'] && $fechas['fecha_fin']) {
+            $query->whereBetween('viajes.fecha_hora_salida', [$fechas['fecha_inicio'], $fechas['fecha_fin']]);
+        }
+
+        $query->select(
+            'rutas.id',
+            'rutas.nombre',
+            'rutas.origen',
+            'rutas.destino',
+            DB::raw('COUNT(viajes.id) as total_fallas'),
+            DB::raw('COALESCE(SUM(viajes.costo_total - viajes.dinero_recaudado), 0) as perdida_total')
+        )
+        ->groupBy('rutas.id', 'rutas.nombre', 'rutas.origen', 'rutas.destino')
+        ->orderByDesc('total_fallas');
+
+        if ($limit > 0) {
+            $query->limit($limit);
+        }
+
+        $resultados = $query->get();
+
+        $datos = $resultados->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'nombre' => $item->nombre,
+                'ruta' => "{$item->origen} - {$item->destino}",
+                'total_fallas' => (int) $item->total_fallas,
+                'perdida_total' => (int) $item->perdida_total,
+            ];
+        });
+
+        return response()->json($datos);
+    }
+
+    /**
+     * Pareto de modelos con más fallas (mantenimientos)
+     */
+    public function paretoModelosFallas(Request $request)
+    {
+        $fechas = $this->procesarFiltrosFecha($request);
+
+        $query = DB::table('mantenimientos')
+            ->join('buses', 'mantenimientos.bus_id', '=', 'buses.id')
+            ->whereNotNull('buses.modelo')
+            ->whereNotNull('mantenimientos.costo_total');
+
+        if ($fechas['fecha_inicio'] && $fechas['fecha_fin']) {
+            $query->whereBetween('mantenimientos.fecha_inicio', [$fechas['fecha_inicio'], $fechas['fecha_fin']]);
+        }
+
+        $resultados = $query
+            ->select(
+                'buses.modelo as modelo',
+                DB::raw('COUNT(mantenimientos.id) as total_fallas'),
+                DB::raw('SUM(mantenimientos.costo_total) as total_costos')
+            )
+            ->groupBy('buses.modelo')
+            ->orderByDesc('total_fallas')
+            ->limit(12)
+            ->get();
+
+        $totalFallas = $resultados->sum('total_fallas') ?: 1;
+        $cumulative = 0;
+
+        $datos = $resultados->map(function ($item) use (&$cumulative, $totalFallas) {
+            $cumulative += $item->total_fallas;
+            return [
+                'modelo' => $item->modelo,
+                'total_fallas' => (int) $item->total_fallas,
+                'total_costos' => (int) $item->total_costos,
+                'porcentaje_acumulado' => round(($cumulative / $totalFallas) * 100, 2),
+            ];
+        });
+
+        return response()->json($datos);
+    }
+
+    /**
      * Buses disponibles para activación de emergencia
      * Buses en mantenimiento que podrían activarse en caso de urgencia
      * Se consideran activables los mantenimientos preventivos o correctivos menores

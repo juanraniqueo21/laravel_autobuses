@@ -248,6 +248,14 @@ const Sidebar = ({ current, onSelect, isOpen, onClose, user }) => {
         <span className="font-medium truncate">Liquidaciones</span>
       </button>
 
+      <button
+        onClick={() => handleSelect('analisis-rrhh')}
+        className={getButtonClasses('analisis-rrhh')}
+      >
+        <Users size={20} className={getIconClasses('analisis-rrhh')} />
+        <span className="font-medium truncate">Análisis RRHH</span>
+      </button>
+
       {/* Recursos Humanos */}
       <p className="px-4 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 mt-6">
         Recursos Humanos

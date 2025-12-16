@@ -38,6 +38,7 @@ class BusController extends Controller
                 $busData = $bus->toArray();
                 $busData['nombre_tipo_servicio'] = $bus->nombre_tipo_servicio;
                 $busData['es_servicio_premium'] = $bus->esServicioPremium();
+                $busData['estado'] = $this->calcularEstadoVisible($bus);
                 return $busData;
             });
 
@@ -150,6 +151,7 @@ class BusController extends Controller
                 
                 // SOAP (obligatorio)
                 'numero_soap' => 'required|string|max:50',
+                'emision_soap' => 'nullable|date|before_or_equal:today',
                 'vencimiento_soap' => 'required|date|after_or_equal:today',
                 
                 // Seguro adicional (opcional)
@@ -159,6 +161,8 @@ class BusController extends Controller
                 'vencimiento_poliza' => 'nullable|date|after_or_equal:today',
                 
                 'numero_permiso_circulacion' => 'nullable|string|max:50',
+                'emision_permiso_circulacion' => 'nullable|date|before_or_equal:today',
+                'vencimiento_permiso_circulacion' => 'nullable|date|after_or_equal:today',
                 'observaciones' => 'nullable|string|max:1000',
             ], [
                 // Mensajes personalizados
@@ -189,6 +193,7 @@ class BusController extends Controller
                 'vencimiento_soap.after_or_equal' => 'El SOAP no puede estar vencido',
                 'tipo_cobertura_adicional.in' => 'Tipo de cobertura inválido',
                 'vencimiento_poliza.after_or_equal' => 'La póliza no puede estar vencida',
+                'vencimiento_permiso_circulacion.after_or_equal' => 'El permiso de circulación no puede estar vencido',
                 'ubicacion_motor.in' => 'Ubicación del motor inválida',
             ]);
 
@@ -245,12 +250,15 @@ class BusController extends Controller
                 'ultima_revision_tecnica' => $request->ultima_revision_tecnica,
                 'documento_revision_tecnica' => $request->documento_revision_tecnica,
                 'numero_soap' => $request->numero_soap,
+                'emision_soap' => $request->emision_soap,
                 'vencimiento_soap' => $request->vencimiento_soap,
                 'compania_seguro' => $request->compania_seguro,
                 'numero_poliza' => $request->numero_poliza,
                 'tipo_cobertura_adicional' => $request->tipo_cobertura_adicional ?? 'ninguna',
                 'vencimiento_poliza' => $request->vencimiento_poliza,
                 'numero_permiso_circulacion' => $request->numero_permiso_circulacion,
+                'emision_permiso_circulacion' => $request->emision_permiso_circulacion,
+                'vencimiento_permiso_circulacion' => $request->vencimiento_permiso_circulacion,
                 'observaciones' => $request->observaciones,
                 'kilometraje_original' => $request->kilometraje_original ?? 0,
             ]);
@@ -328,12 +336,15 @@ class BusController extends Controller
                 'proxima_revision_tecnica' => 'nullable|date',
                 'documento_revision_tecnica' => 'nullable|string|max:255',
                 'numero_soap' => 'sometimes|required|string|max:50',
+                'emision_soap' => 'nullable|date|before_or_equal:today',
                 'vencimiento_soap' => 'sometimes|required|date',
                 'compania_seguro' => 'nullable|string|max:100',
                 'numero_poliza' => 'nullable|string|max:50',
                 'tipo_cobertura_adicional' => ['nullable', Rule::in(['ninguna', 'terceros', 'full'])],
                 'vencimiento_poliza' => 'nullable|date',
                 'numero_permiso_circulacion' => 'nullable|string|max:50',
+                'emision_permiso_circulacion' => 'nullable|date|before_or_equal:today',
+                'vencimiento_permiso_circulacion' => 'nullable|date',
                 'observaciones' => 'nullable|string|max:1000',
             ]);
 
@@ -354,9 +365,9 @@ class BusController extends Controller
                 'marca_chasis', 'modelo_chasis', 'marca_carroceria', 'modelo_carroceria',
                 'proximo_mantenimiento_km', 'fecha_ultimo_mantenimiento', 'fecha_proximo_mantenimiento',
                 'proxima_revision_tecnica', 'ultima_revision_tecnica', 'documento_revision_tecnica',
-                'numero_soap', 'vencimiento_soap', 'compania_seguro', 'numero_poliza',
+                'numero_soap', 'emision_soap', 'vencimiento_soap', 'compania_seguro', 'numero_poliza',
                 'tipo_cobertura_adicional', 'vencimiento_poliza', 'numero_permiso_circulacion',
-                'observaciones', 'kilometraje_original'
+                'emision_permiso_circulacion', 'vencimiento_permiso_circulacion', 'observaciones', 'kilometraje_original'
             ]));
 
             return response()->json([
@@ -554,5 +565,14 @@ class BusController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    private function calcularEstadoVisible(Bus $bus): string
+    {
+        $permisoVencido = $bus->vencimiento_permiso_circulacion && now()->isAfter($bus->vencimiento_permiso_circulacion);
+        if ($bus->estado === 'operativo' && ($bus->seguro_vencido || $bus->revision_tecnica_vencida || $permisoVencido)) {
+            return 'inactivo';
+        }
+        return $bus->estado;
     }
 }

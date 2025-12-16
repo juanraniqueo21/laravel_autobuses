@@ -11,7 +11,8 @@ import {
   fetchBusesSOAPPorVencer,
   fetchBusesPermisoCirculacionPorVencer,
   activarBusEmergencia,
-  fetchHistorialReportes
+  fetchHistorialReportes,
+  fetchRutasConMasFallas
 } from '../services/api';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import MetricCard from '../components/cards/MetricCard';
@@ -30,6 +31,8 @@ export default function AnalisisMantenimientosPage() {
   const [loading, setLoading] = useState(true);
   const [historialReportes, setHistorialReportes] = useState([]);
   const [mostrarHistorial, setMostrarHistorial] = useState(false);
+  const [rutasFallas, setRutasFallas] = useState([]);
+  const [rutasFallasTodas, setRutasFallasTodas] = useState([]);
   
   // Filtros
   const [mes, setMes] = useState(new Date().getMonth() + 1);
@@ -94,6 +97,9 @@ export default function AnalisisMantenimientosPage() {
       setTopsData(tops || { top_buses_fallas: [], top_modelos_fallas: [], rutas_criticas: [] });
       setHistorialReportes((historial?.data) || []);
 
+      const rutasFallasData = await fetchRutasConMasFallas({ ...params, limit: 5 });
+      setRutasFallas(rutasFallasData || []);
+
       // Carga tolerante a fallos para SOAP y Permisos
       try {
         const soap = await fetchBusesSOAPPorVencer({ dias: 30 });
@@ -110,6 +116,21 @@ export default function AnalisisMantenimientosPage() {
       addNotification('error', 'Error', 'No se pudieron cargar los datos de mantenimiento.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMostrarTodasRutas = async () => {
+    if (rutasFallasTodas.length > 0) {
+      abrirModalConDatos('Rutas con más fallas', rutasFallasTodas, 'rutas');
+      return;
+    }
+    try {
+      const allRutas = await fetchRutasConMasFallas({ mes, anio, limit: 0 });
+      setRutasFallasTodas(allRutas || []);
+      abrirModalConDatos('Rutas con más fallas', allRutas, 'rutas');
+    } catch (error) {
+      console.error('Error al cargar rutas', error);
+      addNotification('error', 'Error', 'No se pudieron cargar todas las rutas con fallas.');
     }
   };
 
@@ -258,6 +279,30 @@ export default function AnalisisMantenimientosPage() {
             <p className="text-xs text-gray-500 mt-2">Estado actual: {bus.estado_bus ?? 'N/A'}</p>
           </div>
         ))}
+        </div>
+      );
+    };
+
+  const renderModalRutasFallas = () => {
+    const datos = Array.isArray(datosModal.datos) ? datosModal.datos : [];
+    if (datos.length === 0) {
+      return <p className="text-center text-gray-500">No hay rutas con fallas.</p>;
+    }
+
+    return (
+      <div className="space-y-3">
+        {datos.map((ruta, index) => (
+          <div key={ruta.id || index} className="flex flex-col gap-1 rounded-lg border border-gray-100 p-3 bg-gray-50">
+            <div className="flex justify-between items-center">
+              <p className="text-sm font-semibold text-gray-800">{ruta.nombre}</p>
+              <span className="text-xs text-gray-500">{ruta.ruta}</span>
+            </div>
+            <div className="flex flex-wrap gap-4 text-xs text-gray-600">
+              <span className="font-bold text-gray-800">{ruta.total_fallas} fallas</span>
+              <span>Perdida ${formatCurrency(ruta.perdida_total)}</span>
+            </div>
+          </div>
+        ))}
       </div>
     );
   };
@@ -268,6 +313,9 @@ export default function AnalisisMantenimientosPage() {
     }
     if (datosModal.tipo === 'mantenimientos') {
       return renderModalResumenMantenimientos();
+    }
+    if (datosModal.tipo === 'rutas') {
+      return renderModalRutasFallas();
     }
     const datos = Array.isArray(datosModal.datos) && datosModal.datos.length > 0 ? datosModal.datos : null;
     if (!datos) {
@@ -345,8 +393,45 @@ export default function AnalisisMantenimientosPage() {
             <FileText size={16} />
             <span>{descargandoPdf ? 'Generando...' : 'Descargar PDF'}</span>
           </button>
-        </div>
       </div>
+    </div>
+
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-gray-800">Historial de descargas</p>
+          <p className="text-xs text-gray-500">Últimos archivos generados para este mes</p>
+        </div>
+        <button
+          onClick={() => setMostrarHistorial(prev => !prev)}
+          className="text-xs font-semibold uppercase tracking-wide text-orange-600 px-3 py-1 border border-orange-100 rounded-full hover:bg-orange-50 transition"
+        >
+          {mostrarHistorial ? 'Ocultar' : 'Mostrar'}
+        </button>
+      </div>
+      {mostrarHistorial && (
+        <div className="mt-3 space-y-2">
+          {historialReportes.length === 0 ? (
+            <p className="text-xs text-gray-400">Aún no hay descargas registradas.</p>
+          ) : (
+            historialReportes.map(entry => (
+              <div key={`hist-${entry.id}`} className="flex flex-col gap-1 rounded-lg border border-gray-100 px-3 py-2 bg-gray-50 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">
+                    {formatHistorialMes(entry)} · {entry.archivo || 'Reporte mensual'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Generado {formatHistorialFecha(entry.created_at)} · {formatHistorialUsuario(entry)}
+                    {entry.filtros?.tipo_mantenimiento ? ` · ${entry.filtros.tipo_mantenimiento}` : ''}
+                  </p>
+                </div>
+                <span className="text-xs font-semibold uppercase text-orange-600">{entry.tipo}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
 
       {/* TABS DE NAVEGACIÓN */}
       <div className="flex border-b border-gray-200 mb-6 bg-white rounded-t-lg px-2 overflow-x-auto">
@@ -373,66 +458,96 @@ export default function AnalisisMantenimientosPage() {
 
       {/* --- PESTAÑA 1: GENERAL --- */}
       {tabActiva === 'general' && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <MetricCard
-              title="Total Mantenimientos"
-              value={totalMantenimientos}
-              icon={Wrench}
-              color="orange"
-              interactive
-              subtitle="Ver detalles"
-              onClick={mostrarDetalleMantenimientos}
-            />
-            <MetricCard
-              title="Buses en Taller"
-              value={busesEmergencia.length}
-              icon={AlertTriangle}
-              color="red"
-              interactive
-              subtitle="Mostrar lista"
-              onClick={mostrarBusesEnTaller}
-            />
-            <MetricCard title="Costo Total" value={formatCurrency(totalCostos)} icon={DollarSign} color="blue" />
-            <MetricCard title="Activables Emergencia" value={busesActivables} icon={Power} color="green" subtitle="Ver disponibles" />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-              <h3 className="font-bold text-gray-800 mb-4">Alertas Activas</h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={[
-                      { name: 'Aceite', value: alertasData.por_tipo?.cambio_aceite || 0 },
-                      { name: 'Técnica', value: alertasData.por_tipo?.revision_tecnica || 0 },
-                      { name: 'Mant.', value: alertasData.por_tipo?.mantenimiento || 0 }
-                    ]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} dataKey="value">
-                      <Cell fill="#f59e0b" /><Cell fill="#3b82f6" /><Cell fill="#ef4444" />
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+        <>
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <MetricCard
+                title="Total Mantenimientos"
+                value={totalMantenimientos}
+                icon={Wrench}
+                color="orange"
+                interactive
+                subtitle="Ver detalles"
+                onClick={mostrarDetalleMantenimientos}
+              />
+              <MetricCard
+                title="Buses en Taller"
+                value={busesEmergencia.length}
+                icon={AlertTriangle}
+                color="red"
+                interactive
+                subtitle="Mostrar lista"
+                onClick={mostrarBusesEnTaller}
+              />
+              <MetricCard title="Costo Total" value={formatCurrency(totalCostos)} icon={DollarSign} color="blue" />
+              <MetricCard title="Activables Emergencia" value={busesActivables} icon={Power} color="green" subtitle="Ver disponibles" />
             </div>
 
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-              <h3 className="font-bold text-gray-800 mb-4">Top 5 Modelos con Fallas</h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topsData.top_modelos_fallas.slice(0, 5)} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="marca_modelo" type="category" width={120} tick={{fontSize: 11}} />
-                    <Tooltip />
-                    <Bar dataKey="total_fallas" fill="#8884d8" radius={[0, 4, 4, 0]} barSize={20} name="Fallas" />
-                  </BarChart>
-                </ResponsiveContainer>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+                <h3 className="font-bold text-gray-800 mb-4">Alertas Activas</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={[
+                        { name: 'Aceite', value: alertasData.por_tipo?.cambio_aceite || 0 },
+                        { name: 'Técnica', value: alertasData.por_tipo?.revision_tecnica || 0 },
+                        { name: 'Mant.', value: alertasData.por_tipo?.mantenimiento || 0 }
+                      ]} cx="50%" cy="50%" innerRadius={60} outerRadius={80} dataKey="value">
+                        <Cell fill="#f59e0b" /><Cell fill="#3b82f6" /><Cell fill="#ef4444" />
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+                <h3 className="font-bold text-gray-800 mb-4">Top 5 Modelos con Fallas</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={topsData.top_modelos_fallas.slice(0, 5)} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                      <XAxis type="number" hide />
+                      <YAxis dataKey="marca_modelo" type="category" width={120} tick={{fontSize: 11}} />
+                      <Tooltip />
+                      <Bar dataKey="total_fallas" fill="#8884d8" radius={[0, 4, 4, 0]} barSize={20} name="Fallas" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+          <div className="grid grid-cols-1 gap-6 animate-in fade-in duration-300">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-gray-800">Rutas con más fallas</h3>
+                  <p className="text-xs text-gray-500">Según alertas registradas en los viajes</p>
+                </div>
+                <button onClick={handleMostrarTodasRutas} className="text-xs font-semibold uppercase text-blue-600 hover:underline">
+                  Ver todos
+                </button>
+              </div>
+              {rutasFallas.length === 0 ? (
+                <p className="text-xs text-gray-400">Aún no hay rutas con fallas detectadas.</p>
+              ) : (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={rutasFallas}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="nombre" tick={{ fontSize: 10 }} />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="total_fallas" fill="#0ea5e9" barSize={24} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* --- PESTAÑA 2: TALLER (Top 5 + Ver más) --- */}
@@ -584,43 +699,6 @@ export default function AnalisisMantenimientosPage() {
           </div>
         </div>
       )}
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mt-6">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-bold text-gray-800">Historial de descargas</p>
-            <p className="text-xs text-gray-500">Últimos archivos generados para este mes</p>
-          </div>
-          <button
-            onClick={() => setMostrarHistorial(prev => !prev)}
-            className="text-xs font-semibold uppercase tracking-wide text-orange-600 px-3 py-1 border border-orange-100 rounded-full hover:bg-orange-50 transition"
-          >
-            {mostrarHistorial ? 'Ocultar' : 'Mostrar'}
-          </button>
-        </div>
-        {mostrarHistorial && (
-          <div className="mt-3 space-y-2">
-            {historialReportes.length === 0 ? (
-              <p className="text-xs text-gray-400">Aún no hay descargas registradas.</p>
-            ) : (
-              historialReportes.map(entry => (
-                <div key={`hist-${entry.id}`} className="flex flex-col gap-1 rounded-lg border border-gray-100 px-3 py-2 bg-gray-50 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">
-                      {formatHistorialMes(entry)} · {entry.archivo || 'Reporte mensual'}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Generado {formatHistorialFecha(entry.created_at)} · {formatHistorialUsuario(entry)}
-                      {entry.filtros?.tipo_mantenimiento ? ` · ${entry.filtros.tipo_mantenimiento}` : ''}
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold uppercase text-orange-600">{entry.tipo}</span>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-      </div>
 
       {/* --- MODAL DE DETALLE --- */}
       {modalAbierto && (

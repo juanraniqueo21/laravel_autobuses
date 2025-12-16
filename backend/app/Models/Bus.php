@@ -27,11 +27,14 @@ class Bus extends Model
         'ultima_revision_tecnica',
         'documento_revision_tecnica',
         'vencimiento_soap',
+        'emision_soap',
         'compania_seguro',
         'numero_poliza',
         'tipo_cobertura_adicional',
         'vencimiento_poliza',
         'numero_permiso_circulacion',
+        'emision_permiso_circulacion',
+        'vencimiento_permiso_circulacion',
         'numero_soap',
         'observaciones',
         'kilometraje_original',
@@ -60,6 +63,7 @@ class Bus extends Model
         'proxima_revision_tecnica' => 'date',
         'ultima_revision_tecnica' => 'date',
         'vencimiento_soap' => 'date',
+        'emision_soap' => 'date',
         'vencimiento_poliza' => 'date',
         'anio' => 'integer',
         'capacidad_pasajeros' => 'integer',
@@ -72,6 +76,8 @@ class Bus extends Model
         'fecha_ultimo_mantenimiento' => 'date',
         'fecha_proximo_mantenimiento' => 'date',
         'factor_tarifa' => 'decimal:1',
+        'emision_permiso_circulacion' => 'date',
+        'vencimiento_permiso_circulacion' => 'date',
     ];
 
     // ============================================

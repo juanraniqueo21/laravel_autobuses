@@ -1598,6 +1598,71 @@ export const fetchBusesPermisoCirculacionPorVencer = async (params = {}) => {
 };
 
 /**
+ * Distribución de costos por tipo de mantenimiento
+ */
+export const fetchCostosPorTipoMantenimiento = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.mes) queryParams.append('mes', params.mes);
+  if (params.anio) queryParams.append('anio', params.anio);
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+
+  const url = `${API_URL}/reportes/costos-por-tipo-mantenimiento${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+/**
+ * Tendencia mensual de mantenimientos y costos
+ */
+export const fetchTendenciaMensualMantenimientos = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.mes) queryParams.append('mes', params.mes);
+  if (params.anio) queryParams.append('anio', params.anio);
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+
+  const url = `${API_URL}/reportes/tendencia-mensual-mantenimientos${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+/**
+ * Pareto de modelos con más fallas
+ */
+export const fetchParetoModelosFallas = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.mes) queryParams.append('mes', params.mes);
+  if (params.anio) queryParams.append('anio', params.anio);
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+
+  const url = `${API_URL}/reportes/pareto-modelos-fallas${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+/**
+ * Rutas con más fallas
+ */
+export const fetchRutasConMasFallas = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.mes) queryParams.append('mes', params.mes);
+  if (params.anio) queryParams.append('anio', params.anio);
+  if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+  if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+  if (params.limit !== undefined) queryParams.append('limit', params.limit);
+
+  const url = `${API_URL}/reportes/rutas-con-mas-fallas${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+/**
  * Activar bus en emergencia (cambiar estado de mantenimiento a operativo)
  * Suspende mantenimientos en proceso y activa el bus
  */
