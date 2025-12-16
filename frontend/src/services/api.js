@@ -512,6 +512,12 @@ export const fetchTurno = async (id) => {
 export const createTurno = async (turnoData) => {
   const response = await fetch(`${API_URL}/turnos`, fetchOptions('POST', turnoData));
   const data = await response.json();
+
+  // Manejar caso especial de advertencias que requieren confirmación
+  if (data.requiere_confirmacion) {
+    return { requiere_confirmacion: true, advertencias: data.advertencias, message: data.message };
+  }
+
   if (!response.ok) {
     if (data.errors) throw new Error(Object.values(data.errors).flat().join(', '));
     throw new Error(data.message || `HTTP error! status: ${response.status}`);

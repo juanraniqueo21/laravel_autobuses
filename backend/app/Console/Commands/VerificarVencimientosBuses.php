@@ -20,7 +20,7 @@ class VerificarVencimientosBuses extends Command
      *
      * @var string
      */
-    protected $description = 'Verifica vencimientos de SOAP y permisos de circulación y marca buses como inactivos si están vencidos';
+    protected $description = 'Verifica vencimientos de SOAP, permisos de circulación y revisión técnica y marca buses como inactivos si están vencidos';
 
     /**
      * Execute the console command.
@@ -35,6 +35,7 @@ class VerificarVencimientosBuses extends Command
         $busesActualizados = 0;
         $busesConSoapVencido = 0;
         $busesConPermisoVencido = 0;
+        $busesConRevisionVencida = 0;
 
         // ============================================
         // 1. VERIFICAR BUSES CON SOAP VENCIDO
@@ -74,6 +75,25 @@ class VerificarVencimientosBuses extends Command
         }
 
         // ============================================
+        // 3. VERIFICAR BUSES CON REVISIÓN TÉCNICA VENCIDA
+        // ============================================
+        $this->newLine();
+        $this->info('🔧 Verificando revisiones técnicas vencidas...');
+
+        $busesConRevisionVencidaQuery = Bus::where('estado', 'operativo')
+            ->conRevisionVencida()
+            ->get();
+
+        foreach ($busesConRevisionVencidaQuery as $bus) {
+            $estadoAnterior = $bus->estado;
+            $bus->update(['estado' => 'inactivo']);
+
+            $this->line("   ✓ Bus {$bus->patente}: Revisión técnica vencida el {$bus->proxima_revision_tecnica->format('d/m/Y')} - Estado: {$estadoAnterior} → inactivo");
+            $busesActualizados++;
+            $busesConRevisionVencida++;
+        }
+
+        // ============================================
         // ALERTAS DE VENCIMIENTOS PRÓXIMOS (30 días)
         // ============================================
         $this->newLine();
@@ -109,6 +129,22 @@ class VerificarVencimientosBuses extends Command
             }
         }
 
+        $this->newLine();
+
+        // Revisión técnica próxima a vencer
+        $busesConRevisionProxima = Bus::where('estado', 'operativo')
+            ->whereDate('proxima_revision_tecnica', '>=', Carbon::now())
+            ->whereDate('proxima_revision_tecnica', '<=', Carbon::now()->addDays(30))
+            ->get();
+
+        if ($busesConRevisionProxima->count() > 0) {
+            $this->warn("   ⚠️  {$busesConRevisionProxima->count()} buses con revisión técnica próxima a vencer:");
+            foreach ($busesConRevisionProxima as $bus) {
+                $diasRestantes = Carbon::now()->diffInDays($bus->proxima_revision_tecnica);
+                $this->line("      • {$bus->patente}: vence en {$diasRestantes} días ({$bus->proxima_revision_tecnica->format('d/m/Y')})");
+            }
+        }
+
         // ============================================
         // RESUMEN
         // ============================================
@@ -116,13 +152,15 @@ class VerificarVencimientosBuses extends Command
         $this->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         $this->info('📊 RESUMEN DE VERIFICACIÓN');
         $this->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        $this->line("   Buses con SOAP vencido:            {$busesConSoapVencido}");
-        $this->line("   Buses con permiso vencido:         {$busesConPermisoVencido}");
+        $this->line("   Buses con SOAP vencido:              {$busesConSoapVencido}");
+        $this->line("   Buses con permiso vencido:           {$busesConPermisoVencido}");
+        $this->line("   Buses con revisión técnica vencida:  {$busesConRevisionVencida}");
         $this->line('   ─────────────────────────────────────────');
-        $this->info("   TOTAL buses marcados inactivos:    {$busesActualizados}");
+        $this->info("   TOTAL buses marcados inactivos:      {$busesActualizados}");
         $this->newLine();
-        $this->line("   Buses con SOAP próximo a vencer:   {$busesConSoapProximo->count()}");
-        $this->line("   Buses con permiso próximo a vencer: {$busesConPermisoProximo->count()}");
+        $this->line("   Buses con SOAP próximo a vencer:     {$busesConSoapProximo->count()}");
+        $this->line("   Buses con permiso próximo a vencer:  {$busesConPermisoProximo->count()}");
+        $this->line("   Buses con revisión próxima a vencer: {$busesConRevisionProxima->count()}");
         $this->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         $this->newLine();
 

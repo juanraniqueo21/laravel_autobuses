@@ -310,8 +310,29 @@ export default function TurnosPage() {
         await updateTurno(editingTurno.id, payload);
         setSuccess('Turno actualizado');
       } else {
-        await createTurno(payload);
-        setSuccess('Turno creado');
+        const result = await createTurno(payload);
+
+        // Manejar advertencias que requieren confirmación
+        if (result.requiere_confirmacion) {
+          const advertenciasTexto = result.advertencias
+            .map(adv => `• ${adv.mensaje}`)
+            .join('\n');
+
+          const confirmar = window.confirm(
+            `⚠️ ADVERTENCIAS DEL BUS:\n\n${advertenciasTexto}\n\n¿Desea continuar de todas formas?`
+          );
+
+          if (confirmar) {
+            // Reintentarcon confirmación
+            const payloadConConfirmacion = { ...payload, confirmar_advertencias: true };
+            await createTurno(payloadConConfirmacion);
+            setSuccess('Turno creado (con advertencias)');
+          } else {
+            return; // El usuario canceló
+          }
+        } else {
+          setSuccess('Turno creado');
+        }
       }
       loadTurnos();
       handleCloseDialog();

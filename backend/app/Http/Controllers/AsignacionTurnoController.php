@@ -336,6 +336,69 @@ class AsignacionTurnoController extends Controller
             }
 
             // ============================================
+            // ADVERTENCIAS DE MANTENIMIENTO Y ACEITE
+            // ============================================
+            $advertencias = [];
+
+            // Verificar cambio de aceite vencido
+            if ($bus->estado_aceite === 'critico') {
+                $km = $bus->km_desde_ultimo_aceite;
+                $advertencias[] = [
+                    'tipo' => 'aceite_critico',
+                    'mensaje' => "El bus tiene el cambio de aceite vencido ({$km} km desde el último cambio)",
+                    'severidad' => 'alta'
+                ];
+            } elseif ($bus->estado_aceite === 'alerta') {
+                $km = $bus->km_desde_ultimo_aceite;
+                $advertencias[] = [
+                    'tipo' => 'aceite_alerta',
+                    'mensaje' => "El bus está próximo a necesitar cambio de aceite ({$km} km desde el último cambio)",
+                    'severidad' => 'media'
+                ];
+            }
+
+            // Verificar mantenimiento vencido
+            if ($bus->mantenimientoVencido()) {
+                $fecha = $bus->fecha_proximo_mantenimiento;
+                $advertencias[] = [
+                    'tipo' => 'mantenimiento_vencido',
+                    'mensaje' => "El bus tiene mantenimiento vencido desde el {$fecha->format('d/m/Y')}",
+                    'severidad' => 'alta'
+                ];
+            }
+
+            // Verificar mantenimiento próximo
+            if ($bus->necesitaMantenimientoProximo()) {
+                $fecha = $bus->fecha_proximo_mantenimiento;
+                $dias = Carbon::now()->diffInDays($fecha);
+                $advertencias[] = [
+                    'tipo' => 'mantenimiento_proximo',
+                    'mensaje' => "El bus necesita mantenimiento en {$dias} días (fecha: {$fecha->format('d/m/Y')})",
+                    'severidad' => 'media'
+                ];
+            }
+
+            // Verificar mantenimiento por kilometraje
+            if ($bus->necesitaMantenimientoPorKm()) {
+                $kmRestantes = $bus->proximo_mantenimiento_km - $bus->kilometraje_actual;
+                $advertencias[] = [
+                    'tipo' => 'mantenimiento_km',
+                    'mensaje' => "El bus necesita mantenimiento en {$kmRestantes} km",
+                    'severidad' => 'media'
+                ];
+            }
+
+            // Si hay advertencias y no se ha confirmado, retornar las advertencias
+            if (!empty($advertencias) && !$request->has('confirmar_advertencias')) {
+                return response()->json([
+                    'success' => false,
+                    'requiere_confirmacion' => true,
+                    'message' => 'El bus tiene advertencias de mantenimiento. ¿Desea continuar?',
+                    'advertencias' => $advertencias
+                ], 200);
+            }
+
+            // ============================================
             // CREAR TURNO (Transacción)
             // ============================================
 
