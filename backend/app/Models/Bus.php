@@ -292,6 +292,14 @@ class Bus extends Model
     }
 
     /**
+     * Verificar si el bus está inactivo
+     */
+    public function estaInactivo(): bool
+    {
+        return $this->estado === 'inactivo';
+    }
+
+    /**
      * Verificar si el bus está desmantelado
      */
     public function estaDesmantelado(): bool
@@ -434,6 +442,14 @@ class Bus extends Model
     public function scopeEnMantenimiento($query)
     {
         return $query->where('estado', 'mantenimiento');
+    }
+
+    /**
+     * Scope para obtener buses inactivos
+     */
+    public function scopeInactivos($query)
+    {
+        return $query->where('estado', 'inactivo');
     }
 
     /**

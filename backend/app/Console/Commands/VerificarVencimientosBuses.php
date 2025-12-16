@@ -20,7 +20,7 @@ class VerificarVencimientosBuses extends Command
      *
      * @var string
      */
-    protected $description = 'Verifica vencimientos de SOAP, permisos de circulación y revisión técnica y marca buses como en mantenimiento si están vencidos';
+    protected $description = 'Verifica vencimientos de SOAP, permisos de circulación y revisión técnica y marca buses como inactivos si están vencidos';
 
     /**
      * Execute the console command.
@@ -48,9 +48,9 @@ class VerificarVencimientosBuses extends Command
 
         foreach ($busesConSoapVencidoQuery as $bus) {
             $estadoAnterior = $bus->estado;
-            $bus->update(['estado' => 'mantenimiento']);
+            $bus->update(['estado' => 'inactivo']);
 
-            $this->line("   ✓ Bus {$bus->patente}: SOAP vencido el {$bus->vencimiento_soap->format('d/m/Y')} - Estado: {$estadoAnterior} → mantenimiento");
+            $this->line("   ✓ Bus {$bus->patente}: SOAP vencido el {$bus->vencimiento_soap->format('d/m/Y')} - Estado: {$estadoAnterior} → inactivo");
             $busesActualizados++;
             $busesConSoapVencido++;
         }
@@ -67,9 +67,9 @@ class VerificarVencimientosBuses extends Command
 
         foreach ($busesConPermisoVencidoQuery as $bus) {
             $estadoAnterior = $bus->estado;
-            $bus->update(['estado' => 'mantenimiento']);
+            $bus->update(['estado' => 'inactivo']);
 
-            $this->line("   ✓ Bus {$bus->patente}: Permiso de circulación vencido el {$bus->vencimiento_permiso_circulacion->format('d/m/Y')} - Estado: {$estadoAnterior} → mantenimiento");
+            $this->line("   ✓ Bus {$bus->patente}: Permiso de circulación vencido el {$bus->vencimiento_permiso_circulacion->format('d/m/Y')} - Estado: {$estadoAnterior} → inactivo");
             $busesActualizados++;
             $busesConPermisoVencido++;
         }
@@ -86,9 +86,9 @@ class VerificarVencimientosBuses extends Command
 
         foreach ($busesConRevisionVencidaQuery as $bus) {
             $estadoAnterior = $bus->estado;
-            $bus->update(['estado' => 'mantenimiento']);
+            $bus->update(['estado' => 'inactivo']);
 
-            $this->line("   ✓ Bus {$bus->patente}: Revisión técnica vencida el {$bus->proxima_revision_tecnica->format('d/m/Y')} - Estado: {$estadoAnterior} → mantenimiento");
+            $this->line("   ✓ Bus {$bus->patente}: Revisión técnica vencida el {$bus->proxima_revision_tecnica->format('d/m/Y')} - Estado: {$estadoAnterior} → inactivo");
             $busesActualizados++;
             $busesConRevisionVencida++;
         }
@@ -156,7 +156,7 @@ class VerificarVencimientosBuses extends Command
         $this->line("   Buses con permiso vencido:           {$busesConPermisoVencido}");
         $this->line("   Buses con revisión técnica vencida:  {$busesConRevisionVencida}");
         $this->line('   ─────────────────────────────────────────');
-        $this->info("   TOTAL buses marcados en mantenimiento: {$busesActualizados}");
+        $this->info("   TOTAL buses marcados como inactivos:  {$busesActualizados}");
         $this->newLine();
         $this->line("   Buses con SOAP próximo a vencer:     {$busesConSoapProximo->count()}");
         $this->line("   Buses con permiso próximo a vencer:  {$busesConPermisoProximo->count()}");
@@ -165,7 +165,7 @@ class VerificarVencimientosBuses extends Command
         $this->newLine();
 
         if ($busesActualizados > 0) {
-            $this->warn("⚠️  {$busesActualizados} buses fueron marcados como en mantenimiento por vencimientos.");
+            $this->warn("⚠️  {$busesActualizados} buses fueron marcados como inactivos por vencimientos.");
         } else {
             $this->info('✅ Todos los buses operativos tienen documentación vigente.');
         }
