@@ -20,7 +20,7 @@ class VerificarVencimientosConductores extends Command
      *
      * @var string
      */
-    protected $description = 'Verifica vencimientos de licencias de conducir y marca conductores como inactivos si están vencidos';
+    protected $description = 'Verifica vencimientos de licencias de conducir y marca conductores como suspendidos si están vencidos';
 
     /**
      * Execute the console command.
@@ -41,18 +41,18 @@ class VerificarVencimientosConductores extends Command
         $this->info('👨‍✈️ Verificando licencias de conducir vencidas...');
 
         $conductoresConLicenciaVencidaQuery = Conductor::with('empleado.user')
-            ->whereIn('estado', ['activo', 'baja_medica', 'suspendido'])
+            ->whereIn('estado', ['activo', 'baja_medica'])
             ->conLicenciaVencida()
             ->get();
 
         foreach ($conductoresConLicenciaVencidaQuery as $conductor) {
             $estadoAnterior = $conductor->estado;
-            $conductor->update(['estado' => 'inactivo']);
+            $conductor->update(['estado' => 'suspendido']);
 
             $nombre = $conductor->empleado->user->nombre ?? 'N/A';
             $apellido = $conductor->empleado->user->apellido ?? '';
 
-            $this->line("   ✓ Conductor {$nombre} {$apellido} (Lic: {$conductor->numero_licencia}): Licencia vencida el {$conductor->fecha_vencimiento_licencia->format('d/m/Y')} - Estado: {$estadoAnterior} → inactivo");
+            $this->line("   ✓ Conductor {$nombre} {$apellido} (Lic: {$conductor->numero_licencia}): Licencia vencida el {$conductor->fecha_vencimiento_licencia->format('d/m/Y')} - Estado: {$estadoAnterior} → suspendido");
             $conductoresActualizados++;
             $conductoresConLicenciaVencida++;
         }
@@ -65,7 +65,7 @@ class VerificarVencimientosConductores extends Command
 
         // Licencias próximas a vencer
         $conductoresConLicenciaProxima = Conductor::with('empleado.user')
-            ->whereIn('estado', ['activo', 'baja_medica', 'suspendido'])
+            ->whereIn('estado', ['activo', 'baja_medica'])
             ->whereDate('fecha_vencimiento_licencia', '>=', Carbon::now())
             ->whereDate('fecha_vencimiento_licencia', '<=', Carbon::now()->addDays(30))
             ->get();
@@ -90,14 +90,14 @@ class VerificarVencimientosConductores extends Command
         $this->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         $this->line("   Conductores con licencia vencida:     {$conductoresConLicenciaVencida}");
         $this->line('   ─────────────────────────────────────────');
-        $this->info("   TOTAL conductores marcados inactivos:  {$conductoresActualizados}");
+        $this->info("   TOTAL conductores marcados suspendidos: {$conductoresActualizados}");
         $this->newLine();
         $this->line("   Conductores con licencia próxima:     {$conductoresConLicenciaProxima->count()}");
         $this->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         $this->newLine();
 
         if ($conductoresActualizados > 0) {
-            $this->warn("⚠️  {$conductoresActualizados} conductores fueron marcados como inactivos por licencias vencidas.");
+            $this->warn("⚠️  {$conductoresActualizados} conductores fueron marcados como suspendidos por licencias vencidas.");
         } else {
             $this->info('✅ Todos los conductores activos tienen licencias vigentes.');
         }
