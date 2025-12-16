@@ -441,7 +441,8 @@ class Bus extends Model
      */
     public function scopeConRevisionVencida($query)
     {
-        return $query->whereDate('proxima_revision_tecnica', '<', Carbon::now());
+        return $query->whereNotNull('proxima_revision_tecnica')
+                     ->whereDate('proxima_revision_tecnica', '<', Carbon::now());
     }
 
     /**
@@ -449,7 +450,8 @@ class Bus extends Model
      */
     public function scopeConSeguroVencido($query)
     {
-        return $query->whereDate('vencimiento_soap', '<', Carbon::now());
+        return $query->whereNotNull('vencimiento_soap')
+                     ->whereDate('vencimiento_soap', '<', Carbon::now());
     }
 
     /**
@@ -457,7 +459,8 @@ class Bus extends Model
      */
     public function scopeConPolizaVencida($query)
     {
-        return $query->whereDate('vencimiento_poliza', '<', Carbon::now());
+        return $query->whereNotNull('vencimiento_poliza')
+                     ->whereDate('vencimiento_poliza', '<', Carbon::now());
     }
 
     /**
@@ -465,7 +468,8 @@ class Bus extends Model
      */
     public function scopeConPermisoCirculacionVencido($query)
     {
-        return $query->whereDate('vencimiento_permiso_circulacion', '<', Carbon::now());
+        return $query->whereNotNull('vencimiento_permiso_circulacion')
+                     ->whereDate('vencimiento_permiso_circulacion', '<', Carbon::now());
     }
 
     /**

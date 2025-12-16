@@ -170,14 +170,60 @@ export default function DashboardPage({ onNavigate }) {
            const fechaVenc = venc.toLocaleDateString('es-CL');
 
            if (diffDays < 0) {
-              nuevasAlertas.push({ 
-                id: bus.id, tipo: 'soap', titulo: 'SOAP VENCIDO', 
-                detalle: `Bus ${bus.patente}`, nivel: 'critical', dias: diffDays, vencimiento: fechaVenc 
+              nuevasAlertas.push({
+                id: bus.id, tipo: 'soap', titulo: 'SOAP VENCIDO',
+                detalle: `Bus ${bus.patente}`, nivel: 'critical', dias: diffDays, vencimiento: fechaVenc
               });
            } else if (diffDays <= 30) {
-              nuevasAlertas.push({ 
-                id: bus.id, tipo: 'soap', titulo: 'SOAP por vencer', 
-                detalle: `Bus ${bus.patente} (${diffDays} días)`, nivel: 'warning', dias: diffDays, vencimiento: fechaVenc 
+              nuevasAlertas.push({
+                id: bus.id, tipo: 'soap', titulo: 'SOAP por vencer',
+                detalle: `Bus ${bus.patente} (${diffDays} días)`, nivel: 'warning', dias: diffDays, vencimiento: fechaVenc
+              });
+           }
+        }
+      });
+
+      // --- ALERTAS PERMISOS DE CIRCULACIÓN ---
+      buses.forEach(bus => {
+        if (bus.vencimiento_permiso_circulacion) {
+           const venc = new Date(bus.vencimiento_permiso_circulacion);
+           venc.setMinutes(venc.getMinutes() + venc.getTimezoneOffset());
+           const diffTime = venc - now;
+           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+           const fechaVenc = venc.toLocaleDateString('es-CL');
+
+           if (diffDays < 0) {
+              nuevasAlertas.push({
+                id: bus.id, tipo: 'permiso_circulacion', titulo: 'PERMISO DE CIRCULACIÓN VENCIDO',
+                detalle: `Bus ${bus.patente}`, nivel: 'critical', dias: diffDays, vencimiento: fechaVenc
+              });
+           } else if (diffDays <= 30) {
+              nuevasAlertas.push({
+                id: bus.id, tipo: 'permiso_circulacion', titulo: 'Permiso de circulación por vencer',
+                detalle: `Bus ${bus.patente} (${diffDays} días)`, nivel: 'warning', dias: diffDays, vencimiento: fechaVenc
+              });
+           }
+        }
+      });
+
+      // --- ALERTAS REVISIÓN TÉCNICA ---
+      buses.forEach(bus => {
+        if (bus.proxima_revision_tecnica) {
+           const venc = new Date(bus.proxima_revision_tecnica);
+           venc.setMinutes(venc.getMinutes() + venc.getTimezoneOffset());
+           const diffTime = venc - now;
+           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+           const fechaVenc = venc.toLocaleDateString('es-CL');
+
+           if (diffDays < 0) {
+              nuevasAlertas.push({
+                id: bus.id, tipo: 'revision_tecnica', titulo: 'REVISIÓN TÉCNICA VENCIDA',
+                detalle: `Bus ${bus.patente}`, nivel: 'critical', dias: diffDays, vencimiento: fechaVenc
+              });
+           } else if (diffDays <= 30) {
+              nuevasAlertas.push({
+                id: bus.id, tipo: 'revision_tecnica', titulo: 'Revisión técnica por vencer',
+                detalle: `Bus ${bus.patente} (${diffDays} días)`, nivel: 'warning', dias: diffDays, vencimiento: fechaVenc
               });
            }
         }
