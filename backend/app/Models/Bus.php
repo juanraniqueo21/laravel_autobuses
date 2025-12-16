@@ -32,6 +32,7 @@ class Bus extends Model
         'tipo_cobertura_adicional',
         'vencimiento_poliza',
         'numero_permiso_circulacion',
+        'vencimiento_permiso_circulacion',
         'numero_soap',
         'observaciones',
         'kilometraje_original',
@@ -61,6 +62,7 @@ class Bus extends Model
         'ultima_revision_tecnica' => 'date',
         'vencimiento_soap' => 'date',
         'vencimiento_poliza' => 'date',
+        'vencimiento_permiso_circulacion' => 'date',
         'anio' => 'integer',
         'capacidad_pasajeros' => 'integer',
         'kilometraje_original' => 'integer',
@@ -197,6 +199,17 @@ class Bus extends Model
     }
 
     /**
+     * Verificar si el permiso de circulación está vencido
+     */
+    public function getPermisoCirculacionVencidoAttribute(): bool
+    {
+        if (!$this->vencimiento_permiso_circulacion) {
+            return false;
+        }
+        return Carbon::parse($this->vencimiento_permiso_circulacion)->isPast();
+    }
+
+    /**
      * Calcular días hasta la próxima revisión técnica anual
      */
     public function getDiasHastaRevisionAttribute(): ?int
@@ -227,6 +240,17 @@ class Bus extends Model
             return null;
         }
         return Carbon::now()->diffInDays(Carbon::parse($this->vencimiento_poliza), false);
+    }
+
+    /**
+     * Calcular días hasta el vencimiento del permiso de circulación
+     */
+    public function getDiasHastaVencimientoPermisoCirculacionAttribute(): ?int
+    {
+        if (!$this->vencimiento_permiso_circulacion) {
+            return null;
+        }
+        return Carbon::now()->diffInDays(Carbon::parse($this->vencimiento_permiso_circulacion), false);
     }
 
     /**
@@ -294,9 +318,10 @@ class Bus extends Model
      */
     public function puedeSerAsignado(): bool
     {
-        return $this->estaOperativo() 
-            && !$this->revision_tecnica_vencida 
+        return $this->estaOperativo()
+            && !$this->revision_tecnica_vencida
             && !$this->seguro_vencido
+            && !$this->permiso_circulacion_vencido
             && !$this->mantenimientoVencido();
     }
     
@@ -373,16 +398,17 @@ class Bus extends Model
         if (!$this->estaOperativo()) {
             return 'no_operativo';
         }
-        
-        if ($this->revision_tecnica_vencida || $this->seguro_vencido || $this->mantenimientoVencido()) {
+
+        if ($this->revision_tecnica_vencida || $this->seguro_vencido ||
+            $this->permiso_circulacion_vencido || $this->mantenimientoVencido()) {
             return 'con_vencimientos';
         }
-        
-        if ($this->necesitaRevisionProxima() || $this->seguroVenceProxima() || 
+
+        if ($this->necesitaRevisionProxima() || $this->seguroVenceProxima() ||
             $this->necesitaMantenimientoProximo() || $this->necesitaMantenimientoPorKm()) {
             return 'con_advertencias';
         }
-        
+
         return 'optimo';
     }
 
@@ -431,6 +457,14 @@ class Bus extends Model
     }
 
     /**
+     * Scope para obtener buses con permiso de circulación vencido
+     */
+    public function scopeConPermisoCirculacionVencido($query)
+    {
+        return $query->whereDate('vencimiento_permiso_circulacion', '<', Carbon::now());
+    }
+
+    /**
      * Scope para obtener buses con mantenimiento vencido
      */
     public function scopeConMantenimientoVencido($query)
@@ -451,6 +485,10 @@ class Bus extends Model
             ->where(function($q) {
                 $q->whereDate('vencimiento_soap', '>=', Carbon::now())
                   ->orWhereNull('vencimiento_soap');
+            })
+            ->where(function($q) {
+                $q->whereDate('vencimiento_permiso_circulacion', '>=', Carbon::now())
+                  ->orWhereNull('vencimiento_permiso_circulacion');
             })
             ->where(function($q) {
                 $q->whereDate('fecha_proximo_mantenimiento', '>=', Carbon::now())

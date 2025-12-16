@@ -157,8 +157,9 @@ class BusController extends Controller
                 'numero_poliza' => 'nullable|string|max:50',
                 'tipo_cobertura_adicional' => ['nullable', Rule::in(['ninguna', 'terceros', 'full'])],
                 'vencimiento_poliza' => 'nullable|date|after_or_equal:today',
-                
+
                 'numero_permiso_circulacion' => 'nullable|string|max:50',
+                'vencimiento_permiso_circulacion' => 'nullable|date|after_or_equal:today',
                 'observaciones' => 'nullable|string|max:1000',
             ], [
                 // Mensajes personalizados
@@ -189,6 +190,7 @@ class BusController extends Controller
                 'vencimiento_soap.after_or_equal' => 'El SOAP no puede estar vencido',
                 'tipo_cobertura_adicional.in' => 'Tipo de cobertura inválido',
                 'vencimiento_poliza.after_or_equal' => 'La póliza no puede estar vencida',
+                'vencimiento_permiso_circulacion.after_or_equal' => 'El permiso de circulación no puede estar vencido',
                 'ubicacion_motor.in' => 'Ubicación del motor inválida',
             ]);
 
@@ -251,6 +253,7 @@ class BusController extends Controller
                 'tipo_cobertura_adicional' => $request->tipo_cobertura_adicional ?? 'ninguna',
                 'vencimiento_poliza' => $request->vencimiento_poliza,
                 'numero_permiso_circulacion' => $request->numero_permiso_circulacion,
+                'vencimiento_permiso_circulacion' => $request->vencimiento_permiso_circulacion,
                 'observaciones' => $request->observaciones,
                 'kilometraje_original' => $request->kilometraje_original ?? 0,
             ]);
@@ -334,6 +337,7 @@ class BusController extends Controller
                 'tipo_cobertura_adicional' => ['nullable', Rule::in(['ninguna', 'terceros', 'full'])],
                 'vencimiento_poliza' => 'nullable|date',
                 'numero_permiso_circulacion' => 'nullable|string|max:50',
+                'vencimiento_permiso_circulacion' => 'nullable|date',
                 'observaciones' => 'nullable|string|max:1000',
             ]);
 
@@ -356,7 +360,7 @@ class BusController extends Controller
                 'proxima_revision_tecnica', 'ultima_revision_tecnica', 'documento_revision_tecnica',
                 'numero_soap', 'vencimiento_soap', 'compania_seguro', 'numero_poliza',
                 'tipo_cobertura_adicional', 'vencimiento_poliza', 'numero_permiso_circulacion',
-                'observaciones', 'kilometraje_original'
+                'vencimiento_permiso_circulacion', 'observaciones', 'kilometraje_original'
             ]));
 
             return response()->json([

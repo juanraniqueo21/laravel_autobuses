@@ -130,6 +130,7 @@ export default function BusesPage() {
     tipo_cobertura_adicional: 'ninguna',
     vencimiento_poliza: '',
     numero_permiso_circulacion: '',
+    vencimiento_permiso_circulacion: '',
     observaciones: '',
     kilometraje_original: '',
   });
@@ -224,7 +225,7 @@ export default function BusesPage() {
         proxima_revision_tecnica: '', ultima_revision_tecnica: '', documento_revision_tecnica: '',
         numero_soap: '', vencimiento_soap: '', compania_seguro: '', numero_poliza: '',
         tipo_cobertura_adicional: 'ninguna', vencimiento_poliza: '', numero_permiso_circulacion: '',
-        observaciones: '', kilometraje_original: '',
+        vencimiento_permiso_circulacion: '', observaciones: '', kilometraje_original: '',
       });
     }
     setOpenDialog(true);
@@ -760,6 +761,7 @@ export default function BusesPage() {
           <Input label="Número Póliza" value={formData.numero_poliza} onChange={(e) => setFormData({ ...formData, numero_poliza: e.target.value })} placeholder="Número de póliza" />
           <Input label="Vencimiento Póliza" type="date" value={formData.vencimiento_poliza} onChange={(e) => setFormData({ ...formData, vencimiento_poliza: e.target.value })} />
           <Input label="Permiso Circulación" value={formData.numero_permiso_circulacion} onChange={(e) => setFormData({ ...formData, numero_permiso_circulacion: e.target.value })} />
+          <Input label="Vencimiento Permiso Circulación" type="date" value={formData.vencimiento_permiso_circulacion} onChange={(e) => setFormData({ ...formData, vencimiento_permiso_circulacion: e.target.value })} />
         </div>
 
         <div className="mt-4">

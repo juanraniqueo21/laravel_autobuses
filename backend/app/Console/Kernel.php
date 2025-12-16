@@ -16,6 +16,11 @@ class Kernel extends ConsoleKernel
         $schedule->command('licencias:actualizar-estados')
                  ->dailyAt('00:01')
                  ->appendOutputTo(storage_path('logs/licencias.log'));
+
+        // Verificar vencimientos de SOAP y permisos de circulación todos los días a las 00:05
+        $schedule->command('buses:verificar-vencimientos')
+                 ->dailyAt('00:05')
+                 ->appendOutputTo(storage_path('logs/buses_vencimientos.log'));
     }
 
     /**
