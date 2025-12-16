@@ -217,6 +217,11 @@ Route::middleware('jwt.auth')->group(function () {
         Route::get('/buses-permiso-circulacion-por-vencer', [ReporteController::class, 'busesPermisoCirculacionPorVencer']);
         Route::get('/historial', [ReporteController::class, 'historialReportes']);
 
+        // NUEVO: Análisis avanzados de mantenimientos y conductores
+        Route::get('/rutas-criticas-fallas', [ReporteController::class, 'rutasCriticasPorFallas']);
+        Route::get('/buses-fallas-conductor', [ReporteController::class, 'busesConFallasPorConductor']);
+        Route::get('/conductores-incidentes', [ReporteController::class, 'conductoresConMasIncidentes']);
+
         // Dashboard operativo y SLA
         Route::get('/dashboard-operativo', [ReporteController::class, 'dashboardOperativo']);
         Route::get('/puntualidad-sla', [ReporteController::class, 'puntualidadSLA']);

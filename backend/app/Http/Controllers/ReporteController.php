@@ -1711,4 +1711,261 @@ class ReporteController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * NUEVO: Análisis de rutas críticas con buses problemáticos
+     * Muestra qué rutas se operan con buses que tienen más fallas
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function rutasCriticasPorFallas(Request $request)
+    {
+        try {
+            $fechas = $this->procesarFiltrosFecha($request);
+            $fechaInicio = $fechas['fecha_inicio'];
+            $fechaFin = $fechas['fecha_fin'];
+            $limit = $request->input('limit', 10);
+
+            // Query que cruza viajes -> turnos -> buses -> mantenimientos -> rutas
+            $query = DB::table('viajes as v')
+                ->join('asignaciones_turno as at', 'v.asignacion_turno_id', '=', 'at.id')
+                ->join('buses as b', 'at.bus_id', '=', 'b.id')
+                ->join('rutas as r', 'v.ruta_id', '=', 'r.id')
+                ->leftJoin('mantenimientos as m', function($join) {
+                    $join->on('m.bus_id', '=', 'b.id')
+                         ->where('m.tipo_mantenimiento', '=', 'correctivo');
+                })
+                ->whereNotNull('v.ruta_id');
+
+            // Aplicar filtros de fecha si existen
+            if ($fechaInicio && $fechaFin) {
+                $query->whereBetween('at.fecha_turno', [$fechaInicio, $fechaFin]);
+            }
+
+            $rutasCriticas = $query
+                ->select(
+                    'r.id as ruta_id',
+                    'r.codigo as ruta_codigo',
+                    'r.nombre as ruta_nombre',
+                    'r.origen',
+                    'r.destino',
+                    DB::raw('COUNT(DISTINCT v.id) as total_viajes'),
+                    DB::raw('COUNT(DISTINCT b.id) as buses_diferentes'),
+                    DB::raw('COUNT(DISTINCT m.id) as total_fallas'),
+                    DB::raw('COALESCE(SUM(m.costo_total), 0) as costo_total_fallas'),
+                    DB::raw('ROUND(COUNT(DISTINCT m.id)::numeric / NULLIF(COUNT(DISTINCT v.id), 0), 2) as promedio_fallas_por_viaje')
+                )
+                ->groupBy('r.id', 'r.codigo', 'r.nombre', 'r.origen', 'r.destino')
+                ->having(DB::raw('COUNT(DISTINCT m.id)'), '>', 0)
+                ->orderByDesc('total_fallas')
+                ->limit($limit)
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $rutasCriticas,
+                'total' => $rutasCriticas->count(),
+                'filtros' => [
+                    'fecha_inicio' => $fechaInicio,
+                    'fecha_fin' => $fechaFin
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error en rutasCriticasPorFallas: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener rutas críticas',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * NUEVO: Análisis de buses con fallas por conductor
+     * Muestra qué buses tienen más fallas y qué conductores los operaron
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function busesConFallasPorConductor(Request $request)
+    {
+        try {
+            $fechas = $this->procesarFiltrosFecha($request);
+            $fechaInicio = $fechas['fecha_inicio'];
+            $fechaFin = $fechas['fecha_fin'];
+            $limit = $request->input('limit', 15);
+
+            // Primero obtenemos buses con más fallas
+            $busesConFallas = DB::table('mantenimientos as m')
+                ->join('buses as b', 'm.bus_id', '=', 'b.id')
+                ->where('m.tipo_mantenimiento', 'correctivo');
+
+            if ($fechaInicio && $fechaFin) {
+                $busesConFallas->whereBetween('m.fecha_inicio', [$fechaInicio, $fechaFin]);
+            }
+
+            $busesConFallas = $busesConFallas
+                ->select(
+                    'b.id as bus_id',
+                    'b.patente',
+                    'b.marca',
+                    'b.modelo',
+                    DB::raw('COUNT(m.id) as total_fallas'),
+                    DB::raw('SUM(m.costo_total) as costo_total')
+                )
+                ->groupBy('b.id', 'b.patente', 'b.marca', 'b.modelo')
+                ->orderByDesc('total_fallas')
+                ->limit($limit)
+                ->get();
+
+            // Para cada bus, obtener sus conductores más frecuentes
+            $resultado = [];
+            foreach ($busesConFallas as $bus) {
+                $conductoresQuery = DB::table('asignaciones_turno as at')
+                    ->join('turno_conductores as tc', 'at.id', '=', 'tc.asignacion_turno_id')
+                    ->join('conductores as c', 'tc.conductor_id', '=', 'c.id')
+                    ->join('empleados as e', 'c.empleado_id', '=', 'e.id')
+                    ->join('users as u', 'e.user_id', '=', 'u.id')
+                    ->where('at.bus_id', $bus->bus_id);
+
+                if ($fechaInicio && $fechaFin) {
+                    $conductoresQuery->whereBetween('at.fecha_turno', [$fechaInicio, $fechaFin]);
+                }
+
+                $conductores = $conductoresQuery
+                    ->select(
+                        'c.id as conductor_id',
+                        'c.numero_licencia',
+                        DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nombre_conductor"),
+                        'tc.rol',
+                        DB::raw('COUNT(DISTINCT at.id) as turnos_asignados')
+                    )
+                    ->groupBy('c.id', 'c.numero_licencia', 'u.nombre', 'u.apellido', 'tc.rol')
+                    ->orderByDesc('turnos_asignados')
+                    ->limit(5)
+                    ->get();
+
+                $resultado[] = [
+                    'bus_id' => $bus->bus_id,
+                    'patente' => $bus->patente,
+                    'marca' => $bus->marca,
+                    'modelo' => $bus->modelo,
+                    'total_fallas' => $bus->total_fallas,
+                    'costo_total' => $bus->costo_total,
+                    'conductores' => $conductores
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $resultado,
+                'total' => count($resultado),
+                'filtros' => [
+                    'fecha_inicio' => $fechaInicio,
+                    'fecha_fin' => $fechaFin
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error en busesConFallasPorConductor: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener buses con fallas por conductor',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * NUEVO: Análisis de conductores con más incidentes
+     * Determina si ciertos conductores están asociados con más fallas en los buses
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function conductoresConMasIncidentes(Request $request)
+    {
+        try {
+            $fechas = $this->procesarFiltrosFecha($request);
+            $fechaInicio = $fechas['fecha_inicio'];
+            $fechaFin = $fechas['fecha_fin'];
+            $limit = $request->input('limit', 20);
+
+            // Query principal: conductores con buses que tuvieron fallas después de sus turnos
+            $query = DB::table('asignaciones_turno as at')
+                ->join('turno_conductores as tc', 'at.id', '=', 'tc.asignacion_turno_id')
+                ->join('conductores as c', 'tc.conductor_id', '=', 'c.id')
+                ->join('empleados as e', 'c.empleado_id', '=', 'e.id')
+                ->join('users as u', 'e.user_id', '=', 'u.id')
+                ->join('buses as b', 'at.bus_id', '=', 'b.id')
+                ->leftJoin('mantenimientos as m', function($join) {
+                    $join->on('m.bus_id', '=', 'b.id')
+                         ->where('m.tipo_mantenimiento', '=', 'correctivo')
+                         // Fallas que ocurrieron dentro de los 7 días después del turno
+                         ->whereRaw('m.fecha_inicio >= at.fecha_turno')
+                         ->whereRaw('m.fecha_inicio <= at.fecha_turno + INTERVAL \'7 days\'');
+                });
+
+            if ($fechaInicio && $fechaFin) {
+                $query->whereBetween('at.fecha_turno', [$fechaInicio, $fechaFin]);
+            }
+
+            $conductores = $query
+                ->select(
+                    'c.id as conductor_id',
+                    'c.numero_licencia',
+                    DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nombre_conductor"),
+                    'c.anios_experiencia',
+                    'c.cantidad_infracciones',
+                    'c.cantidad_accidentes',
+                    DB::raw('COUNT(DISTINCT at.id) as total_turnos'),
+                    DB::raw('COUNT(DISTINCT b.id) as buses_diferentes'),
+                    DB::raw('COUNT(DISTINCT m.id) as fallas_asociadas'),
+                    DB::raw('COALESCE(SUM(m.costo_total), 0) as costo_total_fallas'),
+                    DB::raw('ROUND((COUNT(DISTINCT m.id)::numeric / NULLIF(COUNT(DISTINCT at.id), 0)) * 100, 2) as porcentaje_turnos_con_fallas')
+                )
+                ->groupBy(
+                    'c.id',
+                    'c.numero_licencia',
+                    'u.nombre',
+                    'u.apellido',
+                    'c.anios_experiencia',
+                    'c.cantidad_infracciones',
+                    'c.cantidad_accidentes'
+                )
+                ->having(DB::raw('COUNT(DISTINCT m.id)'), '>', 0)
+                ->orderByDesc('fallas_asociadas')
+                ->limit($limit)
+                ->get();
+
+            // Calcular estadísticas generales
+            $totalConductores = DB::table('conductores')->count();
+            $conductoresConIncidentes = $conductores->count();
+            $tasaIncidencia = $totalConductores > 0
+                ? round(($conductoresConIncidentes / $totalConductores) * 100, 2)
+                : 0;
+
+            return response()->json([
+                'success' => true,
+                'data' => $conductores,
+                'total' => $conductores->count(),
+                'estadisticas' => [
+                    'total_conductores' => $totalConductores,
+                    'conductores_con_incidentes' => $conductoresConIncidentes,
+                    'tasa_incidencia' => $tasaIncidencia
+                ],
+                'filtros' => [
+                    'fecha_inicio' => $fechaInicio,
+                    'fecha_fin' => $fechaFin
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error en conductoresConMasIncidentes: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener conductores con incidentes',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

@@ -1604,6 +1604,54 @@ export const fetchBusesPermisoCirculacionPorVencer = async (params = {}) => {
 };
 
 /**
+ * NUEVO: Obtener rutas críticas con buses que tienen más fallas
+ */
+export const fetchRutasCriticasPorFallas = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.mes) queryParams.append('mes', params.mes);
+  if (params.anio) queryParams.append('anio', params.anio);
+  if (params.limit) queryParams.append('limit', params.limit);
+
+  const url = `${API_URL}/reportes/rutas-criticas-fallas${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * NUEVO: Obtener buses con fallas y los conductores que los operaron
+ */
+export const fetchBusesConFallasPorConductor = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.mes) queryParams.append('mes', params.mes);
+  if (params.anio) queryParams.append('anio', params.anio);
+  if (params.limit) queryParams.append('limit', params.limit);
+
+  const url = `${API_URL}/reportes/buses-fallas-conductor${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
+ * NUEVO: Obtener conductores con más incidentes (fallas asociadas)
+ */
+export const fetchConductoresConIncidentes = async (params = {}) => {
+  const queryParams = new URLSearchParams();
+  if (params.mes) queryParams.append('mes', params.mes);
+  if (params.anio) queryParams.append('anio', params.anio);
+  if (params.limit) queryParams.append('limit', params.limit);
+
+  const url = `${API_URL}/reportes/conductores-incidentes${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const response = await fetch(url, fetchOptions());
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const result = await response.json();
+  return result;
+};
+
+/**
  * Activar bus en emergencia (cambiar estado de mantenimiento a operativo)
  * Suspende mantenimientos en proceso y activa el bus
  */
