@@ -11,6 +11,8 @@ class Bus extends Model
     protected $table = 'buses';
     public $timestamps = true;
 
+    protected $appends = ['estado_visual'];
+
     protected $fillable = [
         'patente',
         'patente_verificador',
@@ -374,7 +376,7 @@ class Bus extends Model
             return 'no_operativo';
         }
         
-        if ($this->revision_tecnica_vencida || $this->seguro_vencido || $this->mantenimientoVencido()) {
+        if ($this->tieneVencimientos()) {
             return 'con_vencimientos';
         }
         
@@ -384,6 +386,30 @@ class Bus extends Model
         }
         
         return 'optimo';
+    }
+    
+    /**
+     * Indica si el bus tiene algún vencimiento pendiente
+     */
+    public function tieneVencimientos(): bool
+    {
+        return $this->revision_tecnica_vencida || $this->seguro_vencido || $this->mantenimientoVencido();
+    }
+
+    /**
+     * Estado que debería mostrarse en interfaces cuando hay vencimientos
+     */
+    public function getEstadoVisualAttribute(): string
+    {
+        if ($this->estado === 'desmantelado') {
+            return 'desmantelado';
+        }
+
+        if ($this->estado === 'mantenimiento') {
+            return 'mantenimiento';
+        }
+
+        return $this->tieneVencimientos() ? 'mantenimiento' : $this->estado;
     }
 
     // ============================================

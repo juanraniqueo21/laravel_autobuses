@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,6 +11,8 @@ class Conductor extends Model
 {
     protected $table = 'conductores';
     public $timestamps = true;
+
+    protected $appends = ['estado_visual'];
 
     protected $fillable = [
         'empleado_id',
@@ -49,6 +52,29 @@ class Conductor extends Model
         'certificado_defensa' => 'boolean',
         'empleado_id' => 'integer',
     ];
+
+    /**
+     * Indica si la licencia del conductor ya está vencida
+     */
+    public function getLicenciaVencidaAttribute(): bool
+    {
+        if (!$this->fecha_vencimiento_licencia) {
+            return false;
+        }
+        return Carbon::parse($this->fecha_vencimiento_licencia)->isPast();
+    }
+
+    /**
+     * Estado que debería usarse al mostrar el conductor cuando la licencia está vencida
+     */
+    public function getEstadoVisualAttribute(): string
+    {
+        if ($this->estado !== 'activo') {
+            return $this->estado;
+        }
+
+        return $this->licencia_vencida ? 'inactivo' : 'activo';
+    }
 
     public function empleado(): BelongsTo
     {

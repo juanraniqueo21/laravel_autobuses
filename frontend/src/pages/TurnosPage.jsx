@@ -334,10 +334,10 @@ export default function TurnosPage() {
 
   // --- LOGICA DE FILTROS EN FORMULARIO ---
   const getFilteredBuses = () => {
-    if (!busSearch) return buses.filter(b => b.estado === 'operativo');
+    if (!busSearch) return buses.filter(b => b.estado_visual === 'operativo');
     const term = busSearch.toLowerCase();
     return buses.filter(b => 
-      b.estado === 'operativo' && 
+      b.estado_visual === 'operativo' && 
       (b.patente.toLowerCase().includes(term) || b.modelo.toLowerCase().includes(term))
     );
   };

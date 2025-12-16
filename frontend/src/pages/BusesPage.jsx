@@ -158,7 +158,7 @@ export default function BusesPage() {
       data = data.filter(b => b.capacidad_pasajeros.toString() === filterPasajeros.toString());
     }
     if (filterEstado) {
-      data = data.filter(b => b.estado === filterEstado);
+      data = data.filter(b => b.estado_visual === filterEstado);
     }
     // Líneas 150-152: Agregar al filtro useEffect
     if (filterTipoServicio) {
@@ -351,8 +351,8 @@ export default function BusesPage() {
                     </td>
                     
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(bus.estado)}`}>
-                        {bus.estado}
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(bus.estado_visual)}`}>
+                        {bus.estado_visual}
                       </span>
                     </td>
                     

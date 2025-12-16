@@ -124,7 +124,7 @@ export default function ConductoresPage() {
       if (empleado.user?.rol_id !== 3) return false;
       
       const yaEsConductorActivo = conductores.some(
-        c => c.empleado_id === empleado.id && c.estado === 'activo'
+        c => c.empleado_id === empleado.id && c.estado_visual === 'activo'
       );
 
       if (editingConductor && empleado.id === editingConductor.empleado_id) return true;
@@ -167,7 +167,7 @@ export default function ConductoresPage() {
       const rut = getRutEmpleado(c.empleado_id).toLowerCase();
       const rutSinPuntos = rut.replace(/\./g, '');
       const licencia = c.numero_licencia ? c.numero_licencia.toLowerCase() : '';
-      const estado = c.estado.toLowerCase();
+      const estado = (c.estado_visual || c.estado).toLowerCase();
       
       return nombre.includes(term) || 
              rut.includes(term) || 
@@ -291,12 +291,14 @@ export default function ConductoresPage() {
             {paginatedData.length === 0 ? (
               <tr><td colSpan="7" className="px-6 py-8 text-center text-gray-500">No se encontraron conductores</td></tr>
             ) : (
-              paginatedData.map((conductor) => (
-                <React.Fragment key={conductor.id}>
-                  <tr 
-                    className="hover:bg-gray-100 transition-colors even:bg-gray-50 cursor-pointer"
-                    onClick={() => setExpandedRow(expandedRow === conductor.id ? null : conductor.id)}
-                  >
+              paginatedData.map((conductor) => {
+                const estadoVisual = conductor.estado_visual || conductor.estado;
+                return (
+                  <React.Fragment key={conductor.id}>
+                    <tr 
+                      className="hover:bg-gray-100 transition-colors even:bg-gray-50 cursor-pointer"
+                      onClick={() => setExpandedRow(expandedRow === conductor.id ? null : conductor.id)}
+                    >
                     {/* NOMBRE Y RUT */}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
@@ -326,8 +328,8 @@ export default function ConductoresPage() {
                       {conductor.anios_experiencia} años
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(conductor.estado)}`}>
-                        {conductor.estado}
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${getEstadoColor(estadoVisual)}`}>
+                        {estadoVisual}
                       </span>
                     </td>
                     
@@ -396,8 +398,9 @@ export default function ConductoresPage() {
                       </td>
                     </tr>
                   )}
-                </React.Fragment>
-              ))
+                  </React.Fragment>
+                );
+              })
             )}
           </tbody>
         </table>
